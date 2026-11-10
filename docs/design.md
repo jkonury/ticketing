@@ -105,6 +105,7 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 - 다른 모듈의 데이터는 ID 참조와 이벤트로만 접근한다.
 - 경계와 의존 방향은 Modulith 검증 테스트(`ApplicationModules.verify()`)와 ArchUnit으로 강제한다.
 - MSA 분리 1순위는 `payment`, `settlement`.
+- **결제 계약 이벤트의 소유**: `PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`는 모두 `payment` 모듈 루트에 둔다. 의존 방향은 `booking → payment` 하나다. `payment`는 예매를 모르고 `orderId`만 안다. 양쪽이 각자 이벤트를 소유하면 순환이 생겨 `ApplicationModules.verify()`가 실패한다. [ADR 0017](./adr/0017-payment-owns-payment-events.md) 참고.
 
 ### 헥사고날 모듈의 패키지 구조
 
@@ -134,6 +135,11 @@ io.github.ticketing.booking
 - **모듈 간 외래 키·조인 금지**
 - `settlement`의 집계에 필요한 타 모듈 데이터는 이벤트로 받아 자기 스키마에 사본으로 쌓는다.
 - 스키마 관리는 Flyway, jOOQ 코드는 Flyway가 만든 스키마에서 생성한다.
+
+### booking 스키마 데이터
+
+- **좌석 사본**: `booking`은 `catalog`의 `ScheduleRegistered`를 받아 `booking.schedule`과 `booking.schedule_seat`에 회차와 좌석·가격 사본을 둔다. `catalog`를 직접 조회하지 않는다.
+- **`booking.sold_seat (schedule_id, seat_id)`**: 확정 시에만 행을 넣고 취소 시 지우는 테이블이며 여기에 유니크 제약을 둔다. 예매 좌석 테이블에 유니크를 걸면 취소·만료된 예매가 좌석을 계속 점유하기 때문이다.
 
 ### JPA와 jOOQ 역할 분담
 
@@ -166,17 +172,25 @@ io.github.ticketing.booking
 - 1회 예매 최대 **4매**
 - 선점 유지 시간(TTL) **5분**
 - 여러 좌석은 Lua 스크립트로 **전부 성공하거나 전부 실패**
-- 최종 확정은 결제 성공 시 DB 기록. `(회차, 좌석)` **유니크 제약**이 마지막 방어선
+- 최종 확정은 결제 성공 시 DB 기록. `booking.sold_seat`의 `(회차, 좌석)` **유니크 제약**이 마지막 방어선
+- API 흐름: `POST /api/v1/bookings`가 Redis 선점과 `PENDING` 생성을 하고, `POST /api/v1/bookings/{id}/payments`가 결제 요청 이벤트를 발행한다.
 - 선점·해제·확정 시 좌석 상태 변경을 Redis Streams로 발행하고 스냅샷을 갱신한다.
 
 ### 6.3 예매 상태 전이
 
 ```
-PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소·환불──▶ CANCELLED
+PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요청)──▶ CANCELLED(USER_REQUESTED)
    │
    ├──시간 초과──▶ EXPIRED
-   └──사용자 취소──▶ CANCELLED
+   ├──사용자 취소──▶ CANCELLED(USER_REQUESTED)
+   ├──결제 실패──▶ CANCELLED(PAYMENT_FAILED)
+   └──확정 시 이미 판매된 좌석──▶ CANCELLED(SEAT_ALREADY_SOLD) + 환불 요청
 ```
+
+- **만료는 지연 판정**: 예매는 `expiresAt = 생성 시각 + 5분`을 갖는다. 결제 요청이나 결제 결과가 도착했을 때 `Clock`과 비교해 `EXPIRED`로 전환한다. 일괄 정리는 M2 Batch가 한다.
+- **결제 실패**: `PENDING → CANCELLED`(사유 `PAYMENT_FAILED`)로 바꾸고 좌석을 반환한다. 재결제는 없다.
+- **확정 예매 취소**: 즉시 `CANCELLED`(`USER_REQUESTED`)로 바꾸고 `RefundRequested`를 발행한다. 환불은 비동기다.
+- 같은 결제 결과 이벤트가 다시 와도 상태는 다시 바뀌지 않는다(멱등).
 
 ### 6.4 결제 (이벤트 기반)
 
@@ -184,9 +198,9 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소·환불─
 2. `payment`가 가짜 PG에 결제 요청 (멱등 키 포함)
 3. 가짜 PG가 웹훅으로 결과 통지 (지연, 실패, 중복 가능)
 4. `payment`가 멱등 키로 중복을 걸러내고 결과 이벤트 발행
-5. `booking`이 `CONFIRMED` 또는 실패 처리(좌석 반환)
+5. `booking`이 `CONFIRMED` 또는 실패 처리(`CANCELLED`, 사유 `PAYMENT_FAILED`, 좌석 반환)
 
-**만료 후 결제 성공**: 결제는 성공했는데 선점이 이미 만료된 경우 자동 환불한다.
+**자동 환불 조건**: 결제는 성공했는데 (a) 예매가 이미 만료됐거나(`EXPIRED`로 전환), (b) 확정 시 `booking.sold_seat` 유니크 제약에 걸려 좌석이 이미 판매된 경우(`CANCELLED`, 사유 `SEAT_ALREADY_SOLD`), `booking`이 `RefundRequested`를 발행해 자동 환불한다.
 
 이 구조는 MSA 전환 시 Saga로 그대로 이어진다.
 

@@ -53,7 +53,7 @@
 - [x] 시드 데이터 스크립트
 
 ### M1-3. booking (헥사고날)
-- [ ] 도메인 모델과 상태 전이 (`PENDING` / `CONFIRMED` / `EXPIRED` / `CANCELLED`)
+- [x] 도메인 모델과 상태 전이 (`PENDING` / `CONFIRMED` / `EXPIRED` / `CANCELLED`)
 - [ ] Redis 좌석 선점: Lua 원자적 다중 선점, TTL 5분, 최대 4매
 - [ ] 예매 생성(`PENDING`) → 결제 요청 이벤트 발행
 - [ ] 결제 결과 이벤트 수신 → 확정 또는 좌석 반환

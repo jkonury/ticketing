@@ -29,3 +29,4 @@
 | [0014](0014-sse-bypasses-bff.md) | SSE는 BFF를 우회해 Gateway에 직접 연결 | 수락 |
 | [0015](0015-monorepo.md) | 모노레포 | 수락 |
 | [0016](0016-provided-required-packages.md) | 헥사고날 패키지는 provided / required로 명명 | 수락 |
+| [0017](0017-payment-owns-payment-events.md) | 결제 계약 이벤트는 payment 모듈이 소유 (booking → payment 단방향) | 수락 |

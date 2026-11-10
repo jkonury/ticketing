@@ -5,7 +5,7 @@
     {
       "step": 0,
       "name": "booking-domain",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.booking.domain.*\" --tests \"io.github.ticketing.HexagonalArchitectureTests\"",
         "rg -q 'PAYMENT_FAILED' docs/design.md",
@@ -14,7 +14,9 @@
         "rg -q '^- \\[x\\] 도메인 모델과 상태 전이' docs/roadmap.md"
       ],
       "model": "opus",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "booking/domain(Booking, Ids, BookingStatus/Outcome, BookingRuleException) 순수 도메인과 BookingTests 추가. design.md 반영, ADR 0017(결제 이벤트는 payment 소유) 작성, roadmap 체크.",
+      "commit_message": "feat(booking): 예매 도메인 모델과 상태 전이 구현, ADR 0017 추가"
     },
     {
       "step": 1,
