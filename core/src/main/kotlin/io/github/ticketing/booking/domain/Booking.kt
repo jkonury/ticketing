@@ -45,19 +45,34 @@ class Booking private constructor(
         paymentRequestedAt = now
     }
 
-    fun onPaymentSucceeded(now: Instant): PaymentOutcome = when (status) {
+    /**
+     * 결제 성공을 판정한다. 확정 가능한 PENDING은 상태를 바꾸지 않고 [PaymentOutcome.ConfirmationRequired]를 돌려준다.
+     * 호출자가 sold_seat 삽입에 성공한 뒤 [confirm]을, 좌석 충돌이면 [failConfirmation]을 부른다.
+     */
+    fun onPaymentSucceeded(now: Instant, paidAmount: BigDecimal): PaymentOutcome = when (status) {
         BookingStatus.PENDING ->
             if (isExpired(now)) {
                 status = BookingStatus.EXPIRED
                 PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED)
+            } else if (paidAmount.compareTo(totalPrice) != 0) {
+                status = BookingStatus.CANCELLED
+                cancelledAt = now
+                cancelReason = CancelReason.AMOUNT_MISMATCH
+                PaymentOutcome.AmountMismatch
             } else {
-                status = BookingStatus.CONFIRMED
-                confirmedAt = now
-                PaymentOutcome.Confirmed
+                PaymentOutcome.ConfirmationRequired
             }
         BookingStatus.CONFIRMED -> PaymentOutcome.AlreadyConfirmed
         BookingStatus.EXPIRED -> PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED)
         BookingStatus.CANCELLED -> PaymentOutcome.RefundRequired(RefundReason.BOOKING_CANCELLED)
+    }
+
+    /** 좌석 판매 기록이 끝난 뒤 확정한다. */
+    fun confirm(now: Instant) {
+        if (status != BookingStatus.PENDING) throw InvalidBookingStateException(status)
+        if (isExpired(now)) throw BookingExpiredException()
+        status = BookingStatus.CONFIRMED
+        confirmedAt = now
     }
 
     fun onPaymentFailed(now: Instant) {

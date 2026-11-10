@@ -155,9 +155,9 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(statusOf(token, bookingId)).isEqualTo(expected) }
     }
 
-    private fun succeed(bookingId: Long, paymentId: Long = bookingId) {
+    private fun succeed(bookingId: Long, paymentId: Long = bookingId, amount: BigDecimal = BigDecimal(100000)) {
         tx.executeWithoutResult {
-            publisher.publishEvent(PaymentSucceeded(paymentId, bookingId, BigDecimal(100000), Instant.now()))
+            publisher.publishEvent(PaymentSucceeded(paymentId, bookingId, amount, Instant.now()))
         }
     }
 
@@ -214,10 +214,10 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val id = book(token, schedule, listOf(1, 2))
         pay(token, id).andExpect(status().isAccepted)
 
-        succeed(id)
+        succeed(id, amount = BigDecimal(200000))
         awaitStatus(token, id, "CONFIRMED")
-        succeed(id)
-        succeed(id, paymentId = 999)
+        succeed(id, amount = BigDecimal(200000))
+        succeed(id, paymentId = 999, amount = BigDecimal(200000))
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted {
             assertThat(snapshot(schedule, 1)).isEqualTo("SOLD")
@@ -280,10 +280,10 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val b = book(tokenB, schedule, listOf(2, 3))
         pay(tokenA, a).andExpect(status().isAccepted)
         pay(tokenB, b).andExpect(status().isAccepted)
-        succeed(b)
+        succeed(b, amount = BigDecimal(200000))
         awaitStatus(tokenB, b, "CONFIRMED")
 
-        succeed(a)
+        succeed(a, amount = BigDecimal(200000))
 
         awaitStatus(tokenA, a, "CANCELLED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted {
@@ -291,10 +291,71 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         }
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == a }.single().reason).isEqualTo("SEAT_ALREADY_SOLD")
         assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == a }.single().reason).isEqualTo("SEAT_ALREADY_SOLD")
-        // 롤백되어 A의 sold_seat는 남지 않고 B의 것만 있다
+        // 좌석 1은 들어갔다가 같은 트랜잭션에서 지워져 A의 sold_seat는 남지 않고 B의 것만 있다
         assertThat(soldSeatCount(a)).isZero()
         assertThat(soldSeatCount(b)).isEqualTo(2)
         assertThat(snapshot(schedule, 2)).isEqualTo("SOLD")
+    }
+
+    @Test
+    fun `결제 금액이 예매 금액과 다르면 CANCELLED AMOUNT_MISMATCH와 RefundRequested가 생기고 좌석이 반환된다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1, 2))
+        pay(token, id).andExpect(status().isAccepted)
+
+        succeed(id, amount = BigDecimal(100000))
+
+        awaitStatus(token, id, "CANCELLED")
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).hasSize(1)
+            assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE")
+            assertThat(snapshot(schedule, 2)).isEqualTo("AVAILABLE")
+        }
+        assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }.single().reason).isEqualTo("AMOUNT_MISMATCH")
+        val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(cancelled.reason).isEqualTo("AMOUNT_MISMATCH")
+        assertThat(cancelled.refundRequired).isTrue()
+        assertThat(soldSeatCount(id)).isZero()
+        assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).isEmpty()
+        assertThat(jdbc.queryForObject("SELECT cancel_reason FROM booking.booking WHERE id = ?", String::class.java, id)).isEqualTo("AMOUNT_MISMATCH")
+        book(token(), schedule, listOf(1, 2))
+    }
+
+    @Test
+    fun `확정된 예매에 결제를 다시 요청하면 409 INVALID_BOOKING_STATE이다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1))
+        pay(token, id).andExpect(status().isAccepted)
+        succeed(id)
+        awaitStatus(token, id, "CONFIRMED")
+
+        pay(token, id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("INVALID_BOOKING_STATE"))
+        assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
+    }
+
+    @Test
+    fun `취소된 예매에 결제를 다시 요청하면 409 INVALID_BOOKING_STATE이다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1))
+        pay(token, id).andExpect(status().isAccepted)
+        cancel(token, id).andExpect(status().isOk)
+
+        pay(token, id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("INVALID_BOOKING_STATE"))
+    }
+
+    @Test
+    fun `이미 결제를 요청한 PENDING은 만료 시각이 지나도 재요청에 202를 준다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1))
+        pay(token, id).andExpect(status().isAccepted)
+        clock.now = clock.now.plus(Duration.ofMinutes(6))
+
+        pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.status").value("PENDING"))
+        assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
     }
 
     @Test
@@ -303,7 +364,7 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val token = token()
         val id = book(token, schedule, listOf(1, 2))
         pay(token, id).andExpect(status().isAccepted)
-        succeed(id)
+        succeed(id, amount = BigDecimal(200000))
         awaitStatus(token, id, "CONFIRMED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("SOLD") }
 

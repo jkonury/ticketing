@@ -171,6 +171,7 @@ io.github.ticketing.booking
 - 스냅샷의 `HELD:<만료 시각>`: 선점 키 TTL이 끝나도 Redis는 알려 주지 않으므로 읽는 쪽이 만료를 직접 판정한다.
 - 선점 가능 여부의 판단 기준은 스냅샷이 아니라 선점 키와 `SOLD`다.
 - 선점·해제·판매·판매 해제는 각각 Lua 스크립트 한 번으로 처리하며, 같은 스크립트에서 스냅샷과 Stream을 갱신한다.
+- DB 커밋 뒤 Redis 반영이 실패하면 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다(6.4절).
 
 ## 6. 핵심 흐름
 
@@ -198,12 +199,15 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
    ├──시간 초과──▶ EXPIRED
    ├──사용자 취소──▶ CANCELLED(USER_REQUESTED)
    ├──결제 실패──▶ CANCELLED(PAYMENT_FAILED)
+   ├──결제 금액 불일치──▶ CANCELLED(AMOUNT_MISMATCH) + 환불 요청
    └──확정 시 이미 판매된 좌석──▶ CANCELLED(SEAT_ALREADY_SOLD) + 환불 요청
 ```
 
 - **만료는 지연 판정**: 예매는 `expiresAt = 생성 시각 + 5분`을 갖는다. 결제 요청이나 결제 결과가 도착했을 때 `Clock`과 비교해 `EXPIRED`로 전환한다. 일괄 정리는 M2 Batch가 한다.
 - **결제 실패**: `PENDING → CANCELLED`(사유 `PAYMENT_FAILED`)로 바꾸고 좌석을 반환한다. 재결제는 없다.
 - **확정 예매 취소**: 즉시 `CANCELLED`(`USER_REQUESTED`)로 바꾸고 `RefundRequested`를 발행한다. 환불은 비동기다.
+- **결제 금액 불일치**: 결제는 성공했지만 금액(`compareTo`)이 `totalPrice`와 다르면 확정하지 않는다. `PENDING → CANCELLED`(`AMOUNT_MISMATCH`)로 바꾸고 `RefundRequested`(사유 `AMOUNT_MISMATCH`)와 `BookingCancelled`(`refundRequired=true`)를 발행하며 커밋 후 선점을 해제한다. `sold_seat`는 넣지 않는다. 만료 판정이 먼저라서 만료됐으면 불일치여도 `EXPIRED` 환불 경로다.
+- **결제 재요청**(`POST /api/v1/bookings/{id}/payments`): `PENDING`이면 이미 요청했어도 `202`(이벤트는 다시 발행하지 않는다). 이미 요청했다면 만료 시각이 지나도 결제가 진행 중이므로 `202`다. `CONFIRMED`, `CANCELLED`는 `409 INVALID_BOOKING_STATE`, `EXPIRED`는 `409 BOOKING_EXPIRED`.
 - 같은 결제 결과 이벤트가 다시 와도 상태는 다시 바뀌지 않는다(멱등).
 
 ### 6.4 결제 (이벤트 기반)
@@ -215,6 +219,13 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 5. `booking`이 `CONFIRMED` 또는 실패 처리(`CANCELLED`, 사유 `PAYMENT_FAILED`, 좌석 반환)
 
 **자동 환불 조건**: 결제는 성공했는데 (a) 예매가 이미 만료됐거나(`EXPIRED`로 전환), (b) 확정 시 `booking.sold_seat` 유니크 제약에 걸려 좌석이 이미 판매된 경우(`CANCELLED`, 사유 `SEAT_ALREADY_SOLD`), `booking`이 `RefundRequested`를 발행해 자동 환불한다.
+
+**결제 결과 처리의 트랜잭션 구조**
+- 결과 이벤트는 `@ApplicationModuleListener`(비동기 + 새 트랜잭션)로 받고, DB 작업은 그 리스너 트랜잭션 하나에 참여한다. 내부에서 `REQUIRES_NEW`를 또 열지 않는다. 리스너가 가상 스레드로 상한 없이 동시에 돌아 커넥션을 두 개씩 잡으면 풀 고갈과 교착이 생기기 때문이다.
+- 확정 순서는 확정 가능 여부 판정 → `sold_seat` 삽입(`ON CONFLICT DO NOTHING`) → 전부 들어가면 `CONFIRMED`, 일부라도 충돌하면 같은 트랜잭션에서 이 예매의 `sold_seat`를 지우고 `SEAT_ALREADY_SOLD`로 취소한다. 충돌해도 트랜잭션이 깨지지 않아 롤백 후 재시도가 필요 없다.
+- Redis 반영(SOLD 표시, 선점 해제)은 트랜잭션 `afterCommit`에서 한다. 롤백되면 Redis를 건드리지 않는다.
+- **커밋 후 Redis 반영이 실패하면** 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다. 중복 판매는 DB 유니크 제약이 막는다.
+- 낙관적 락 충돌은 삼키지 않고 던져 이벤트 발행 레지스트리가 다시 시도하게 한다.
 
 이 구조는 MSA 전환 시 Saga로 그대로 이어진다.
 
@@ -244,6 +255,7 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 |---|---|
 | 일별 정산 | 공연·주최자별 매출 집계, 수수료 계산. jOOQ reader, chunk 처리 |
 | 미결제 예매 정리 | `PENDING`으로 남은 건을 `EXPIRED`로 전환 (Redis TTL 누락분 보정) |
+| 좌석 스냅샷 보정 | 커밋 후 Redis 반영 실패로 DB와 어긋난 좌석 스냅샷을 DB 기준으로 보정 |
 | 결제 대사 | 가짜 PG 거래 내역과 내부 결제 기록의 불일치 검출 |
 
 코어와 같은 코드베이스의 별도 실행 모듈로 두고, 추후 k8s CronJob으로 옮긴다.
