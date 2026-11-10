@@ -1,8 +1,3 @@
----
-paths:
-  - "web/**"
----
-
 # Frontend 지침 (Next.js BFF)
 
 Next.js(App Router) + TypeScript. `web`은 화면이면서 **BFF**다. 책임은 두 가지: 인증/토큰 관리, 여러 API의 데이터 조합. 설계 근거는 `docs/design.md` 7~8장.

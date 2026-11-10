@@ -11,7 +11,7 @@
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
 - `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
-- `.claude/rules/frontend.md`: `web`
+- `docs/rules/frontend.md`: `web`
 
 ## 저장소 구조
 
