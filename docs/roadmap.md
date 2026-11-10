@@ -23,16 +23,16 @@
 ## M0. 프로젝트 뼈대
 
 - [ ] 버전 확정: Spring Boot 4.x, Spring Modulith, Spring Cloud Gateway, Kotlin, jOOQ, Java 25의 호환 조합을 공식 문서로 확인하고 `design.md` 2장에 기록
-- [ ] `git init`, `.gitignore`, `.editorconfig`
-- [ ] Gradle 멀티 모듈 구성 (Kotlin DSL, version catalog): `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
-- [ ] Kotlin 플러그인 설정: `spring`(allopen), `jpa`(noarg)
-- [ ] `core`: 메인 클래스 `io.github.ticketing`, Virtual Thread 활성화, 모듈 패키지 6개 생성
-- [ ] Docker Compose: PostgreSQL, Redis
-- [ ] Flyway: 모듈별 스키마(`member`, `catalog`, `booking`, `payment`, `settlement`) 생성 마이그레이션
-- [ ] jOOQ 코드 생성 설정 (Flyway 스키마 기준)
-- [ ] Testcontainers 기반 통합 테스트 베이스
-- [ ] Modulith 검증 테스트(`ApplicationModules.verify()`), ArchUnit 규칙(헥사고날 의존 방향)
-- [ ] Modulith 이벤트 발행 레지스트리 설정
+- [x] `git init`, `.gitignore`, `.editorconfig`
+- [x] Gradle 멀티 모듈 구성 (Kotlin DSL, version catalog): `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
+- [x] Kotlin 플러그인 설정: `spring`(allopen), `jpa`(noarg)
+- [x] `core`: 메인 클래스 `io.github.ticketing`, Virtual Thread 활성화, 모듈 패키지 6개 생성
+- [x] Docker Compose: PostgreSQL, Redis
+- [x] Flyway: 모듈별 스키마(`member`, `catalog`, `booking`, `payment`, `settlement`) 생성 마이그레이션
+- [x] jOOQ 코드 생성 설정 (Flyway 스키마 기준)
+- [x] Testcontainers 기반 통합 테스트 베이스
+- [x] Modulith 검증 테스트(`ApplicationModules.verify()`), ArchUnit 규칙(헥사고날 의존 방향)
+- [x] Modulith 이벤트 발행 레지스트리 설정
 
 **완료 기준**: `./gradlew build` 통과, `core`가 Compose 환경에서 기동, 검증 테스트 통과.
 

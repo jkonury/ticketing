@@ -1,0 +1,20 @@
+[versions]
+boot = "4.1.2"
+kotlin = "2.3.21"
+modulith = "2.1.1"
+cloud = "2025.1.4"
+archunit = "1.4.1"
+jooq = "3.21.9"
+flyway = "12.4.0"
+
+[libraries]
+flyway-postgres = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+postgres = { module = "org.postgresql:postgresql", version = "42.7.14" }
+
+[plugins]
+jooq = { id = "org.jooq.jooq-codegen-gradle", version.ref = "jooq" }
+flyway = { id = "org.flywaydb.flyway", version.ref = "flyway" }
+spring-boot = { id = "org.springframework.boot", version.ref = "boot" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+kotlin-jpa = { id = "org.jetbrains.kotlin.plugin.jpa", version.ref = "kotlin" }

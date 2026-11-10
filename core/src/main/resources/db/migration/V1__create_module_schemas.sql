@@ -1,0 +1,5 @@
+CREATE SCHEMA member;
+CREATE SCHEMA catalog;
+CREATE SCHEMA booking;
+CREATE SCHEMA payment;
+CREATE SCHEMA settlement;

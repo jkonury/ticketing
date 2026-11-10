@@ -1,0 +1,12 @@
+spring:
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${TICKETING_DB_URL:jdbc:postgresql://localhost:5432/ticketing}
+    username: ${TICKETING_DB_USER:ticketing}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate

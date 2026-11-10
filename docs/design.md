@@ -36,7 +36,7 @@
 | 보안 | Spring Security, JWT |
 | 프런트 | Next.js 최신 안정판 (App Router) + TypeScript, BFF 역할 |
 
-정확한 버전 번호와 Spring Boot · Spring Modulith · Spring Cloud Gateway · Kotlin · jOOQ의 호환 조합은 **프로젝트 생성 시점에 공식 문서로 확인**한다 (미확정).
+프로젝트 버전: Java 25, Gradle 9.8.2, Spring Boot 4.1.2, Kotlin 2.3.21, Spring Modulith 2.1.2, Spring Cloud 2025.1.3, jOOQ 3.21.9 (Boot 관리). Spring Cloud 2025.1은 [공식 호환표](https://github.com/spring-cloud/spring-cloud-release/wiki/Supported-Versions)에서 Boot 4.0.x를 지원한다. Boot 4.1.x와의 조합은 공식 지원이 확인되지 않았으나 사용자 선택으로 유지하며 Gateway 기동 검증이 필요하다. [Boot 의존성 버전](https://docs.spring.io/spring-boot/appendix/dependency-versions/coordinates.html), [Gradle Java 호환표](https://docs.gradle.org/current/userguide/compatibility.html).
 
 ## 3. 시스템 구성
 

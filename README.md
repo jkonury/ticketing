@@ -61,3 +61,18 @@ flowchart LR
 ## 실행
 
 M0(프로젝트 뼈대) 완료 후 작성한다.
+
+### M0 로컬 실행
+
+`.env.example`을 `.env`로 복사해 PostgreSQL 비밀번호를 설정한 뒤 다음 명령을 실행한다. Compose는 `.env`를 자동으로 읽지만 Gradle과 애플리케이션은 셸 환경 변수로 전달해야 한다.
+
+```bash
+cp .env.example .env
+set -a; source .env; set +a
+docker compose up -d
+./gradlew :core:jooqCodegen
+./gradlew build
+./gradlew :core:bootRun
+```
+
+`jooqCodegen`은 Flyway 마이그레이션을 먼저 적용하고 로컬 PostgreSQL에서 코드를 생성한다. 접속 주소와 사용자를 바꾸려면 `TICKETING_DB_URL`, `TICKETING_DB_USER`를 설정한다. 생성 코드는 `core/build`에 저장한다.
