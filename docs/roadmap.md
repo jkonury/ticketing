@@ -66,7 +66,7 @@
 - [x] 결제 요청 API, 웹훅 발송
 - [x] 지연·타임아웃·실패·중복 웹훅을 설정으로 제어
 - [x] 거래 내역 조회 API (결제 대사용)
-- [ ] Docker Compose에 추가
+- [x] Docker Compose에 추가
 
 ### M1-5. payment (헥사고날)
 - [ ] PG 출력 포트와 가짜 PG 어댑터
