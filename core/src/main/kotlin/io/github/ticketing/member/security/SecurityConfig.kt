@@ -38,6 +38,8 @@ class SecurityConfig {
             .authorizeHttpRequests {
                 it.requestMatchers(HttpMethod.POST, "/api/v1/members", "/api/v1/auth/tokens", "/api/v1/auth/tokens/refresh").permitAll()
                     .requestMatchers("/actuator/health/**").permitAll()
+                    // PG 웹훅은 토큰 대신 서명으로 인증한다 (payment 모듈이 검증)
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/fake-pg").permitAll()
                     // 공연·회차 조회는 공개 API다 (catalog 모듈의 경로)
                     .requestMatchers(HttpMethod.GET, "/api/v1/performances/**", "/api/v1/schedules/**").permitAll()
                     .anyRequest().authenticated()

@@ -264,6 +264,22 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 ## 10. 외부 연동
 
 - 결제: **가짜 PG 서버**를 직접 만든다. 지연, 타임아웃, 실패, 중복 웹훅을 설정으로 재현한다. 출력 포트로 추상화하여 추후 실제 PG 어댑터를 추가할 수 있게 한다.
+
+### fake-pg 프로토콜 요약
+
+| 방향 | 경로 | 요점 |
+|---|---|---|
+| 코어 → PG | `POST /v1/payments` | 헤더 `Idempotency-Key`(예매가 정한 키), 본문 `{orderId, amount, scenario?}` → 202 `{transactionId, status: PENDING}`. 같은 키면 같은 `transactionId` |
+| 코어 → PG | `POST /v1/payments/{transactionId}/refund` | 헤더 `Idempotency-Key` = `refund-{orderId}` → 202. 주문 하나에 환불 하나 |
+| PG → 코어 | `POST /api/v1/payments/webhooks/fake-pg` | 본문 `{eventId, type, transactionId, orderId, amount, occurredAt, failureReason}`. `type`은 `PAYMENT_APPROVED`, `PAYMENT_FAILED`, `REFUND_COMPLETED` |
+
+- 웹훅 인증: JWT 대신 서명으로 한다(경로는 `permitAll`). `X-FakePg-Signature` = hex(HMAC-SHA256(secret, `"{X-FakePg-Timestamp}.{원문 바이트}"`)). 원문 바이트로 계산하고 `MessageDigest.isEqual`로 비교한다. 시각이 허용 오차(기본 5분)를 벗어나거나 서명이 없거나 틀리면 401 `INVALID_WEBHOOK_SIGNATURE`. secret은 `FAKE_PG_WEBHOOK_SECRET` 환경 변수로만 받는다.
+- 웹훅 중복: `eventId`를 `payment` 스키마의 웹훅 기록에 `ON CONFLICT DO NOTHING`으로 넣고, 이미 있으면 바로 200. 기록과 상태 전이는 한 트랜잭션이다. 거래를 찾지 못하면 404로 롤백해 PG가 재시도하게 한다. 같은 전이가 이미 반영됐으면 결과 이벤트를 다시 발행하지 않는다.
+- 웹훅이 거래 ID 반영보다 먼저 올 수 있다. 결제는 `transactionId`로 찾고, 없으면 `orderId`로 찾아 거래 ID를 붙인다.
+- 시나리오: fake-pg가 지연, `TIMEOUT`(응답은 늦지만 실제로는 승인되고 웹훅이 온다), 실패, 중복 웹훅을 재현한다.
+- PG 호출 결과: 2xx는 `Accepted`, 4xx는 확정적 실패 `Rejected`(결제는 `FAILED` + `PaymentFailed`), 타임아웃·5xx·연결 실패는 `Unknown`. 결제 요청의 `Unknown`은 실패로 확정하지 않고 `REQUESTED`로 둔다. 실제로는 승인됐을 수 있어서다. 결과는 웹훅이나 M2 결제 대사가 맞춘다.
+- 환불: PG가 접수(`Accepted`)한 뒤에 `REFUND_REQUESTED`로 바꾼다. 접수 전에 바꾸면 `Unknown` 재처리가 "이미 요청함"으로 건너뛰어 환불이 나가지 않는다. `Unknown`이면 예외를 던져 이벤트 발행 레지스트리의 재처리 대상으로 남긴다(멱등 키 덕분에 재요청이 안전하다). `REFUND_REQUESTED`·`REFUNDED`에 다시 오면 PG를 부르지 않는다.
+- PG 호출은 트랜잭션 밖에서 한다. 결제 행 저장(트랜잭션) → PG 호출 → 결과 반영(트랜잭션)으로 나눈다. 리스너는 트랜잭션을 열지 않는다(`Propagation.NOT_SUPPORTED`).
 - 알림: 로그 출력으로 시작.
 
 ## 11. 개발 환경과 테스트

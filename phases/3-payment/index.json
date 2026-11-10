@@ -20,7 +20,7 @@
     {
       "step": 1,
       "name": "payment-pg-flow",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -d core/src/main/kotlin/io/github/ticketing/payment/adapter/required/pg",
         "test -d core/src/main/kotlin/io/github/ticketing/payment/adapter/provided/web",
@@ -29,7 +29,11 @@
         "rg -q '^- \\[x\\] 환불, 만료 후 결제 성공 시 자동 환불' docs/roadmap.md"
       ],
       "model": "opus",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "started_at": "2026-11-10T13:46:37.170956+00:00",
+      "summary": "payment/{adapter/required/pg,adapter/provided/{web,event},application/service} 추가. PG 호출은 트랜잭션 밖, Unknown은 REQUESTED 유지, 환불은 PG 접수 후 REFUND_REQUESTED. 웹훅은 원문 HMAC 검증·eventId 중복 차단.",
+      "commit_message": "feat(payment): PG 결제·환불 연동과 서명 검증 웹훅 추가",
+      "completed_at": "2026-11-10T13:51:08.415355+00:00"
     },
     {
       "step": 2,

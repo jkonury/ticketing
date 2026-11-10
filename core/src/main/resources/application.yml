@@ -28,3 +28,13 @@ spring:
 
 server:
   port: 8080
+
+ticketing:
+  payment:
+    fake-pg:
+      base-url: ${FAKE_PG_BASE_URL:http://localhost:8090}
+      connect-timeout: 2s
+      read-timeout: 3s
+      # 기본값을 두지 않는다. .env의 FAKE_PG_WEBHOOK_SECRET(fake-pg와 같은 값)을 쓴다
+      webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}
+      webhook-tolerance: 5m
