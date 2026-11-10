@@ -1,0 +1,35 @@
+{
+  "project": "ticketing",
+  "phase": "4-m1-verify",
+  "steps": [
+    {
+      "step": 0,
+      "name": "m1-flow-tests",
+      "status": "pending",
+      "ac": [
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.e2e.*\"",
+        "rg -q '^- \\[x\\] 동시성 테스트: 같은 좌석' docs/roadmap.md",
+        "rg -q '^- \\[x\\] 실패 경로 테스트' docs/roadmap.md",
+        "./scripts/agent/test/check-summary.sh"
+      ],
+      "model": "opus",
+      "reasoning_effort": "high"
+    },
+    {
+      "step": 1,
+      "name": "architecture-doc",
+      "status": "pending",
+      "ac": [
+        "test ! -e docs/design.md",
+        "test -s docs/architecture.md",
+        "test -n \"$(fd -e puml . docs/modulith)\"",
+        "! rg -n 'design\\.md' README.md AGENTS.md docs --glob '!docs/roadmap.md'",
+        "! rg -n '\\]\\(\\./design\\.md' docs/roadmap.md",
+        "./scripts/agent/docs/check-docs.sh",
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.ModularityTests\""
+      ],
+      "model": "sonnet",
+      "reasoning_effort": "medium"
+    }
+  ]
+}

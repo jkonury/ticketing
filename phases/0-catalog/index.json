@@ -1,0 +1,44 @@
+{
+  "project": "ticketing",
+  "phase": "0-catalog",
+  "steps": [
+    {
+      "step": 0,
+      "name": "catalog-model",
+      "status": "pending",
+      "ac": [
+        "test -f core/src/main/resources/db/migration/V4__create_catalog_tables.sql",
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.catalog.*\"",
+        "rg -q '^- \\[x\\] 공연, 회차, 공연장, 좌석 배치 모델' docs/roadmap.md"
+      ],
+      "model": "sonnet",
+      "reasoning_effort": "medium"
+    },
+    {
+      "step": 1,
+      "name": "catalog-register-api",
+      "status": "pending",
+      "ac": [
+        "test -f core/src/main/kotlin/io/github/ticketing/catalog/ScheduleRegistered.kt",
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.catalog.*\" --tests \"io.github.ticketing.ModularityTests\"",
+        "rg -q '^- \\[x\\] 주최자의 공연·회차 등록 API' docs/roadmap.md"
+      ],
+      "model": "sonnet",
+      "reasoning_effort": "high"
+    },
+    {
+      "step": 2,
+      "name": "catalog-query-seed",
+      "status": "pending",
+      "ac": [
+        "rg -q 'Profile\\(\"seed\"\\)' core/src/main/kotlin/io/github/ticketing/catalog",
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.catalog.*\"",
+        "rg -q '^- \\[x\\] 공연 목록·상세 조회' docs/roadmap.md",
+        "rg -q '^- \\[x\\] 시드 데이터 스크립트' docs/roadmap.md",
+        "./scripts/agent/test/check-summary.sh"
+      ],
+      "model": "sonnet",
+      "reasoning_effort": "medium"
+    }
+  ]
+}

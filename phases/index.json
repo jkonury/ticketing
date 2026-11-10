@@ -1,0 +1,9 @@
+{
+  "phases": [
+    { "dir": "0-catalog" },
+    { "dir": "1-fake-pg" },
+    { "dir": "2-booking", "depends_on": ["0-catalog"] },
+    { "dir": "3-payment", "depends_on": ["1-fake-pg", "2-booking"] },
+    { "dir": "4-m1-verify", "depends_on": ["3-payment"] }
+  ]
+}

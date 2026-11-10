@@ -1,0 +1,44 @@
+{
+  "project": "ticketing",
+  "phase": "3-payment",
+  "steps": [
+    {
+      "step": 0,
+      "name": "payment-domain-persistence",
+      "status": "pending",
+      "ac": [
+        "test -f core/src/main/resources/db/migration/V6__create_payment_tables.sql",
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.payment.*\" --tests \"io.github.ticketing.HexagonalArchitectureTests\""
+      ],
+      "model": "sonnet",
+      "reasoning_effort": "medium"
+    },
+    {
+      "step": 1,
+      "name": "payment-pg-flow",
+      "status": "pending",
+      "ac": [
+        "test -d core/src/main/kotlin/io/github/ticketing/payment/adapter/required/pg",
+        "test -d core/src/main/kotlin/io/github/ticketing/payment/adapter/provided/web",
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.payment.*\" --tests \"io.github.ticketing.ModularityTests\"",
+        "rg -q '^- \\[x\\] 멱등 키 기반 결제 요청과 웹훅 중복 처리' docs/roadmap.md",
+        "rg -q '^- \\[x\\] 환불, 만료 후 결제 성공 시 자동 환불' docs/roadmap.md"
+      ],
+      "model": "opus",
+      "reasoning_effort": "high"
+    },
+    {
+      "step": 2,
+      "name": "notification-module-tests",
+      "status": "pending",
+      "ac": [
+        "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.notification.*\" --tests \"*ModuleTests\"",
+        "rg -q '^- \\[x\\] 예매 확정·취소 이벤트 수신 후 로그 출력' docs/roadmap.md",
+        "rg -q '^- \\[x\\] 모듈 단위 테스트' docs/roadmap.md",
+        "./scripts/agent/test/check-summary.sh"
+      ],
+      "model": "sonnet",
+      "reasoning_effort": "medium"
+    }
+  ]
+}
