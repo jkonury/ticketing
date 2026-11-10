@@ -43,17 +43,17 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/design.md`.
 <module>
 ├── domain            순수 Kotlin. Spring, JPA, jOOQ import 금지
 ├── application
-│   ├── port.in       유스케이스 인터페이스 + Command/Result 타입
-│   ├── port.out      XxxCommandPort(쓰기), XxxQueryPort(조회), 외부 시스템 포트
+│   ├── port.provided 유스케이스 인터페이스 + Command/Result 타입
+│   ├── port.required XxxCommandPort(쓰기), XxxQueryPort(조회), 외부 시스템 포트
 │   └── service       유스케이스 구현. 트랜잭션 경계
 └── adapter
-    ├── in.web / in.event
-    └── out.jpa / out.jooq / out.redis / out.pg
+    ├── provided.web / provided.event
+    └── required.jpa / required.jooq / required.redis / required.pg
 ```
 
 - 의존 방향: `adapter → application → domain`. 반대 방향 import 금지. ArchUnit으로 검증한다.
-- 도메인 모델과 JPA 엔티티를 분리한다. 변환은 `adapter.out.jpa` 안의 매퍼가 맡는다.
-- 컨트롤러는 `port.in`만 호출한다. 요청/응답 DTO는 `adapter.in.web`에 두고 도메인 타입을 그대로 응답으로 내보내지 않는다.
+- 도메인 모델과 JPA 엔티티를 분리한다. 변환은 `adapter.required.jpa` 안의 매퍼가 맡는다.
+- 컨트롤러는 `port.provided`만 호출한다. 요청/응답 DTO는 `adapter.provided.web`에 두고 도메인 타입을 그대로 응답으로 내보내지 않는다.
 - 비즈니스 규칙(상태 전이, 최대 4매 등)은 `domain`에 둔다. 서비스는 흐름 조율만 한다.
 
 계층형 모듈(`member`, `catalog`, `notification`)은 `web / service / repository` 정도로 단순하게 유지한다. 포트를 억지로 만들지 않는다.

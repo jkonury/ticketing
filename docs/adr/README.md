@@ -28,3 +28,4 @@
 | [0013](0013-jwt-behind-bff.md) | 자체 JWT 발급, 토큰은 BFF가 보관 | 수락 |
 | [0014](0014-sse-bypasses-bff.md) | SSE는 BFF를 우회해 Gateway에 직접 연결 | 수락 |
 | [0015](0015-monorepo.md) | 모노레포 | 수락 |
+| [0016](0016-provided-required-packages.md) | 헥사고날 패키지는 provided / required로 명명 | 수락 |

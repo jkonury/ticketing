@@ -88,17 +88,19 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 
 ### 헥사고날 모듈의 패키지 구조
 
+Kotlin 키워드와 겹치지 않도록 입력 측 패키지는 `provided`, 출력 측 패키지는 `required`로 명명한다. [ADR 0016](./adr/0016-provided-required-packages.md) 참고.
+
 ```
 io.github.ticketing.booking
 ├── domain            순수 도메인 모델, 프레임워크 의존 없음
 ├── application
-│   ├── port.in       유스케이스 인터페이스
-│   ├── port.out      CommandPort(쓰기) / QueryPort(조회) 분리
+│   ├── port.provided 유스케이스 인터페이스
+│   ├── port.required CommandPort(쓰기) / QueryPort(조회) 분리
 │   └── service       유스케이스 구현
 └── adapter
-    ├── in.web        컨트롤러
-    ├── in.event      이벤트 리스너
-    └── out
+    ├── provided.web  컨트롤러
+    ├── provided.event 이벤트 리스너
+    └── required
         ├── jpa       CommandPort 구현
         ├── jooq      QueryPort 구현
         └── redis     좌석 선점 등
