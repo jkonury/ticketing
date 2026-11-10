@@ -1,0 +1,13 @@
+package io.github.ticketing.member.service
+
+import io.github.ticketing.DomainException
+import org.springframework.http.HttpStatus
+
+class EmailAlreadyExistsException : DomainException("EMAIL_ALREADY_EXISTS", HttpStatus.CONFLICT, "이미 가입된 이메일입니다.")
+
+// 이메일 존재 여부를 알 수 없도록 이메일 오류와 비밀번호 오류를 구분하지 않는다
+class InvalidCredentialsException : DomainException("INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.")
+
+class InvalidRefreshTokenException : DomainException("INVALID_REFRESH_TOKEN", HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다.")
+
+class MemberNotFoundException : DomainException("MEMBER_NOT_FOUND", HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다.")
