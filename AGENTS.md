@@ -51,11 +51,28 @@ M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 �
 ```bash
 docker compose up -d                 # PostgreSQL, Redis, fake-pg
 ./gradlew build                      # 전체 빌드 + 테스트
-./gradlew :core:test                 # 모듈별 테스트
-./gradlew :core:test --tests "*BookingConcurrencyTest"
 ./gradlew :core:bootRun
 cd web && npm run dev
 ```
+
+### 테스트 실행
+
+- 사전 조건: Docker가 떠 있어야 한다. jOOQ 코드 생성(`:core:generateJooq`)과 Testcontainers PostgreSQL이 Docker를 쓴다. 에이전트 스크립트는 `fd`, `rg`를 쓰므로 설치되어 있어야 한다.
+- Gradle 테스트는 모듈 단위다. `--tests` 필터는 항상 모듈 경로와 함께 쓴다(`:core:test --tests ...`). 경로 없이 쓰면 일치하는 테스트가 없는 모듈에서 실패한다.
+- 에이전트나 긴 로그를 줄여 보고 싶을 때는 `scripts/agent/test/`의 래퍼를 쓴다. 실패한 테스트와 Gradle 오류만 출력하고 전체 로그 경로를 알려준다.
+
+| 목적 | 명령 |
+|---|---|
+| 전체 테스트 | `./gradlew test` |
+| 모듈 테스트 | `./gradlew :core:test` |
+| 단일 클래스 | `./gradlew :core:test --tests "*BookingConcurrencyTest"` |
+| 실패만 요약 (테스트) | `scripts/agent/test/run-tests.sh :core:test --tests "*BookingConcurrencyTest"` |
+| 검증 태스크 요약 (컴파일·테스트·검사) | `scripts/agent/test/check-summary.sh :core:check` |
+| 명령 로그 요약 (임의 명령) | `scripts/agent/test/run-summary.sh -- ./gradlew :core:compileKotlin` |
+
+- `check-summary.sh`는 `test` 태스크와 `--tests`를 받지 않는다. 테스트 실행은 `run-tests.sh`를 쓴다.
+- 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
+- Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌린다(`docs/rules/backend.md`). 테스트 규칙(한국어 백틱 이름, `Clock` 고정, `runTest`)도 같은 문서를 따른다.
 
 ## 공통 규칙
 
