@@ -1,5 +1,5 @@
 <!--
-문제 조사·해결 기록 템플릿(Claude Code, Codex, 사람 공용). backend·frontend·배포·외부 API 문제에 사용한다. 새 문서는 이 파일을 복사해 `docs/troubleshooting/<대상>-<증상>.md`로 만든다.
+문제 조사·해결 기록 템플릿(Claude Code, Codex, 사람 공용). 코어·실시간 앱·Gateway·BFF·Batch·가짜 PG 문제에 사용한다. 새 문서는 이 파일을 복사해 `docs/troubleshooting/<대상>-<증상>.md`로 만든다.
 
 ■ 버전 선택 (기본은 짧은 버전)
 - 짧은 버전(기본): 절 1·5·6·7만 작성한다. "[전체]"가 붙은 절(2·3·4·8)은 통째로 지운다. 지운 절을 "해당 없음"으로 남기지 않는다.
@@ -12,7 +12,7 @@
 - 문서를 짧게 시작했다가 도중에 막히면 [전체] 절을 추가하고 상태를 "조사중"으로 바꾼다.
 
 ■ 파일명
-- `<대상>-<증상>.md`, kebab-case. 예: `auth-login-session-expired.md`, `importing-job-stuck.md`, `web-api-502.md`
+- `<대상>-<증상>.md`, kebab-case. 예: `auth-login-session-expired.md`, `booking-seat-hold-conflict.md`, `web-api-502.md`
 - 날짜는 파일명에 넣지 않는다(문서를 갱신하면 어긋난다). 날짜는 제목과 "갱신 이력"에 쓴다.
 
 ■ 작성 원칙
@@ -22,7 +22,7 @@
   4. 명령·로그는 재현에 필요한 핵심만 보존한다. 긴 로그는 증거 폴더에 파일로 두고 오류 줄과 요약만 싣는다.
   5. 마스킹 (아래 목록 참고). 마스킹 후 "마스킹 확인" 명령으로 한 번 더 확인한다.
   6. 설명은 한국어로 쓰고 `docs/glossary.md`의 표준 표기를 따른다. 코드 식별자·설정 키·오류 메시지는 원문을 유지한다.
-  7. 모든 명령 블록에 실행 주체(`[사용자]` 또는 `[에이전트]`), 실행 위치(저장소 루트·backend·frontend·서버), 대상 환경을 적는다. 실제 실행 주체를 기록하며 sudo 사용 여부만으로 구분하지 않는다.
+  7. 모든 명령 블록에 실행 주체(`[사용자]` 또는 `[에이전트]`), 실행 위치(저장소 루트·대상 앱 디렉터리·서버), 대상 환경을 적는다. 실제 실행 주체를 기록하며 sudo 사용 여부만으로 구분하지 않는다.
   8. 작업 경로의 AGENTS.md를 따른다. 설계·ADR 변경이 필요하면 사용자와 먼저 합의하고, 관련 설계 문서·지침을 함께 갱신한다. 이 템플릿은 서버 반영이나 데이터 변경을 승인하는 문서가 아니다.
 
 ■ 마스킹 대상과 치환 규칙
@@ -31,14 +31,14 @@
 - 공인 IP → `203.0.113.10` (문서용 예약 대역)
 - 내부 IP 대역·호스트명 → `10.0.0.x`, `<HOSTNAME>`
 - SSH 포트 → `<SSH_PORT>`
-- 개인 계정명·이메일 → `<USER>`, `user@example.com` (저장소에 공개된 service·DB role 식별자 `ledger`는 유지)
-- 실제 카드번호·계좌번호·명세서 원본·가구별 거래·자산 정보 → 저장하지 않는다. 재현에는 합성 데이터나 익명화한 fixture만 사용한다.
-- Authorization·Cookie·Set-Cookie, access token·refresh token, session 값·재설정 링크·초대 코드 → `<TOKEN>` 또는 항목 삭제
+- 개인 계정명·이메일 → `<USER>`, `user@example.com` (저장소에 공개된 앱·DB role 식별자는 유지)
+- 실제 카드번호·계좌번호·PG 원본 응답·회원 개인정보·개인별 예매·결제 정보 → 저장하지 않는다. 재현에는 합성 데이터나 익명화한 fixture만 사용한다.
+- Authorization·Cookie·Set-Cookie, access token·refresh token, 세션 값·입장 토큰·SSE 티켓 → `<TOKEN>` 또는 항목 삭제
 - 환경 변수는 이름만 적고 실제 비밀 값이나 환경 파일 전체를 복사하지 않는다.
 
 ■ 증거 보관
 - 긴 로그·설정 사본은 `docs/troubleshooting/evidence/<문서 파일명(확장자 제외)>/`에 둔다. 마스킹한 뒤 저장한다.
-- 원본 로그·설정·명세서는 저장소에 복사하지 않는다. 저장소 밖 증거는 "저장소에 없음"과 비밀 값이 없는 보관 위치·보관 기한을 적는다.
+- 원본 로그·설정·PG 응답은 저장소에 복사하지 않는다. 저장소 밖 증거는 "저장소에 없음"과 비밀 값이 없는 보관 위치·보관 기한을 적는다.
 - 요약 스크립트의 임시 로그는 분석 후 정리한다. 장기 근거가 필요하면 핵심 부분만 비식별화해 위 증거 폴더에 보존하고, 삭제될 임시 경로에만 의존하지 않는다.
 
 ■ 마스킹 확인 (커밋 전에 실행)
@@ -47,14 +47,14 @@
 - 첫 명령은 후보를 찾는 용도라 오탐이 많다(예약 대역 IP도 걸린다). 두 번째 명령은 본인 값을 직접 채워서 쓴다. 이 값은 이 템플릿에 적지 않는다.
 
 ■ 참고 문서(저장소 루트 기준)
-- docs/design.md, docs/events.md, docs/adr/
-- backend/AGENTS.md, frontend/AGENTS.md, 관련 backend 모듈의 AGENTS.md
+- docs/design.md, docs/roadmap.md, docs/glossary.md, docs/adr/
+- AGENTS.md, docs/rules/backend.md, docs/rules/frontend.md
 
 ■ 이 주석과 작성용 `<...>` 표시는 작성하면서 바꾸거나 지운다. 비밀 값 치환 표시는 유지한다.
 ■ 아래 상대 링크는 docs/troubleshooting/<대상>-<증상>.md로 복사한 뒤를 기준으로 한다.
 -->
 
-# ledger <대상 앱·모듈> <증상 요약> 조사·해결 기록 (<YYYY-MM-DD>)
+# ticketing <대상 앱·모듈> <증상 요약> 조사·해결 기록 (<YYYY-MM-DD>)
 
 상태: <조사중 / 우회 적용 / 해결> · 버전: <짧은 / 전체>
 
@@ -73,25 +73,25 @@
 - <관측된 현상. 사용자가 본 그대로 쓴다.>
 - <오류 메시지 원문 한 줄. 예: `Caused by: …`>
 - 발생 시각: <YYYY-MM-DD HH:MM KST> / 발견 시각: <…> / 해결 시각: <…>
-- 빈도·영향 범위: <api·web·admin, 관련 모듈·기능, 가구 범위. 실제 가구 식별자 제외>
+- 빈도·영향 범위: <대상 앱·코어 모듈·기능, 영향받은 회차·좌석·예매·결제 범위. 실제 회원 식별자 제외>
 - 추적 근거: <발생 시각·시간대, traceId, API 경로·HTTP 상태·오류 코드, 해당하면 batch 실행 식별자>
+- 정합성 영향: <좌석 중복 확정·선점 잔존·중복 결제·환불 누락·이벤트 누락 여부. 관련 없으면 해당 없음>
 - 데이터 손실: <없음 / 있음(내용) / 미확인>
 
 ### 환경
 | 항목 | 값 |
 | --- | --- |
-| 실행 환경·배포 단계 | <개발 PC의 격리 스택 / 서버 DB에 연결한 local 프로필 / 서버, systemd·compose·k8s 중 실제 사용 방식> |
-| 대상 앱·모듈·의존 | <api·web·admin, 관련 모듈, PostgreSQL·Redis·외부 API 등> |
+| 실행 환경·배포 단계 | <개발 PC / 테스트 환경 / 배포 환경, Compose·JVM 직접 실행 등 실제 사용 방식과 로드맵 단계> |
+| 대상 앱·모듈·의존 | <core·core-batch·realtime·gateway·fake-pg·web, 코어 모듈, PostgreSQL·Redis 등> |
 | 재현한 소스·배포물 | <branch·commit, commit하지 않은 변경, 해당하면 image digest> |
-| 실행 도구·버전 | <관련 JDK·Gradle·Node·pnpm·Docker·브라우저·OS 버전. backend 버전 원본은 backend/gradle/libs.versions.toml, frontend는 각 package.json> |
-| 실행 위치·프로필·접속 경로 | <명령 실행 디렉터리, Spring 프로필, 브라우저 → BFF → backend 등 실패 구간> |
+| 실행 도구·버전 | <관련 JDK·Gradle·Node·npm·Docker·브라우저·OS 버전. JVM 의존 버전은 gradle/libs.versions.toml, web은 구현 후 package.json 기준> |
+| 실행 위치·프로필·접속 경로 | <명령 실행 디렉터리, Spring 프로필, 브라우저 → BFF → Gateway → core 또는 브라우저 → Gateway → realtime 등 실패 구간> |
 | 설정·배포 파일 | <저장소 상대 경로와 환경 변수 이름. 실제 비밀 값 제외> |
 | 데이터·이벤트 | <관련 schema·이벤트·batch job, 합성 재현 데이터 위치. 무관하면 해당 없음> |
 | 변경 직전 작업 | <직전 배포·설정·migration·입력 변경. 확인하지 못했으면 미확인> |
 
-개발 PC의 격리 스택은 `scripts/dev.sh`를 사용한다(api 38220, web 38221, admin 38222).
-`local` 프로필은 서버 DB·Redis에 연결할 수 있으므로 프로필 이름만으로 격리 환경이라고 판단하지 않는다.
-실제 연결 대상은 비밀 값을 제외하고 확인해 기록한다.
+현재 구현 상태는 [로드맵](../roadmap.md)에서 확인한다. 계획된 앱·기능을 이미 동작하는 것으로 기록하지 않는다.
+Compose 설정과 실제 실행 프로필·환경 변수를 기준으로 연결 대상과 포트를 확인한다. 프로필 이름만으로 격리 환경이라고 판단하지 않는다.
 
 ### 변경 전 구성
 ```text
@@ -108,7 +108,7 @@
 ### 재현 단순화
 <최소 단위 재현(예: `nc`, `curl`, `psql` 한 줄). 불가능하면 이유를 적는다.>
 ```bash
-# [사용자|에이전트]
+# [사용자|에이전트] <실행 위치>, <대상 환경>
 <명령>
 ```
 ```text
@@ -132,7 +132,7 @@
 - 근거: <왜 이 가설을 세웠는가>
 - 검증:
   ```bash
-  # [사용자|에이전트]
+  # [사용자|에이전트] <실행 위치>, <대상 환경>
   <명령>
   ```
   ```text
@@ -169,7 +169,7 @@
 
 ## 6. 해결 방법 및 변경 전후 비교
 
-원칙: <해결 시 지킨 제약. 예: 모듈의 데이터 소유와 가구 격리를 유지한다>
+원칙: <해결 시 지킨 제약. 예: 모듈별 스키마 소유, 좌석 중복 확정 방지, 결제 멱등성을 유지한다>
 
 ### 변경 전후
 | 항목 | 변경 전 | 변경 후 |
@@ -185,43 +185,43 @@
 
 트레이드오프: <해결책의 단점과 감수한 이유.>
 
-### 반영 및 rollback
+### 반영 및 롤백
 
 <코드·설정·데이터 중 바뀌는 대상과 환경. 서버 반영이 없으면 해당 없음과 이유를 적는다.
-배포 명령은 실제 단계의 deploy 문서를 따른다. DB 변경은 migration·백업·복구 가능 범위를 구분한다.>
+배포 명령은 현재 단계에서 실제로 사용하는 배포 설정을 따른다. DB 변경은 migration·백업·복구 가능 범위를 구분한다.>
 
 ```bash
-# [사용자]
+# [사용자] <실행 위치>, <대상 환경>
 <반영 명령 순서>
 ```
 - 반영 근거·PR: <해당하면 사용자 합의, PR 번호, merge commit, 실제 반영 시각>
-- rollback: <되돌리는 방법과 보존한 것(데이터·Secret 등)>
+- 롤백: <되돌리는 방법과 보존한 것(데이터·Secret 등)>
 
 ## 7. 해결 후 검증 방법과 실제 결과
 
 <필요한 명령만 실행하고 실제 결과를 아래 표에 기록한다. 문서만 바꿨다면 링크·경로·명령의 지침 일치를 확인한다.>
 
-backend 코드를 바꾸면 저장소 루트에서 전체 테스트(`ModularityTests` 포함)와 검사를 실행한다.
+JVM 앱 코드를 바꾸면 [백엔드 규칙](../rules/backend.md)에 따라 저장소 루트에서 테스트와 검사를 실행한다.
+모듈 의존을 바꿨다면 Modulith 구조 검증도 필수다. Docker, fd, rg가 필요하다.
 테스트 필터는 사용자가 지정한 경우에만 추가한다.
 
 ```bash
 # [사용자|에이전트] 저장소 루트, 개발 PC
-./scripts/agent/run-tests.sh
-./scripts/agent/check-summary.sh
+./scripts/agent/test/run-tests.sh
+./scripts/agent/test/check-summary.sh
 ```
 
-frontend 코드를 바꾸면 다음을 실행하고, 화면 변경은 `frontend/AGENTS.md`의 환경 준비 후 E2E도 실행한다.
+`web` 코드를 바꾸면 [프런트엔드 규칙](../rules/frontend.md)과 구현된 package.json의 스크립트에 따라 검사한다.
+현재 단계에 없는 검사 명령이나 E2E 실행 결과를 만들어 적지 않는다.
+
+문서의 제목·링크·경로를 바꾸거나 문서를 옮겼다면 다음 검사를 실행한다.
 
 ```bash
 # [사용자|에이전트] 저장소 루트, 개발 PC
-./scripts/agent/run-summary.sh -C frontend pnpm -r typecheck
-./scripts/agent/run-summary.sh -C frontend pnpm lint
-./scripts/agent/run-summary.sh -C frontend pnpm build
-# 화면 변경 시 (Docker 필요)
-./scripts/agent/run-summary.sh -C frontend pnpm --filter @ledger/e2e test:app
+./scripts/agent/docs/check-docs.sh <변경한 문서 경로>
 ```
 
-- 그 밖의 진단용 빌드·검사는 `scripts/agent/run-summary.sh`로 감싼다.
+- 그 밖의 진단용 빌드·검사는 `scripts/agent/test/run-summary.sh`로 감싼다.
 - Docker가 없으면 Testcontainers 통합 테스트가 건너뛰어져도 통과로 표시될 수 있다. DB 변경은 Docker를 켜고 실제 실행 여부를 확인한다.
 - 실패·건너뜀·미실행과 그 이유를 구분한다. health 정상뿐 아니라 원래 실패했던 업무 흐름과 데이터 정합성도 검증한다.
 
