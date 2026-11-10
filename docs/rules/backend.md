@@ -1,14 +1,3 @@
----
-paths:
-  - "core/**"
-  - "core-batch/**"
-  - "realtime/**"
-  - "gateway/**"
-  - "fake-pg/**"
-  - "*.gradle.kts"
-  - "gradle/**"
----
-
 # Backend 지침
 
 Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/design.md`.

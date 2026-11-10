@@ -8,9 +8,9 @@
 - `docs/roadmap.md`: 단계별 구현 체크리스트와 완료 기준
 - `docs/adr/`: 결정별로 검토한 대안과 선택 이유. 설계를 바꾸는 결정은 새 ADR로 남긴다
 
-작업 영역별 세부 지침은 해당 경로의 파일을 다룰 때 자동으로 적용된다.
+작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
-- `.claude/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
+- `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
 - `.claude/rules/frontend.md`: `web`
 
 ## 저장소 구조
