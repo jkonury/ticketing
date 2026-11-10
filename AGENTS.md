@@ -2,7 +2,7 @@
 
 공연/티켓 예매 서비스(지정석). 1인 학습 겸 포트폴리오 프로젝트. Modulith로 시작해 추후 MSA + k8s로 전환한다.
 
-## 먼저 읽을 문서
+## 1. 먼저 읽을 문서
 
 - `docs/design.md`: 설계 합의서. 구조·규칙에 대한 결정의 근거
 - `docs/roadmap.md`: 단계별 구현 체크리스트와 완료 기준
@@ -13,7 +13,7 @@
 - `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
 - `docs/rules/frontend.md`: `web`
 
-## 저장소 구조
+## 2. 저장소 구조
 
 | 경로 | 내용 |
 |---|---|
@@ -25,7 +25,7 @@
 | `web/` | Next.js BFF + 화면 |
 | `docs/` | 설계서, 로드맵, 측정 결과 |
 
-## 작업 방식
+## 3. 작업 방식
 
 - 작업 시작 전 `docs/roadmap.md`에서 현재 단계와 다음 미완료 항목을 확인한다.
 - 한 단계의 **완료 기준**을 만족하기 전에는 다음 단계 항목을 시작하지 않는다.
@@ -34,7 +34,7 @@
 - `docs/design.md` 12장의 "의도적으로 미룬 것"은 요청 없이 앞당겨 구현하지 않는다.
 - 라이브러리 버전과 API는 기억에 의존하지 말고 공식 문서로 확인한다. 특히 Spring Boot 4.x, Spring Modulith, Spring Cloud Gateway, jOOQ, Next.js.
 
-## 반드시 지킬 설계 규칙
+## 4. 반드시 지킬 설계 규칙
 
 1. 코어 모듈 간 호출은 Modulith 이벤트로만 한다. 다른 모듈의 내부 클래스를 직접 참조하지 않는다.
 2. 모듈별 PostgreSQL 스키마를 넘는 외래 키와 조인을 만들지 않는다.
@@ -44,7 +44,7 @@
 6. 좌석 확정의 최종 방어선은 DB의 `(회차, 좌석)` 유니크 제약이다. Redis 선점만 믿고 확정하지 않는다.
 7. 결제 요청과 웹훅 처리는 멱등 키로 중복을 걸러낸다.
 
-## 명령
+## 6. 명령
 
 M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 이 절을 고친다.
 
@@ -55,26 +55,18 @@ docker compose up -d                 # PostgreSQL, Redis, fake-pg
 cd web && npm run dev
 ```
 
-### 테스트 실행
+## 7. 테스트 실행
+
+**Claude Code와 Codex 모두** 저장소 루트에서 다음 스크립트를 실행합니다. 실패를 받으면 작업 중인 에이전트가 직접 고칩니다.
 
 - 사전 조건: Docker가 떠 있어야 한다. jOOQ 코드 생성(`:core:generateJooq`)과 Testcontainers PostgreSQL이 Docker를 쓴다. 에이전트 스크립트는 `fd`, `rg`를 쓰므로 설치되어 있어야 한다.
-- Gradle 테스트는 모듈 단위다. `--tests` 필터는 항상 모듈 경로와 함께 쓴다(`:core:test --tests ...`). 경로 없이 쓰면 일치하는 테스트가 없는 모듈에서 실패한다.
-- 에이전트나 긴 로그를 줄여 보고 싶을 때는 `scripts/agent/test/`의 래퍼를 쓴다. 실패한 테스트와 Gradle 오류만 출력하고 전체 로그 경로를 알려준다.
-
-| 목적 | 명령 |
-|---|---|
-| 전체 테스트 | `./gradlew test` |
-| 모듈 테스트 | `./gradlew :core:test` |
-| 단일 클래스 | `./gradlew :core:test --tests "*BookingConcurrencyTest"` |
-| 실패만 요약 (테스트) | `scripts/agent/test/run-tests.sh :core:test --tests "*BookingConcurrencyTest"` |
-| 검증 태스크 요약 (컴파일·테스트·검사) | `scripts/agent/test/check-summary.sh :core:check` |
-| 명령 로그 요약 (임의 명령) | `scripts/agent/test/run-summary.sh -- ./gradlew :core:compileKotlin` |
-
-- `check-summary.sh`는 `test` 태스크와 `--tests`를 받지 않는다. 테스트 실행은 `run-tests.sh`를 쓴다.
+- test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
+- check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
+- 문서 검사: `./scripts/agent/docs/check-docs.sh [경로...]` (lychee 오프라인으로 상대 경로 링크와 `#anchor`를, `check-doc-refs.sh`로 문서의 백틱 경로를 검사). 문서를 옮기거나 제목·링크를 바꾸면 실행합니다. 설정은 `lychee.toml`입니다.
 - 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
 - Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌린다(`docs/rules/backend.md`). 테스트 규칙(한국어 백틱 이름, `Clock` 고정, `runTest`)도 같은 문서를 따른다.
 
-## 공통 규칙
+## 8. 공통 규칙
 
 - 대화, 문서, 커밋 메시지는 한국어. 코드 식별자는 영어.
 - 주석은 "왜"가 코드에서 드러나지 않을 때만 쓴다.
@@ -82,3 +74,12 @@ cd web && npm run dev
 - 커밋 메시지 형식: `<type>(<scope>): <요약>`. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`. scope는 모듈명(`booking`, `gateway`, `web` 등).
 - 테스트가 실패하면 실패한 그대로 보고한다. 테스트를 지우거나 비활성화해서 통과시키지 않는다.
 - 비밀 값은 저장소에 넣지 않는다. 로컬 설정은 `.env`(git 제외)와 `application-local.yml`을 쓴다.
+
+## 9. 조회·출력 분량 관리
+
+- **필수 지침은 처음에 모두 읽고, 문서·코드는 필요한 범위만 읽습니다.** `rg --files`로 경로를 찾고 `rg -n`으로 관련 절·심볼을 찾은 뒤 `sed -n '시작,끝p' 파일`로 해당 구간을 확인합니다. 대용량 파일이나 여러 문서를 한꺼번에 `cat`하지 않습니다.
+- **한 번 읽은 내용은 재사용합니다.** 확인한 경로·행·결론을 작업 중 짧게 기록하고, 같은 문서·코드·diff는 변경됐거나 새 의문이 생긴 경우에만 다시 조회합니다. 다시 볼 때는 달라진 구간이나 의문과 관련된 부분만 읽습니다.
+- **diff는 범위를 좁혀 확인합니다.** 먼저 `git diff --stat`·`git status --short`로 범위를 확인하고 `git diff -- 경로`로 검토합니다. 같은 전체 diff를 중간 점검마다 출력하지 않습니다. 새 파일은 필요한 구간을 별도로 확인합니다.
+- **테스트·로그는 요약 스크립트를 우선 사용합니다.** 7절의 전용 스크립트가 있으면 그것을 쓰고, 그 밖의 명령은 `run-summary.sh`로 실행합니다. 출력이 많다는 이유로 필수 검사나 실패 처리를 생략하지 않습니다. pipeline은 `bash -o pipefail -c '...'`로 감싸 실패가 가려지지 않게 합니다.
+- **실패 분석은 저장된 로그에서 좁혀 갑니다.** 성공 로그·전체 trace를 대화에 출력하지 않습니다. 먼저 실패 요약을 보고, 부족하면 해당 로그에서 `rg -n -m 20 '오류 패턴' 로그경로`로 위치를 찾은 뒤 필요한 주변 줄만 조회합니다. 끝부분만으로 원인을 알 수 없으면 앞부분과 원인 예외도 확인합니다. 수정·새 근거 없이 같은 검사를 반복 실행하지 않습니다.
+- **도구 출력은 호출 전에 제한합니다.** 검색 경로·패턴·문맥 줄 수와 출력 한도를 정하고, 잘렸다면 같은 명령을 더 큰 한도로 반복하지 않고 파일·구간을 좁힙니다. 완료 보고에는 변경 내용, 검증 결과와 건너뛴 항목, 필요한 로그 경로만 적습니다.
