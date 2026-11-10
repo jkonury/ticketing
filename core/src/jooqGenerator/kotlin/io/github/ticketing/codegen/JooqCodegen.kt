@@ -26,7 +26,7 @@ fun main(args: Array<String>) {
 
     File(outputDir).deleteRecursively()
 
-    PostgreSQLContainer("postgres:17").use { postgres ->
+    PostgreSQLContainer("postgres:18.3-alpine").use { postgres ->
         postgres.start()
 
         Flyway.configure()
