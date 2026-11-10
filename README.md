@@ -61,3 +61,5 @@ flowchart LR
 ## 실행
 
 M0(프로젝트 뼈대) 완료 후 작성한다.
+
+시드 데이터(공연장 2곳, 공연 3편, 회차 각 3개)는 `SPRING_PROFILES_ACTIVE=seed ./gradlew :core:bootRun`으로 넣는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)이고, 다시 실행해도 늘지 않는다.

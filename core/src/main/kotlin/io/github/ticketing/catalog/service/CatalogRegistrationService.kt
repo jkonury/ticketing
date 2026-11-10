@@ -10,6 +10,8 @@ import io.github.ticketing.catalog.domain.VenueSeat
 import io.github.ticketing.catalog.repository.PerformanceRepository
 import io.github.ticketing.catalog.repository.ScheduleRepository
 import io.github.ticketing.catalog.repository.VenueRepository
+import io.github.ticketing.catalog.config.CatalogCaches
+import org.springframework.cache.annotation.CacheEvict
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -36,6 +38,7 @@ class CatalogRegistrationService(
     }
 
     @Transactional
+    @CacheEvict(CatalogCaches.PERFORMANCE, key = "#result.id")
     fun registerPerformance(command: RegisterPerformanceCommand): Performance {
         val venue = venues.findById(command.venueId).orElseThrow { VenueNotFoundException() }
         if (command.prices.map { it.grade }.toSet().size != command.prices.size) throw DuplicatePriceGradeException()
@@ -49,7 +52,9 @@ class CatalogRegistrationService(
         )
     }
 
+    // 상세에 회차 목록이 들어 있으므로 회차 등록 시 무효화한다. 캐시 매니저가 transactionAware라 커밋 뒤에 지운다
     @Transactional
+    @CacheEvict(CatalogCaches.PERFORMANCE, key = "#command.performanceId")
     fun registerSchedule(command: RegisterScheduleCommand): Schedule {
         val performance = performances.findById(command.performanceId).orElseThrow { PerformanceNotFoundException() }
         // 리소스 소유자 확인은 서비스에서 한다 (docs/rules/backend.md § 보안)

@@ -17,3 +17,5 @@ class PriceMissingForGradeException(grades: Collection<String>) :
 class NotPerformanceOwnerException : DomainException("NOT_PERFORMANCE_OWNER", HttpStatus.FORBIDDEN, "해당 공연의 주최자만 회차를 등록할 수 있습니다.")
 
 class DuplicateScheduleException : DomainException("DUPLICATE_SCHEDULE", HttpStatus.CONFLICT, "같은 시작 시각의 회차가 이미 있습니다.")
+
+class ScheduleNotFoundException : DomainException("SCHEDULE_NOT_FOUND", HttpStatus.NOT_FOUND, "회차를 찾을 수 없습니다.")

@@ -49,8 +49,8 @@
 ### M1-2. catalog
 - [x] 공연, 회차, 공연장, 좌석 배치 모델
 - [x] 주최자의 공연·회차 등록 API
-- [ ] 공연 목록·상세 조회 (jOOQ), Redis 조회 캐시
-- [ ] 시드 데이터 스크립트
+- [x] 공연 목록·상세 조회 (jOOQ), Redis 조회 캐시
+- [x] 시드 데이터 스크립트
 
 ### M1-3. booking (헥사고날)
 - [ ] 도메인 모델과 상태 전이 (`PENDING` / `CONFIRMED` / `EXPIRED` / `CANCELLED`)
