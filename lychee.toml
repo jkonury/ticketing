@@ -1,0 +1,6 @@
+# 문서 링크 검사 설정. 실행은 scripts/agent/docs/check-docs.sh
+offline = true
+include_fragments = "anchor-only"
+no_progress = true
+# 양식의 자리표시자([텍스트](URL) 등)는 링크가 아니므로 검사하지 않는다.
+exclude_path = ["docs/templates"]
