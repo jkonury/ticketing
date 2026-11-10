@@ -5,7 +5,7 @@
     {
       "step": 0,
       "name": "fake-pg-api",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "./scripts/agent/test/run-tests.sh :fake-pg:test --tests \"io.github.ticketing.fakepg.payment.*\"",
         "rg -q '^- \\[x\\] 결제 요청 API, 웹훅 발송' docs/roadmap.md",
@@ -14,7 +14,10 @@
         "./scripts/agent/test/check-summary.sh :fake-pg:check"
       ],
       "model": "sonnet",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "started_at": "2026-11-10T09:51:16.073305+00:00",
+      "summary": "fake-pg/src/main/.../payment/{config,service,web} 구현. POST /v1/payments, /{id}/refund, GET /v1/transactions, HMAC 웹훅(재시도·중복 eventId). 설정 fake-pg.*(retry-delay 추가). 테스트 27건 통과.",
+      "completed_at": "2026-11-10T09:57:05.120212+00:00"
     },
     {
       "step": 1,
@@ -30,5 +33,6 @@
       "model": "haiku",
       "reasoning_effort": "low"
     }
-  ]
+  ],
+  "created_at": "2026-11-10T09:51:16.071677+00:00"
 }

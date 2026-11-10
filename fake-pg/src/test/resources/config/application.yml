@@ -1,0 +1,11 @@
+# 테스트 전용 설정. classpath:/config/ 는 main의 application.yml보다 우선한다.
+fake-pg:
+  webhook:
+    secret: test-webhook-secret
+    delay: 20ms
+    duplicate-count: 2
+    max-attempts: 3
+    retry-delay: 50ms
+  behavior:
+    timeout-delay: 500ms
+    delayed-webhook-delay: 1s
