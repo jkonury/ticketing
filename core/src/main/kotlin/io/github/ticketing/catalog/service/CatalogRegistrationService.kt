@@ -1,0 +1,105 @@
+package io.github.ticketing.catalog.service
+
+import io.github.ticketing.catalog.ScheduleRegistered
+import io.github.ticketing.catalog.ScheduleSeat
+import io.github.ticketing.catalog.domain.Performance
+import io.github.ticketing.catalog.domain.Schedule
+import io.github.ticketing.catalog.domain.SeatGrade
+import io.github.ticketing.catalog.domain.Venue
+import io.github.ticketing.catalog.domain.VenueSeat
+import io.github.ticketing.catalog.repository.PerformanceRepository
+import io.github.ticketing.catalog.repository.ScheduleRepository
+import io.github.ticketing.catalog.repository.VenueRepository
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.time.Clock
+import java.time.Instant
+
+@Service
+class CatalogRegistrationService(
+    private val venues: VenueRepository,
+    private val performances: PerformanceRepository,
+    private val schedules: ScheduleRepository,
+    private val events: ApplicationEventPublisher,
+    private val clock: Clock,
+) {
+
+    @Transactional
+    fun registerVenue(command: RegisterVenueCommand): Venue {
+        val seats = command.seats.map { VenueSeat(it.section.trim(), it.rowLabel.trim(), it.seatNumber, it.grade) }
+        // 도메인 불변식 위반(IllegalArgumentException)이 500으로 새지 않도록 중복을 먼저 400으로 변환한다
+        if (seats.map { it.key }.toSet().size != seats.size) throw DuplicateVenueSeatException()
+        return venues.save(Venue(command.name.trim(), seats, clock.instant()))
+    }
+
+    @Transactional
+    fun registerPerformance(command: RegisterPerformanceCommand): Performance {
+        val venue = venues.findById(command.venueId).orElseThrow { VenueNotFoundException() }
+        if (command.prices.map { it.grade }.toSet().size != command.prices.size) throw DuplicatePriceGradeException()
+        val prices = command.prices.associate { it.grade to it.price }
+
+        val missing = venue.seats.map { it.grade }.toSet() - prices.keys
+        if (missing.isNotEmpty()) throw PriceMissingForGradeException(missing.sorted().map { it.name })
+
+        return performances.save(
+            Performance(command.organizerId, command.title.trim(), command.description.trim(), command.venueId, prices, clock.instant()),
+        )
+    }
+
+    @Transactional
+    fun registerSchedule(command: RegisterScheduleCommand): Schedule {
+        val performance = performances.findById(command.performanceId).orElseThrow { PerformanceNotFoundException() }
+        // 리소스 소유자 확인은 서비스에서 한다 (docs/rules/backend.md § 보안)
+        if (performance.organizerId != command.requesterId) throw NotPerformanceOwnerException()
+        val performanceId = requireNotNull(performance.id)
+        if (schedules.existsByPerformanceIdAndStartsAt(performanceId, command.startsAt)) throw DuplicateScheduleException()
+
+        // exists 확인과 저장 사이에 같은 회차가 들어오면 유니크 제약이 막는다. 500 대신 409로 변환한다
+        val schedule = try {
+            schedules.saveAndFlush(Schedule(performanceId, command.startsAt, clock.instant()))
+        } catch (e: DataIntegrityViolationException) {
+            throw DuplicateScheduleException()
+        }
+
+        val venue = venues.findById(performance.venueId).orElseThrow { VenueNotFoundException() }
+        val seats = venue.seats.map { seat ->
+            ScheduleSeat(
+                seatId = requireNotNull(seat.id),
+                grade = seat.grade.name,
+                label = "${seat.section}구역 ${seat.rowLabel}열 ${seat.seatNumber}번",
+                price = requireNotNull(performance.prices[seat.grade]) { "등록된 공연의 가격표에 ${seat.grade} 등급이 없다" },
+            )
+        }
+        // 회차 저장과 같은 트랜잭션에서 발행한다. 이벤트 발행 레지스트리가 커밋 후 전달을 보장한다
+        events.publishEvent(
+            ScheduleRegistered(
+                scheduleId = requireNotNull(schedule.id),
+                performanceId = performanceId,
+                performanceTitle = performance.title,
+                organizerId = performance.organizerId,
+                startsAt = schedule.startsAt,
+                seats = seats,
+            ),
+        )
+        return schedule
+    }
+
+    data class SeatSpec(val section: String, val rowLabel: String, val seatNumber: Int, val grade: SeatGrade)
+
+    data class PriceSpec(val grade: SeatGrade, val price: BigDecimal)
+
+    data class RegisterVenueCommand(val name: String, val seats: List<SeatSpec>)
+
+    data class RegisterPerformanceCommand(
+        val organizerId: Long,
+        val title: String,
+        val description: String,
+        val venueId: Long,
+        val prices: List<PriceSpec>,
+    )
+
+    data class RegisterScheduleCommand(val requesterId: Long, val performanceId: Long, val startsAt: Instant)
+}

@@ -20,14 +20,17 @@
     {
       "step": 1,
       "name": "catalog-register-api",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/kotlin/io/github/ticketing/catalog/ScheduleRegistered.kt",
         "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.catalog.*\" --tests \"io.github.ticketing.ModularityTests\"",
         "rg -q '^- \\[x\\] 주최자의 공연·회차 등록 API' docs/roadmap.md"
       ],
       "model": "sonnet",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "started_at": "2026-11-10T09:55:26.442543+00:00",
+      "summary": "catalog/ScheduleRegistered.kt(이벤트), service/CatalogRegistrationService·CatalogExceptions, web/CatalogRegistrationController 추가. 회차 저장 후 같은 트랜잭션에서 발행. 테스트·roadmap 갱신 완료.",
+      "completed_at": "2026-11-10T09:58:54.743836+00:00"
     },
     {
       "step": 2,
