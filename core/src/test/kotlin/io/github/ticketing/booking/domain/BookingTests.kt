@@ -19,7 +19,7 @@ class BookingTests {
     private fun seat(id: Long, price: Long = 10_000) = BookedSeat(SeatId(id), BigDecimal(price))
 
     private fun booking(seats: List<BookedSeat> = listOf(seat(1))) =
-        Booking.create(owner, ScheduleId(1), seats, HoldToken("hold-1"), t0)
+        Booking.create(owner, ScheduleId(1), seats, HoldToken("hold-1"), t0, "key-1")
 
     private fun codeOf(block: () -> Unit) = assertThrows<BookingRuleException>(block).code
 

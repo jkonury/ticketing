@@ -125,7 +125,7 @@ class Booking private constructor(
             seats: List<BookedSeat>,
             holdToken: HoldToken,
             now: Instant,
-            idempotencyKey: String = holdToken.value,
+            idempotencyKey: String,
         ): Booking {
             if (seats.isEmpty()) throw NoSeatsException()
             if (seats.size > MAX_SEATS) throw TooManySeatsException()

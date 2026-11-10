@@ -1,5 +1,6 @@
 package io.github.ticketing
 
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
@@ -25,5 +26,13 @@ class ApiExceptionHandler {
         problem.setProperty("code", "INVALID_REQUEST")
         problem.setProperty("errors", e.bindingResult.fieldErrors.map { mapOf("field" to it.field, "message" to it.defaultMessage) })
         return ResponseEntity.badRequest().body(problem)
+    }
+
+    /** 낙관적 락 충돌은 클라이언트가 다시 시도하면 해결되므로 409로 알린다. 이벤트 리스너 경로는 영향받지 않는다. */
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun handleOptimisticLock(e: OptimisticLockingFailureException): ResponseEntity<ProblemDetail> {
+        val problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "다른 요청과 동시에 변경되었습니다. 다시 시도해 주세요.")
+        problem.setProperty("code", "CONCURRENT_MODIFICATION")
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem)
     }
 }
