@@ -51,6 +51,10 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/design.md`.
 
 - **쓰기는 JPA, 조회는 jOOQ.** 조회용 쿼리를 JPA(JPQL, 연관 탐색)로 작성하지 않는다.
 - jOOQ 조회 결과는 조회 전용 DTO로 직접 매핑한다. 엔티티로 받지 않는다.
+- 명령 처리 중의 읽기(애그리거트 로드, 존재 확인)는 화면·목록용 조회가 아니므로 JPA(Spring Data 메서드, JPQL)로 해도 된다.
+- **문자열 SQL을 쓰지 않는다.** `createNativeQuery`, `@Query(nativeQuery = true)`, `JdbcTemplate` 문자열 쿼리 금지. 이유: 컬럼 이름 오타나 스키마 변경이 컴파일 단계에서 드러나지 않는다.
+- JPA로 표현할 수 없는 쓰기(`ON CONFLICT` upsert, 엔티티가 없는 테이블)와 엔티티가 없는 테이블의 읽기는 jOOQ DSL로 한다. 이때 명령 어댑터(`required.jpa`)가 `DSLContext`를 함께 쓸 수 있다.
+- 같은 트랜잭션에서 JPA와 jOOQ를 섞으면 jOOQ 쿼리는 JPA의 flush를 일으키지 않는다. jOOQ가 아직 flush되지 않은 JPA 변경에 의존하면 먼저 `flush()`하고, 그렇지 않으면 jOOQ 쓰기를 JPA `persist`보다 앞에 둔다.
 - JPA 연관관계는 같은 애그리거트 안에서만 쓴다. 다른 애그리거트·다른 모듈은 ID로 참조한다. 모든 연관은 `LAZY`.
 - `open-in-view`는 끈다.
 - 스키마 변경은 Flyway 마이그레이션으로만 한다. `ddl-auto`는 `validate`. 적용된 마이그레이션 파일은 수정하지 않고 새 파일을 추가한다.

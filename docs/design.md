@@ -143,7 +143,7 @@ io.github.ticketing.booking
 
 ### JPA와 jOOQ 역할 분담
 
-- 명령(쓰기): JPA
+- 명령(쓰기): JPA. JPA로 표현할 수 없는 쓰기(`ON CONFLICT` upsert, 엔티티 없는 테이블)는 jOOQ DSL. 문자열 SQL은 쓰지 않는다
 - 조회(목록, 통계, 정산 집계): jOOQ
 - 출력 포트를 `CommandPort` / `QueryPort`로 나누고 어댑터를 각각 구현한다.
 

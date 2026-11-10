@@ -6,37 +6,36 @@ import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
 import jakarta.persistence.EntityManager
+import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
+import ticketing.jooq.booking.tables.references.SCHEDULE
+import java.time.ZoneOffset
 
 @Repository
-internal class ScheduleSeatPersistenceAdapter(private val em: EntityManager) : ScheduleSeatCommandPort {
+internal class ScheduleSeatPersistenceAdapter(
+    private val em: EntityManager,
+    private val dsl: DSLContext,
+) : ScheduleSeatCommandPort {
     override fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>): Boolean {
-        // 동시에 같은 이벤트가 와도 한쪽만 삽입되도록 회차 행을 먼저 ON CONFLICT로 선점한다
-        val inserted = em.createNativeQuery(
-            """
-            INSERT INTO booking.schedule
-                (schedule_id, performance_id, performance_title, organizer_id, starts_at, received_at)
-            VALUES (:id, :performanceId, :title, :organizerId, :startsAt, :receivedAt)
-            ON CONFLICT (schedule_id) DO NOTHING
-            """.trimIndent(),
-        )
-            .setParameter("id", schedule.scheduleId.value)
-            .setParameter("performanceId", schedule.performanceId)
-            .setParameter("title", schedule.performanceTitle)
-            .setParameter("organizerId", schedule.organizerId)
-            .setParameter("startsAt", schedule.startsAt)
-            .setParameter("receivedAt", schedule.receivedAt)
-            .executeUpdate()
+        // 동시에 같은 이벤트가 와도 한쪽만 삽입되도록 회차 행을 먼저 ON CONFLICT로 선점한다.
+        // jOOQ 쓰기는 JPA flush를 일으키지 않으므로 좌석 persist보다 앞에 둔다
+        val inserted = dsl.insertInto(SCHEDULE)
+            .set(SCHEDULE.SCHEDULE_ID, schedule.scheduleId.value)
+            .set(SCHEDULE.PERFORMANCE_ID, schedule.performanceId)
+            .set(SCHEDULE.PERFORMANCE_TITLE, schedule.performanceTitle)
+            .set(SCHEDULE.ORGANIZER_ID, schedule.organizerId)
+            .set(SCHEDULE.STARTS_AT, schedule.startsAt.atOffset(ZoneOffset.UTC))
+            .set(SCHEDULE.RECEIVED_AT, schedule.receivedAt.atOffset(ZoneOffset.UTC))
+            .onConflict(SCHEDULE.SCHEDULE_ID)
+            .doNothing()
+            .execute()
         if (inserted == 0) return false
         seats.forEach { em.persist(it.toEntity()) }
         return true
     }
 
     override fun existsSchedule(scheduleId: ScheduleId): Boolean =
-        em.createNativeQuery("SELECT 1 FROM booking.schedule WHERE schedule_id = :id")
-            .setParameter("id", scheduleId.value)
-            .resultList
-            .isNotEmpty()
+        dsl.fetchExists(SCHEDULE, SCHEDULE.SCHEDULE_ID.eq(scheduleId.value))
 
     override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> {
         if (seatIds.isEmpty()) return emptyList()

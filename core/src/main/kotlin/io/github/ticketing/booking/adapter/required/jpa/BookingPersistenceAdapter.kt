@@ -6,15 +6,17 @@ import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
-import jakarta.persistence.EntityManager
+import org.jooq.DSLContext
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Repository
+import ticketing.jooq.booking.tables.references.SOLD_SEAT
 import java.time.Instant
+import java.time.ZoneOffset
 
 @Repository
 internal class BookingPersistenceAdapter(
     private val bookings: BookingJpaRepository,
-    private val em: EntityManager,
+    private val dsl: DSLContext,
 ) : BookingCommandPort {
     override fun save(booking: Booking): Booking {
         val id = booking.id
@@ -34,25 +36,19 @@ internal class BookingPersistenceAdapter(
     override fun findByMemberAndIdempotencyKey(memberId: MemberId, key: String): Booking? =
         bookings.findWithSeatsByMemberIdAndIdempotencyKey(memberId.value, key)?.toDomain()
 
-    override fun insertSoldSeats(bookingId: BookingId, scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant): Int =
-        seatIds.sumOf { seatId ->
-            em.createNativeQuery(
-                """
-                INSERT INTO booking.sold_seat (schedule_id, seat_id, booking_id, sold_at)
-                VALUES (:scheduleId, :seatId, :bookingId, :soldAt)
-                ON CONFLICT (schedule_id, seat_id) DO NOTHING
-                """.trimIndent(),
-            )
-                .setParameter("scheduleId", scheduleId.value)
-                .setParameter("seatId", seatId.value)
-                .setParameter("bookingId", bookingId.value)
-                .setParameter("soldAt", now)
-                .executeUpdate()
+    override fun insertSoldSeats(bookingId: BookingId, scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant): Int {
+        if (seatIds.isEmpty()) return 0
+        val soldAt = now.atOffset(ZoneOffset.UTC)
+        // 좌석 하나라도 이미 팔렸으면 그 행만 건너뛰므로, 삽입된 행 수가 요청 수보다 작아진다
+        return seatIds.fold(dsl.insertInto(SOLD_SEAT, SOLD_SEAT.SCHEDULE_ID, SOLD_SEAT.SEAT_ID, SOLD_SEAT.BOOKING_ID, SOLD_SEAT.SOLD_AT)) { step, seatId ->
+            step.values(scheduleId.value, seatId.value, bookingId.value, soldAt)
         }
+            .onConflict(SOLD_SEAT.SCHEDULE_ID, SOLD_SEAT.SEAT_ID)
+            .doNothing()
+            .execute()
+    }
 
     override fun deleteSoldSeats(bookingId: BookingId) {
-        em.createNativeQuery("DELETE FROM booking.sold_seat WHERE booking_id = :bookingId")
-            .setParameter("bookingId", bookingId.value)
-            .executeUpdate()
+        dsl.deleteFrom(SOLD_SEAT).where(SOLD_SEAT.BOOKING_ID.eq(bookingId.value)).execute()
     }
 }
