@@ -21,7 +21,7 @@
     {
       "step": 1,
       "name": "booking-persistence",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/resources/db/migration/V5__create_booking_tables.sql",
         "rg -q 'sold_seat' core/src/main/resources/db/migration/V5__create_booking_tables.sql",
@@ -29,7 +29,9 @@
         "rg -q '^- \\[x\\] `\\(회차, 좌석\\)` 유니크 제약' docs/roadmap.md"
       ],
       "model": "sonnet",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "V5 마이그레이션, booking 영속 포트·JPA 어댑터(sold_seat ON CONFLICT), ScheduleRegistered 리스너/유스케이스 추가. Booking에 idempotencyKey·version·cancelledAt 추가.",
+      "commit_message": "feat(booking): 예매 테이블과 JPA 어댑터, 회차 좌석 사본 리스너 구현"
     },
     {
       "step": 2,

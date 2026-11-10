@@ -12,12 +12,15 @@ class Booking private constructor(
     val scheduleId: ScheduleId,
     val seats: List<BookedSeat>,
     val holdToken: HoldToken,
+    val idempotencyKey: String,
+    val version: Long?,
     val createdAt: Instant,
     val expiresAt: Instant,
     status: BookingStatus,
     cancelReason: CancelReason?,
     paymentRequestedAt: Instant?,
     confirmedAt: Instant?,
+    cancelledAt: Instant?,
 ) {
     var status: BookingStatus = status
         private set
@@ -26,6 +29,8 @@ class Booking private constructor(
     var paymentRequestedAt: Instant? = paymentRequestedAt
         private set
     var confirmedAt: Instant? = confirmedAt
+        private set
+    var cancelledAt: Instant? = cancelledAt
         private set
 
     val totalPrice: BigDecimal
@@ -58,6 +63,7 @@ class Booking private constructor(
     fun onPaymentFailed(now: Instant) {
         if (status != BookingStatus.PENDING) return
         status = BookingStatus.CANCELLED
+        cancelledAt = now
         cancelReason = CancelReason.PAYMENT_FAILED
     }
 
@@ -65,6 +71,7 @@ class Booking private constructor(
     fun failConfirmation(now: Instant) {
         if (status != BookingStatus.PENDING) throw InvalidBookingStateException(status)
         status = BookingStatus.CANCELLED
+        cancelledAt = now
         cancelReason = CancelReason.SEAT_ALREADY_SOLD
     }
 
@@ -79,11 +86,13 @@ class Booking private constructor(
         return when (status) {
             BookingStatus.PENDING -> {
                 status = BookingStatus.CANCELLED
+                cancelledAt = now
                 cancelReason = CancelReason.USER_REQUESTED
                 CancelOutcome.ReleasedHold
             }
             BookingStatus.CONFIRMED -> {
                 status = BookingStatus.CANCELLED
+                cancelledAt = now
                 cancelReason = CancelReason.USER_REQUESTED
                 CancelOutcome.RefundRequired
             }
@@ -101,6 +110,7 @@ class Booking private constructor(
             seats: List<BookedSeat>,
             holdToken: HoldToken,
             now: Instant,
+            idempotencyKey: String = holdToken.value,
         ): Booking {
             if (seats.isEmpty()) throw NoSeatsException()
             if (seats.size > MAX_SEATS) throw TooManySeatsException()
@@ -111,12 +121,15 @@ class Booking private constructor(
                 scheduleId = scheduleId,
                 seats = seats.toList(),
                 holdToken = holdToken,
+                idempotencyKey = idempotencyKey,
+                version = null,
                 createdAt = now,
                 expiresAt = now + HOLD_DURATION,
                 status = BookingStatus.PENDING,
                 cancelReason = null,
                 paymentRequestedAt = null,
                 confirmedAt = null,
+                cancelledAt = null,
             )
         }
 
@@ -127,15 +140,18 @@ class Booking private constructor(
             scheduleId: ScheduleId,
             seats: List<BookedSeat>,
             holdToken: HoldToken,
+            idempotencyKey: String,
+            version: Long,
             createdAt: Instant,
             expiresAt: Instant,
             status: BookingStatus,
             cancelReason: CancelReason?,
             paymentRequestedAt: Instant?,
             confirmedAt: Instant?,
+            cancelledAt: Instant?,
         ): Booking = Booking(
-            id, memberId, scheduleId, seats.toList(), holdToken, createdAt, expiresAt,
-            status, cancelReason, paymentRequestedAt, confirmedAt,
+            id, memberId, scheduleId, seats.toList(), holdToken, idempotencyKey, version, createdAt, expiresAt,
+            status, cancelReason, paymentRequestedAt, confirmedAt, cancelledAt,
         )
     }
 }
