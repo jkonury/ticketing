@@ -83,7 +83,14 @@
 - [ ] 실패 경로 테스트: 결제 실패, 웹훅 중복, 웹훅 지연으로 인한 만료 후 결제
 - [ ] 모듈 단위 테스트(`@ApplicationModuleTest`)
 
-**완료 기준**: 가입 → 로그인 → 좌석 선점 → 가짜 결제 → 예매 확정이 API 테스트로 통과하고, 동시성·실패 경로 테스트가 모두 통과.
+### M1-8. 문서 정리
+- [ ] `docs/design.md`를 `docs/architecture.md`로 승격: 새로 쓰지 않고 옮기면서 실제 구조에 맞게 고친다. 합의일·상태 등 기록성 항목은 제거하고, "의도적으로 미룬 것" 절은 이 로드맵으로 옮긴다
+- [ ] 예매 흐름 시퀀스 다이어그램 추가 (대기열 제외: 선점 → 결제 → 확정, 실패 경로 포함)
+- [ ] Modulith `Documenter`로 모듈 의존 다이어그램 생성
+- [ ] 이벤트 목록(발행자, 구독자, 페이로드)과 테이블 구조(ERD) 추가
+- [ ] `design.md`를 가리키는 모든 참조를 `architecture.md`로 수정: `README.md`, `CLAUDE.md`, `.claude/rules/backend.md`, `.claude/rules/frontend.md`, `docs/adr/README.md`, 이 로드맵 (`grep -rn "design.md"`로 확인)
+
+**완료 기준**: 가입 → 로그인 → 좌석 선점 → 가짜 결제 → 예매 확정이 API 테스트로 통과하고, 동시성·실패 경로 테스트가 모두 통과. `docs/architecture.md`가 실제 코드 구조와 일치.
 
 ---
 
