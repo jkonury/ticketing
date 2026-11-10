@@ -61,3 +61,11 @@ flowchart LR
 ## 실행
 
 M0(프로젝트 뼈대) 완료 후 작성한다.
+
+fake-pg 컨테이너는 빌드된 jar를 복사하므로 먼저 bootJar를 만든 뒤 Compose를 올린다.
+
+```bash
+cp .env.example .env                 # 최초 1회. FAKE_PG_WEBHOOK_SECRET은 코어와 같은 값으로 맞춘다
+./gradlew :fake-pg:bootJar
+docker compose up -d                 # PostgreSQL, Redis, fake-pg
+```
