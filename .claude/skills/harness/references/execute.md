@@ -6,7 +6,7 @@
 - **step 실행** — step마다 새 Claude 세션(`--strict-mcp-config`, `--tools Bash,Read,Write,Edit`, step의 `model` 지정 시 `--model`, `reasoning_effort` 지정 시 `--effort`)을 띄우고, 이전 step들의 `summary`를 `[CONTEXT]`로 전달한다. 직전 step은 전문, 그 이전 step은 120자로 줄여 싣는다(`CONTEXT_FULL_STEPS`, `CONTEXT_OLD_SUMMARY_CHARS`).
 - **완료 판정** — 에이전트가 `completed`로 보고하면 execute.py가 `ac` 커맨드를 직접 실행한다. 실패 시 `error`로 덮어쓰고 출력을 `[RETRY CONTEXT]`로 넘겨 재시도한다.
 - **재시도** — 프로세스 실패, 타임아웃, `index.json` 미갱신, AC 실패 모두 step당 최대 3회 시도한다. 이전 시도의 변경은 남겨 두고 오류 부분만 고치게 한다. `blocked`는 즉시 중단한다.
-- **커밋** — AC를 통과하면 `git add -A` 후 `harness({phase}): step{NN} {name}`으로 커밋한다. step 1개 = 커밋 1개이므로, worktree는 깨끗한 상태에서 시작한다.
+- **커밋** — AC를 통과하면 `git add -A` 후 step 세션이 `index.json`에 남긴 `commit_message`로 커밋한다. 형식은 `AGENTS.md` 8절의 `<type>(<scope>): <요약>`(72자 이내 한 줄)이며, 없거나 형식이 틀리면 step을 실패 처리하지 않고 `chore({phase}): step{NN} {name} 완료`로 대체하고 경고를 출력한다. step 1개 = 커밋 1개이므로, worktree는 깨끗한 상태에서 시작한다.
 - **추론 강도** — `python3 scripts/execute.py {phase} --reasoning-effort medium`처럼 실행 옵션으로 모든 step의 값을 덮어쓸 수 있다. 시작 전에 남은 step의 값을 모두 검증해, 잘못된 값 때문에 앞 step만 실행·커밋된 채 멈추지 않게 한다. 시도별 JSON에 `requested_reasoning_effort`와 출처(`cli`/`step`/`cli_default`)를 남긴다. 이 값은 요청값이고 실제 적용값은 아니다.
 - **사용량 비교** — `python3 scripts/usage_report.py {phase} [--run RUN_ID]`가 step별 Input Total(캐시 포함)·Uncached·Output·Turns를 집계한다. 모델·강도·step 분할을 바꿨다면 이 표로 이전 실행과 비교한다.
 - **로그** — 실행마다 `phases/{phase}/logs/{run_id}/`에 `run.json`과 시도별 `step{NN}-attempt{NN}.log`(프롬프트·출력), `.json`(메타데이터·사용량·AC 결과)을 남긴다 (gitignore 대상, worktree 삭제 시 함께 사라짐).

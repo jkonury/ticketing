@@ -5,6 +5,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -34,6 +35,7 @@ class StepEntry(TypedDict):
     failed_at: NotRequired[str]
     blocked_at: NotRequired[str]
     summary: NotRequired[str]
+    commit_message: NotRequired[str]
     ac: NotRequired[list[str]]
     model: NotRequired[str]
     reasoning_effort: NotRequired[str]
@@ -72,6 +74,13 @@ SUMMARY_MAX_CHARS = 200
 # [CONTEXT]에는 최근 step만 summary 전문을 싣고, 그 이전 step은 앞부분만 싣는다.
 CONTEXT_FULL_STEPS = 1
 CONTEXT_OLD_SUMMARY_CHARS = 120
+# step 커밋 메시지는 AGENTS.md 8절 형식을 따른다. 결과물을 아는 step 세션이 쓰고,
+# execute.py는 형식만 확인한다.
+COMMIT_TYPES = ("feat", "fix", "refactor", "test", "docs", "chore")
+COMMIT_MESSAGE_PATTERN = re.compile(
+    rf"^(?:{'|'.join(COMMIT_TYPES)})\([a-z0-9-]+\): \S.*$"
+)
+COMMIT_SUBJECT_MAX_CHARS = 72
 # step 세션에 노출할 내장 도구. 도구 정의가 세션 기본 컨텍스트의 절반 이상을 차지한다
 # (실측: 전체 15.7k → 이 목록 6.6k 토큰).
 STEP_TOOLS = "Bash,Read,Write,Edit"
@@ -211,9 +220,28 @@ def check_worktree() -> None:
             sys.exit(0)
 
 
+def resolve_commit_message(phase_name: str, step: StepEntry) -> str:
+    """step 세션이 남긴 commit_message를 검사하고, 형식이 틀리면 기본 메시지로 대체한다.
+
+    형식 오류로 step을 실패 처리하지 않는다. 코드와 AC는 이미 통과했으므로
+    메시지 하나 때문에 세션 전체를 다시 돌리는 비용이 더 크다.
+    """
+    message = step.get("commit_message", "").strip()
+    if (
+        "\n" not in message
+        and len(message) <= COMMIT_SUBJECT_MAX_CHARS
+        and COMMIT_MESSAGE_PATTERN.match(message)
+    ):
+        return message
+    fallback = f"chore({phase_name}): step{step['step']:02d} {step['name']} 완료"
+    reason = "없음" if not message else f"형식 불일치: {message!r}"
+    print(f"  ⚠ commit_message {reason} — 기본 메시지 사용: {fallback}", file=sys.stderr)
+    return fallback
+
+
 def commit_step(phase_name: str, step: StepEntry) -> None:
     """AC를 통과한 step의 모든 변경을 하나의 커밋으로 남긴다."""
-    message = f"harness({phase_name}): step{step['step']:02d} {step['name']}"
+    message = resolve_commit_message(phase_name, step)
     for args in (("add", "-A"), ("commit", "-m", message)):
         result = _git(*args)
         if result.returncode != 0:
@@ -276,7 +304,12 @@ def build_prompt(
         + "작업 완료 후 이 파일의 해당 step 상태를 갱신하라. "
         + "작업 지시서에 다른 phase의 index 경로가 있으면 위 경로를 사용하라.\n"
         + f"summary는 {SUMMARY_MAX_CHARS}자 이내로 쓴다(넘으면 잘린다). "
-        + "다음 step이 알아야 할 산출물 경로와 핵심 결론만 남긴다."
+        + "다음 step이 알아야 할 산출물 경로와 핵심 결론만 남긴다.\n"
+        + "같은 step에 commit_message도 남긴다. 이 step의 변경을 커밋할 한 줄 메시지로, "
+        + f"`<type>(<scope>): <한국어 요약>` 형식이다. type은 {', '.join(COMMIT_TYPES)} 중 하나, "
+        + "scope는 영어 소문자 모듈명(예: catalog, booking, web)이다. "
+        + f"{COMMIT_SUBJECT_MAX_CHARS}자 이내로 쓰고 step 번호나 도구 서명은 넣지 않는다. "
+        + "커밋은 execute.py가 하므로 직접 하지 마라."
     )
 
     return "\n\n".join(parts)
