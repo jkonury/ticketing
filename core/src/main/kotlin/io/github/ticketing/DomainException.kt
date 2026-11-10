@@ -10,4 +10,7 @@ abstract class DomainException(
     val code: String,
     val status: HttpStatus,
     message: String,
-) : RuntimeException(message)
+) : RuntimeException(message) {
+    /** 응답 ProblemDetail에 추가로 실을 값. 예: 선점 실패한 좌석 ID 목록 */
+    open val properties: Map<String, Any> = emptyMap()
+}

@@ -32,6 +32,12 @@ internal class ScheduleSeatPersistenceAdapter(private val em: EntityManager) : S
         return true
     }
 
+    override fun existsSchedule(scheduleId: ScheduleId): Boolean =
+        em.createNativeQuery("SELECT 1 FROM booking.schedule WHERE schedule_id = :id")
+            .setParameter("id", scheduleId.value)
+            .resultList
+            .isNotEmpty()
+
     override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> {
         if (seatIds.isEmpty()) return emptyList()
         return em.createQuery(

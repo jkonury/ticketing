@@ -51,14 +51,16 @@
     {
       "step": 3,
       "name": "booking-create-api",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.booking.adapter.provided.web.*\"",
         "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.booking.*\" --tests \"io.github.ticketing.HexagonalArchitectureTests\"",
         "rg -q '^- \\[x\\] 내 예매 내역 조회' docs/roadmap.md"
       ],
       "model": "sonnet",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "booking 예매 생성/조회/PENDING 취소 API: web/BookingController, application/service(Create/Cancel/Query), required/jooq/BookingQueryJooqAdapter. DomainException.properties 추가. 멱등키 재요청 200.",
+      "commit_message": "feat(booking): 예매 생성·조회·대기 중 취소 API 구현"
     },
     {
       "step": 4,

@@ -15,6 +15,7 @@ class ApiExceptionHandler {
     fun handleDomain(e: DomainException): ResponseEntity<ProblemDetail> {
         val problem = ProblemDetail.forStatusAndDetail(e.status, e.message)
         problem.setProperty("code", e.code)
+        e.properties.forEach { (key, value) -> problem.setProperty(key, value) }
         return ResponseEntity.status(e.status).body(problem)
     }
 
