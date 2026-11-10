@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: core
+  config:
+    # 로컬 비밀 값은 저장소 루트의 .env에서 읽는다 (bootRun은 core/가 작업 디렉터리, jar는 루트에서 실행)
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/${POSTGRES_DB:ticketing}
+    username: ${POSTGRES_USER:ticketing}
+    password: ${POSTGRES_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  modulith:
+    events:
+      # 재시작 시 완료되지 않은 이벤트 발행을 다시 처리한다. 리스너는 멱등해야 한다
+      republish-outstanding-events-on-restart: true
+
+server:
+  port: 8080

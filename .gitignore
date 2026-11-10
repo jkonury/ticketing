@@ -1,0 +1,33 @@
+.gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+.kotlin/
+
+### 로컬 설정 (비밀 값) ###
+.env
+application-local.yml
+application-local.properties
+
+### IDE ###
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+.apt_generated
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### OS ###
+.DS_Store
