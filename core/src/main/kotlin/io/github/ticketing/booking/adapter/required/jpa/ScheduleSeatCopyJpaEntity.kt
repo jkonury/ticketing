@@ -4,8 +4,11 @@ import jakarta.persistence.Column
 import jakarta.persistence.Embeddable
 import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Entity
-import jakarta.persistence.Id
+import jakarta.persistence.PostLoad
+import jakarta.persistence.PostPersist
 import jakarta.persistence.Table
+import jakarta.persistence.Transient
+import org.springframework.data.domain.Persistable
 import java.io.Serializable
 import java.math.BigDecimal
 
@@ -26,4 +29,18 @@ class ScheduleSeatCopyJpaEntity(
     val label: String,
     @Column(name = "price", nullable = false)
     val price: BigDecimal,
-)
+) : Persistable<ScheduleSeatKey> {
+    // 식별자를 직접 할당하므로 신규 여부를 알리지 않으면 save가 merge(사전 SELECT)로 간다
+    @Transient
+    private var newEntity: Boolean = true
+
+    override fun getId(): ScheduleSeatKey = key
+
+    override fun isNew(): Boolean = newEntity
+
+    @PostPersist
+    @PostLoad
+    fun markNotNew() {
+        newEntity = false
+    }
+}

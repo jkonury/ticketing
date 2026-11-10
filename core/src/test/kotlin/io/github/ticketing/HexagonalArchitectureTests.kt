@@ -66,6 +66,14 @@ class HexagonalArchitectureTests {
     }
 
     @Test
+    fun `main 코드는 EntityManager를 직접 의존하지 않는다`() {
+        noClasses()
+            .should().dependOnClassesThat().haveFullyQualifiedName(EntityManager::class.java.name)
+            .allowEmptyShould(true)
+            .check(classes)
+    }
+
+    @Test
     fun `Query 애너테이션에 nativeQuery를 쓰지 않는다`() {
         methods().should(object : ArchCondition<JavaMethod>("not use @Query(nativeQuery = true)") {
             override fun check(method: JavaMethod, events: ConditionEvents) {
