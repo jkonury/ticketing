@@ -7,6 +7,7 @@ import io.github.ticketing.booking.application.port.provided.BookingResult
 import io.github.ticketing.booking.application.port.provided.CancelBookingUseCase
 import io.github.ticketing.booking.application.port.provided.CreateBookingCommand
 import io.github.ticketing.booking.application.port.provided.CreateBookingUseCase
+import io.github.ticketing.booking.application.port.provided.RequestPaymentUseCase
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Size
@@ -30,6 +31,7 @@ class BookingController(
     private val createBooking: CreateBookingUseCase,
     private val cancelBooking: CancelBookingUseCase,
     private val queries: BookingQueryUseCase,
+    private val requestPayment: RequestPaymentUseCase,
 ) {
     @PostMapping
     fun create(
@@ -58,7 +60,20 @@ class BookingController(
     @PostMapping("/{id}/cancel")
     fun cancel(authentication: Authentication, @PathVariable id: Long): BookingResponse =
         BookingResponse.from(cancelBooking.cancel(authentication.name.toLong(), id))
+
+    @PostMapping("/{id}/payments")
+    fun pay(
+        authentication: Authentication,
+        @PathVariable id: Long,
+        @RequestHeader("Idempotency-Key") @Size(min = 1, max = 100) idempotencyKey: String,
+    ): ResponseEntity<PaymentRequestResponse> {
+        // PG 멱등 키는 예매 하나에 결제 하나가 되도록 서버가 정한다. 헤더 값은 재시도 식별용으로 받기만 한다
+        val result = requestPayment.request(authentication.name.toLong(), id)
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(PaymentRequestResponse(result.bookingId, result.status))
+    }
 }
+
+data class PaymentRequestResponse(val bookingId: Long, val status: String)
 
 data class CreateBookingRequest(
     val scheduleId: Long,

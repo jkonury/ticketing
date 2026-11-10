@@ -65,7 +65,7 @@
     {
       "step": 4,
       "name": "booking-payment-flow",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/kotlin/io/github/ticketing/payment/PaymentRequested.kt",
         "test -f core/src/main/kotlin/io/github/ticketing/booking/BookingConfirmed.kt",
@@ -75,7 +75,9 @@
         "./scripts/agent/test/check-summary.sh"
       ],
       "model": "opus",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "payment 계약 이벤트 5종, booking 이벤트 3종, RequestPayment/PaymentResultService, PaymentResultListener, POST /{id}/payments, 확정 취소 확장. Redis는 커밋 후 반영. 흐름 테스트 8건.",
+      "commit_message": "feat(booking): 결제 요청·결과 이벤트 연동과 확정 예매 취소 구현"
     }
   ]
 }
