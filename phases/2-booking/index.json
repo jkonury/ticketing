@@ -36,7 +36,7 @@
     {
       "step": 2,
       "name": "booking-seat-hold",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -n \"$(fd -e lua . core/src/main/resources/redis/booking)\"",
         "./scripts/agent/test/run-tests.sh :core:test --tests \"io.github.ticketing.booking.adapter.required.redis.*\"",
@@ -44,7 +44,9 @@
         "rg -q '^- \\[x\\] Redis 좌석 선점' docs/roadmap.md"
       ],
       "model": "opus",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "SeatHoldPort, RedisSeatHoldAdapter(+Lua 4종, resources/redis/booking), 등록 서비스 afterCommit initSnapshot, design.md 키 형식 표, 동시성 테스트 추가.",
+      "commit_message": "feat(booking): Redis Lua 좌석 선점 어댑터와 스냅샷·Stream 갱신 구현"
     },
     {
       "step": 3,

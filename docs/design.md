@@ -158,6 +158,20 @@ io.github.ticketing.booking
 | 입장 토큰 | 단기 키 | 실시간 앱 발급, Gateway 검증 |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
 
+#### 좌석 선점 키 형식 (코어 `booking`, realtime이 읽음)
+
+모든 키에 `{scheduleId}` 해시 태그를 넣어 Lua가 다루는 키를 같은 슬롯에 둔다.
+
+| 키 | 자료구조 | 내용 |
+|---|---|---|
+| `booking:hold:{<scheduleId>}:<seatId>` | String, PX TTL | 값은 선점 소유자(`HoldToken`) |
+| `booking:seats:{<scheduleId>}` | Hash | field `seatId` → `AVAILABLE` / `HELD:<만료 epoch ms>` / `SOLD` |
+| `booking:seat-events:{<scheduleId>}` | Stream, `MAXLEN ~ 10000` | `seatIds`(쉼표 구분), `status`, `holdExpiresAt`(HELD일 때), `at`(epoch ms) |
+
+- 스냅샷의 `HELD:<만료 시각>`: 선점 키 TTL이 끝나도 Redis는 알려 주지 않으므로 읽는 쪽이 만료를 직접 판정한다.
+- 선점 가능 여부의 판단 기준은 스냅샷이 아니라 선점 키와 `SOLD`다.
+- 선점·해제·판매·판매 해제는 각각 Lua 스크립트 한 번으로 처리하며, 같은 스크립트에서 스냅샷과 Stream을 갱신한다.
+
 ## 6. 핵심 흐름
 
 ### 6.1 대기열과 입장
