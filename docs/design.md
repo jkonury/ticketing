@@ -36,7 +36,27 @@
 | 보안 | Spring Security, JWT |
 | 프런트 | Next.js 최신 안정판 (App Router) + TypeScript, BFF 역할 |
 
-정확한 버전 번호와 Spring Boot · Spring Modulith · Spring Cloud Gateway · Kotlin · jOOQ의 호환 조합은 **프로젝트 생성 시점에 공식 문서로 확인**한다 (미확정).
+### 확정 버전 (2026-11-10, M0 기준)
+
+| 항목 | 버전 | 비고 |
+|---|---|---|
+| Java | 25 (Temurin) | toolchain으로 고정 |
+| Kotlin | 2.3.21 | |
+| Spring Boot | 4.1.2 | |
+| Spring Modulith | 2.1.1 | BOM으로 관리 |
+| Spring Cloud | 2025.1.4 | Gateway는 `spring-cloud-starter-gateway-server-webflux` |
+| jOOQ | 3.21.9 | Boot BOM 관리. 코드 생성은 Testcontainers + Flyway 기반 |
+| Gradle | 9.8.2 | wrapper |
+| PostgreSQL / Redis | 17 / 7 | Compose, Testcontainers 공통 |
+
+버전은 `gradle/libs.versions.toml`이 기준이다. Boot BOM이 관리하는 라이브러리(jOOQ, Flyway, Testcontainers)는 BOM을 따른다.
+
+### 빌드 구조 메모
+
+- 공통 빌드 설정은 `build-logic/`의 convention plugin(`ticketing.kotlin-conventions`, `ticketing.spring-conventions`, `ticketing.jpa-conventions`)에 둔다.
+- jOOQ 생성 코드의 패키지는 `ticketing.jooq`다. Modulith는 `io.github.ticketing`의 직계 하위 패키지를 모두 모듈로 보므로 루트 밖에 둔다.
+- Modulith 모듈 선언은 Kotlin에 `package-info`가 없어 `core/src/main/java/.../<모듈>/package-info.java`에 둔다 (Java 파일은 이것뿐).
+- Modulith 이벤트 발행 레지스트리 테이블(`event_publication`)은 `public` 스키마에 둔다.
 
 ## 3. 시스템 구성
 
