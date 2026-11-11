@@ -1,7 +1,7 @@
 # 테스트 구조 개선 실행 계획
 
 - 작성일: 2026-11-12
-- 상태: Step 2 완료, Step 3 진행 예정
+- 상태: Step 3 완료, Step 4 진행 예정
 - 기준: [아키텍처](../architecture.md), [로드맵](../roadmap.md), [백엔드 규칙](../rules/backend.md)
 - 기존 측정: [통합 테스트 재사용 개선](../test-performance.md)
 
@@ -20,7 +20,7 @@
 
 - [x] Step 1. 기준선 측정과 설계 결정 기록
 - [x] Step 2. 단위·통합 테스트 실행 경로 분리
-- [ ] Step 3. 운영 저장소 최소화
+- [x] Step 3. 운영 저장소 최소화
 - [ ] Step 4. core 단위 테스트 전환
 - [ ] Step 5. gateway·realtime·fake-pg 단위 테스트 전환
 - [ ] Step 6. 통합 테스트 컨텍스트 통합
@@ -177,3 +177,10 @@
 - 단위 테스트, 전체 `check`(ktlint·detekt 포함), 문서 생성과 문서 링크·경로 검사 통과. 문서 기본 출력은 `core/build/modulith`이며 추적 다이어그램은 바뀌지 않는다. 서비스 흐름 변경이 없어 E2E는 생략했다.
 - 초기 Kotlin daemon 경로 권한·메타스페이스 부족·캐시 잠금은 권한 상승 및 `-Pkotlin.compiler.execution.strategy=in-process --max-workers=2 -Dorg.gradle.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=1g"`로 해결했다. 통합 소스 세트의 internal 접근과 빌드 포맷 오류를 수정한 후 통과했다. 검증은 이 옵션을 붙여 전용 test/check 스크립트로 순차 실행했다.
 - 로그: `build/check-summary/gradle-out.txt`, `build/run-tests/gradle-test-out.txt`(마지막 문서 작업).
+
+### Step 3
+
+- 운영 저장소 8개를 `Repository<T, ID>` 직접 상속과 실제 호출 메서드로 바꿨다. JPQL·비관적 잠금·saveAndFlush·saveAll 계약과 기존 엔티티 신규 판별은 유지한다. 운영 코드에 JpaRepository 상속은 없다.
+- 테스트만 쓰던 Venue flush·Schedule save/findById는 운영 인터페이스에 추가하지 않았다. 카탈로그 영속 검증은 기존 saveAndFlush·테스트 EntityManager 재조회·트랜잭션 커밋 시 제약 검증으로 유지했다. 직접 flush 예외 타입 차이로 첫 실행에서 실패한 뒤 기존 DataIntegrityViolationException 검증을 복원했다.
+- `./scripts/agent/test/run-tests.sh :core:integrationTest` 141개와 `./scripts/agent/test/check-summary.sh ktlintCheck detekt` 통과(Step 2의 환경 옵션 적용). 공식 Spring Data JPA 4.1.2 문서와 실제 저장·잠금·동시성 통합 검증으로 확인했다. 모듈 의존·API·스키마·서비스 흐름 변경이 없어 E2E는 생략했다.
+- 로그: `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`.

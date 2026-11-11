@@ -9,6 +9,7 @@ import io.github.ticketing.catalog.domain.VenueSeat
 import io.github.ticketing.catalog.repository.PerformanceRepository
 import io.github.ticketing.catalog.repository.ScheduleRepository
 import io.github.ticketing.catalog.repository.VenueRepository
+import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -22,6 +23,7 @@ class CatalogRepositoryTests(
     private val performances: PerformanceRepository,
     private val schedules: ScheduleRepository,
     private val tx: TransactionTemplate,
+    private val entityManager: EntityManager,
 ) : IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-01-01T00:00:00Z")
@@ -53,9 +55,9 @@ class CatalogRepositoryTests(
 
         assertThat(prices).containsEntry(SeatGrade.VIP, BigDecimal(150000))
 
-        val schedule = schedules.save(Schedule(requireNotNull(saved.id), now.plusSeconds(3600), now))
+        val schedule = schedules.saveAndFlush(Schedule(requireNotNull(saved.id), now.plusSeconds(3600), now))
 
-        assertThat(schedules.findById(requireNotNull(schedule.id))).isPresent
+        assertThat(tx.execute { entityManager.find(Schedule::class.java, requireNotNull(schedule.id)) }).isNotNull
     }
 
     @Test
@@ -63,7 +65,7 @@ class CatalogRepositoryTests(
         val venueId = requireNotNull(venues.save(venue()).id)
         val performanceId =
             requireNotNull(performances.save(Performance(7, "공연", "설명", venueId, mapOf(SeatGrade.VIP to BigDecimal.ONE), now)).id)
-        schedules.save(Schedule(performanceId, now, now))
+        schedules.saveAndFlush(Schedule(performanceId, now, now))
 
         assertThatThrownBy { schedules.saveAndFlush(Schedule(performanceId, now, now)) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
@@ -82,8 +84,6 @@ class CatalogRepositoryTests(
 
                 @Suppress("UNCHECKED_CAST")
                 (seatsField.get(loadedVenue) as MutableList<VenueSeat>).add(VenueSeat("A", "1", 1, SeatGrade.S))
-
-                venues.flush()
             }
         }.isInstanceOf(DataIntegrityViolationException::class.java)
     }

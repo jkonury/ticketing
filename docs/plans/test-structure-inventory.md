@@ -101,9 +101,9 @@
 |---|---|---|
 | `MemberRepository` | `findByEmail`, `existsByEmail`, `findById`, `saveAndFlush` | 없음 |
 | `RefreshTokenRepository` | `findByTokenHash` (비관적 쓰기 잠금), `revokeAllByMemberId`, `save` | 없음 |
-| `VenueRepository` | `existsByName`, `findById`, `save` | `flush` |
+| `VenueRepository` | `existsByName`, `findById`, `save` | 기존 `flush`는 Step 3에서 트랜잭션 커밋으로 검증 |
 | `PerformanceRepository` | `findById`, `save` | 없음 |
-| `ScheduleRepository` | `existsByPerformanceIdAndStartsAt`, `saveAndFlush` | `save`, `findById` |
+| `ScheduleRepository` | `existsByPerformanceIdAndStartsAt`, `saveAndFlush` | 기존 저장 검증은 `saveAndFlush`, 재조회는 테스트의 EntityManager로 변경 |
 | `BookingJpaRepository` | `findWithSeatsById`, `findWithSeatsByMemberIdAndIdempotencyKey`, `saveAndFlush` | 없음 |
 | `ScheduleSeatCopyJpaRepository` | `findByKeyScheduleIdAndKeySeatIdIn`, `saveAll` | 없음 |
 | `PaymentJpaRepository` | `findByOrderId`, `findByIdempotencyKey`, `findByPgTransactionId`, `findById`, `saveAndFlush` | 없음 |
