@@ -22,6 +22,7 @@ class CatalogDomainTests {
     @Test
     fun `좌석 키가 중복되면 공연장을 만들 수 없다`() {
         val seats = listOf(VenueSeat("A", "1", 1, SeatGrade.VIP), VenueSeat("A", "1", 1, SeatGrade.R))
+
         assertThatThrownBy { Venue("공연장", seats, now) }
             .isInstanceOf(IllegalArgumentException::class.java)
     }
@@ -29,6 +30,7 @@ class CatalogDomainTests {
     @Test
     fun `좌석이 유효하면 공연장을 만든다`() {
         val venue = Venue("공연장", listOf(VenueSeat("A", "1", 1, SeatGrade.VIP), VenueSeat("A", "1", 2, SeatGrade.VIP)), now)
+
         assertThat(venue.seats).hasSize(2)
     }
 
@@ -47,6 +49,7 @@ class CatalogDomainTests {
     @Test
     fun `가격이 0이어도 공연을 만든다`() {
         val performance = Performance(1, "제목", "설명", 1, mapOf(SeatGrade.A to BigDecimal.ZERO), now)
+
         assertThat(performance.prices).containsEntry(SeatGrade.A, BigDecimal.ZERO)
     }
 }

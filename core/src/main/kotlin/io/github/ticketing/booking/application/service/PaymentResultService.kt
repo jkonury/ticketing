@@ -60,10 +60,13 @@ class PaymentResultService(
         return when (val outcome = booking.onPaymentSucceeded(now, amount)) {
             PaymentOutcome.ConfirmationRequired -> {
                 val seatIds = booking.seats.map { it.seatId }
+
                 val inserted = bookings.insertSoldSeats(bookingId, booking.scheduleId, seatIds, now)
+
                 if (inserted == seatIds.size) {
                     booking.confirm(now)
                     val saved = bookings.save(booking)
+
                     events.publishEvent(
                         BookingConfirmed(bookingId.value, booking.memberId.value, booking.scheduleId.value, seatIds.map { it.value }, booking.totalPrice, now),
                     )
@@ -99,10 +102,12 @@ class PaymentResultService(
     private fun refund(booking: Booking, before: BookingStatus, outcome: PaymentOutcome.RefundRequired, paymentId: Long, now: Instant): After {
         val bookingId = requireNotNull(booking.id).value
         val saved = if (booking.status != before) bookings.save(booking) else booking
+
         events.publishEvent(RefundRequested(bookingId, outcome.reason.name, now))
         if (booking.status != before) {
             events.publishEvent(BookingExpired(bookingId, booking.memberId.value, booking.scheduleId.value, now))
         }
+
         log.info("결제는 성공했지만 환불을 요청한다 bookingId={} paymentId={} reason={}", bookingId, paymentId, outcome.reason)
         return After.Release(saved)
     }

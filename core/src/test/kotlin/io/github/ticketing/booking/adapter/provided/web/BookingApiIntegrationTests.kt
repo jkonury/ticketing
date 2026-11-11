@@ -198,6 +198,7 @@ class BookingApiIntegrationTests : IntegrationTestSupport() {
         val id = bookingId(book(owner, schedule, listOf(1, 2)).andExpect(status().isCreated))
 
         val cancel = { mvc.perform(post("/api/v1/bookings/$id/cancel").header("Authorization", auth(owner))) }
+
         cancel().andExpect(status().isOk).andExpect(jsonPath("$.status").value("CANCELLED"))
         cancel().andExpect(status().isOk).andExpect(jsonPath("$.status").value("CANCELLED"))
 

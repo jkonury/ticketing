@@ -18,13 +18,21 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
         val firstStartsAt = DSL.field(
             DSL.select(DSL.min(SCHEDULE.STARTS_AT)).from(SCHEDULE).where(SCHEDULE.PERFORMANCE_ID.eq(PERFORMANCE.ID)),
         )
+
         val rows = dsl.select(PERFORMANCE.ID, PERFORMANCE.TITLE, VENUE.NAME, firstStartsAt)
             .from(PERFORMANCE)
             .join(VENUE).on(VENUE.ID.eq(PERFORMANCE.VENUE_ID))
             .where(if (cursor != null) PERFORMANCE.ID.lt(cursor) else DSL.noCondition())
             .orderBy(PERFORMANCE.ID.desc())
             .limit(size + 1)
-            .fetch { PerformanceSummary(requireNotNull(it[PERFORMANCE.ID]), requireNotNull(it[PERFORMANCE.TITLE]), requireNotNull(it[VENUE.NAME]), it[firstStartsAt]?.toInstant()) }
+            .fetch {
+                PerformanceSummary(
+                    id = requireNotNull(it[PERFORMANCE.ID]),
+                    title = requireNotNull(it[PERFORMANCE.TITLE]),
+                    venueName = requireNotNull(it[VENUE.NAME]),
+                    firstStartsAt = it[firstStartsAt]?.toInstant(),
+                )
+            }
 
         val items = rows.take(size)
         return PerformancePage(items, if (rows.size > size) items.last().id else null)

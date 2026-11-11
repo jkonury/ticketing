@@ -61,8 +61,10 @@ class BookingJpaEntity(
 
 @Embeddable
 data class BookingSeatKey(
-    @Column(name = "booking_id") val bookingId: Long = 0,
-    @Column(name = "seat_id") val seatId: Long = 0,
+    @Column(name = "booking_id")
+    val bookingId: Long = 0,
+    @Column(name = "seat_id")
+    val seatId: Long = 0,
 ) : Serializable
 
 @Entity

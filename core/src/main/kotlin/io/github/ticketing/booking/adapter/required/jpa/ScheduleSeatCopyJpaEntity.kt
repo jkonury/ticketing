@@ -14,8 +14,10 @@ import java.math.BigDecimal
 
 @Embeddable
 data class ScheduleSeatKey(
-    @Column(name = "schedule_id") val scheduleId: Long = 0,
-    @Column(name = "seat_id") val seatId: Long = 0,
+    @Column(name = "schedule_id")
+    val scheduleId: Long = 0,
+    @Column(name = "seat_id")
+    val seatId: Long = 0,
 ) : Serializable
 
 @Entity

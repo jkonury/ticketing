@@ -11,15 +11,26 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 
 @Service
-class PaymentTransactionService(private val payments: PaymentCommandPort, private val events: ApplicationEventPublisher, private val clock: Clock) {
+class PaymentTransactionService(
+    private val payments: PaymentCommandPort,
+    private val events: ApplicationEventPublisher,
+    private val clock: Clock,
+) {
+
     @Transactional
     fun preparePayment(command: RequestPaymentCommand): Payment? {
         val orderId = OrderId(command.orderId)
         val existing = payments.findByOrderId(orderId)
         val keyOwner = payments.findByIdempotencyKey(command.idempotencyKey)
         if (keyOwner != null && keyOwner.orderId != orderId) throw PaymentContractMismatchException()
+
         val payment = existing ?: payments.save(Payment.request(orderId, MemberId(command.memberId), command.amount, command.idempotencyKey, command.requestedAt))
-        if (payment.memberId.value != command.memberId || payment.amount.compareTo(command.amount) != 0 || payment.idempotencyKey != command.idempotencyKey) throw PaymentContractMismatchException()
+
+        val sameContract = payment.memberId.value == command.memberId &&
+            payment.amount.compareTo(command.amount) == 0 &&
+            payment.idempotencyKey == command.idempotencyKey
+        if (!sameContract) throw PaymentContractMismatchException()
+
         return payment.takeIf { it.status == PaymentStatus.REQUESTED && it.pgTransactionId == null }
     }
 
@@ -34,6 +45,7 @@ class PaymentTransactionService(private val payments: PaymentCommandPort, privat
     fun rejectPayment(orderId: Long, reason: String) {
         val payment = find(orderId)
         if (payment.status != PaymentStatus.REQUESTED) return
+
         val now = clock.instant()
         payment.fail(reason, now)
         val saved = payments.save(payment)

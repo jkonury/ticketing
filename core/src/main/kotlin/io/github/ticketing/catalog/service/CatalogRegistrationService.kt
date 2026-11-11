@@ -32,6 +32,7 @@ class CatalogRegistrationService(
     @Transactional
     fun registerVenue(command: RegisterVenueCommand): Venue {
         val seats = command.seats.map { VenueSeat(it.section.trim(), it.rowLabel.trim(), it.seatNumber, it.grade) }
+
         // 도메인 불변식 위반(IllegalArgumentException)이 500으로 새지 않도록 중복을 먼저 400으로 변환한다
         if (seats.map { it.key }.toSet().size != seats.size) throw DuplicateVenueSeatException()
         return venues.save(Venue(command.name.trim(), seats, clock.instant()))
@@ -42,6 +43,7 @@ class CatalogRegistrationService(
     fun registerPerformance(command: RegisterPerformanceCommand): Performance {
         val venue = venues.findById(command.venueId).orElseThrow { VenueNotFoundException() }
         if (command.prices.map { it.grade }.toSet().size != command.prices.size) throw DuplicatePriceGradeException()
+
         val prices = command.prices.associate { it.grade to it.price }
 
         val missing = venue.seats.map { it.grade }.toSet() - prices.keys

@@ -153,14 +153,17 @@ class CatalogQueryApiTests : IntegrationTestSupport() {
 
         assertThat(cache.get(performanceId)).isNull()
         val first = mvc.perform(get("/api/v1/performances/$performanceId")).andReturn().response.contentAsString
+
         assertThat(cache.get(performanceId)).isNotNull()
 
         // 캐시에 심은 값이 그대로 나오면 DB가 아니라 캐시에서 온 것이다
         val cached = requireNotNull(cache.get(performanceId)?.get()) as io.github.ticketing.catalog.query.PerformanceDetail
         cache.put(performanceId, cached.copy(title = "캐시된 제목"))
+
         mvc.perform(get("/api/v1/performances/$performanceId")).andExpect(jsonPath("$.title").value("캐시된 제목"))
 
         schedule(performanceId, "2027-07-02T10:00:00Z")
+
         assertThat(cache.get(performanceId)).isNull()
         mvc.perform(get("/api/v1/performances/$performanceId"))
             .andExpect(jsonPath("$.title").value("조회 공연"))

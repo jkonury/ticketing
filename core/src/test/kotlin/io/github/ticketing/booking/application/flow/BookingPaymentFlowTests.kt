@@ -1,8 +1,5 @@
 package io.github.ticketing.booking.application.flow
 
-import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
-import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
-import org.springframework.test.context.bean.override.mockito.MockitoBean
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
@@ -17,6 +14,8 @@ import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
+import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
+import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
@@ -33,6 +32,7 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -52,8 +52,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 @AutoConfigureMockMvc
 @Import(BookingPaymentFlowTests.TestClockConfig::class)
 class BookingPaymentFlowTests : IntegrationTestSupport() {
-    @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
-    @MockitoBean lateinit var refundRequestListener: RefundRequestListener
+
+    @MockitoBean
+    lateinit var paymentRequestListener: PaymentRequestListener
+
+    @MockitoBean
+    lateinit var refundRequestListener: RefundRequestListener
 
     class MutableClock : Clock() {
         @Volatile var now: Instant = Instant.now()
@@ -80,6 +84,7 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
 
     @TestConfiguration(proxyBeanMethods = false)
     class TestClockConfig {
+
         @Bean
         @Primary
         fun mutableClock() = MutableClock()
@@ -88,21 +93,29 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         fun eventCollector() = EventCollector()
     }
 
-    @Autowired lateinit var mvc: MockMvc
+    @Autowired
+    lateinit var mvc: MockMvc
 
-    @Autowired lateinit var register: RegisterScheduleSeatsUseCase
+    @Autowired
+    lateinit var register: RegisterScheduleSeatsUseCase
 
-    @Autowired lateinit var redis: StringRedisTemplate
+    @Autowired
+    lateinit var redis: StringRedisTemplate
 
-    @Autowired lateinit var jdbc: JdbcTemplate
+    @Autowired
+    lateinit var jdbc: JdbcTemplate
 
-    @Autowired lateinit var publisher: ApplicationEventPublisher
+    @Autowired
+    lateinit var publisher: ApplicationEventPublisher
 
-    @Autowired lateinit var tx: TransactionTemplate
+    @Autowired
+    lateinit var tx: TransactionTemplate
 
-    @Autowired lateinit var clock: MutableClock
+    @Autowired
+    lateinit var clock: MutableClock
 
-    @Autowired lateinit var collector: EventCollector
+    @Autowired
+    lateinit var collector: EventCollector
 
     private val json = JsonMapper.builder().build()
 
@@ -183,6 +196,7 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.status").value("PENDING"))
 
         val requested = collector.of(PaymentRequested::class.java) { it.orderId == id }
+
         assertThat(requested).hasSize(1)
         assertThat(requested[0].idempotencyKey).isEqualTo("booking-$id")
         assertThat(requested[0].amount).isEqualByComparingTo(BigDecimal(200000))
@@ -195,6 +209,7 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val id = book(owner, schedule, listOf(1))
 
         mvc.perform(post("/api/v1/bookings/$id/payments").header("Authorization", "Bearer $owner")).andExpect(status().isBadRequest)
+
         pay(token(), id).andExpect(status().isForbidden)
     }
 
@@ -230,11 +245,13 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
             assertThat(snapshot(schedule, 2)).isEqualTo("SOLD")
         }
         assertThat(soldSeatCount(id)).isEqualTo(2)
+
         // 중복 이벤트가 모두 처리될 시간을 준다
         await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
             assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).hasSize(1)
             assertThat(statusOf(token, id)).isEqualTo("CONFIRMED")
         }
+
         assertThat(soldSeatCount(id)).isEqualTo(2)
         assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }.single().seatIds).containsExactlyInAnyOrder(1L, 2L)
     }
@@ -250,9 +267,12 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
 
         awaitStatus(token, id, "CANCELLED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE") }
+
         val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+
         assertThat(cancelled.reason).isEqualTo("PAYMENT_FAILED")
         assertThat(cancelled.refundRequired).isFalse()
+
         book(token(), schedule, listOf(1))
     }
 
@@ -280,26 +300,29 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val schedule = newSchedule()
         val tokenA = token()
         val tokenB = token()
-        val a = book(tokenA, schedule, listOf(1, 2))
+        val bookingA = book(tokenA, schedule, listOf(1, 2))
+
         // A의 선점 키가 사라진 상황(TTL 누락·유실)을 흉내 내 같은 좌석을 B가 선점하게 한다
         redis.delete(listOf(holdKey(ScheduleId(schedule), SeatId(1)), holdKey(ScheduleId(schedule), SeatId(2))))
-        val b = book(tokenB, schedule, listOf(2, 3))
-        pay(tokenA, a).andExpect(status().isAccepted)
-        pay(tokenB, b).andExpect(status().isAccepted)
-        succeed(b, amount = BigDecimal(200000))
-        awaitStatus(tokenB, b, "CONFIRMED")
+        val bookingB = book(tokenB, schedule, listOf(2, 3))
 
-        succeed(a, amount = BigDecimal(200000))
+        pay(tokenA, bookingA).andExpect(status().isAccepted)
+        pay(tokenB, bookingB).andExpect(status().isAccepted)
+        succeed(bookingB, amount = BigDecimal(200000))
+        awaitStatus(tokenB, bookingB, "CONFIRMED")
 
-        awaitStatus(tokenA, a, "CANCELLED")
+        succeed(bookingA, amount = BigDecimal(200000))
+
+        awaitStatus(tokenA, bookingA, "CANCELLED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted {
-            assertThat(collector.of(RefundRequested::class.java) { it.orderId == a }).hasSize(1)
+            assertThat(collector.of(RefundRequested::class.java) { it.orderId == bookingA }).hasSize(1)
         }
-        assertThat(collector.of(RefundRequested::class.java) { it.orderId == a }.single().reason).isEqualTo("SEAT_ALREADY_SOLD")
-        assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == a }.single().reason).isEqualTo("SEAT_ALREADY_SOLD")
+        assertThat(collector.of(RefundRequested::class.java) { it.orderId == bookingA }.single().reason).isEqualTo("SEAT_ALREADY_SOLD")
+        assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == bookingA }.single().reason).isEqualTo("SEAT_ALREADY_SOLD")
+
         // 좌석 1은 들어갔다가 같은 트랜잭션에서 지워져 A의 sold_seat는 남지 않고 B의 것만 있다
-        assertThat(soldSeatCount(a)).isZero()
-        assertThat(soldSeatCount(b)).isEqualTo(2)
+        assertThat(soldSeatCount(bookingA)).isZero()
+        assertThat(soldSeatCount(bookingB)).isEqualTo(2)
         assertThat(snapshot(schedule, 2)).isEqualTo("SOLD")
     }
 
@@ -318,13 +341,17 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
             assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE")
             assertThat(snapshot(schedule, 2)).isEqualTo("AVAILABLE")
         }
+
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }.single().reason).isEqualTo("AMOUNT_MISMATCH")
+
         val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+
         assertThat(cancelled.reason).isEqualTo("AMOUNT_MISMATCH")
         assertThat(cancelled.refundRequired).isTrue()
         assertThat(soldSeatCount(id)).isZero()
         assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).isEmpty()
         assertThat(jdbc.queryForObject("SELECT cancel_reason FROM booking.booking WHERE id = ?", String::class.java, id)).isEqualTo("AMOUNT_MISMATCH")
+
         book(token(), schedule, listOf(1, 2))
     }
 
@@ -338,6 +365,7 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         awaitStatus(token, id, "CONFIRMED")
 
         pay(token, id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("INVALID_BOOKING_STATE"))
+
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
     }
 
@@ -361,6 +389,7 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         clock.now = clock.now.plus(Duration.ofMinutes(6))
 
         pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.status").value("PENDING"))
+
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
     }
 
@@ -381,7 +410,9 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         assertThat(snapshot(schedule, 2)).isEqualTo("AVAILABLE")
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).hasSize(1)
         assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == id }.single().refundRequired).isTrue()
+
         cancel(token, id).andExpect(status().isOk)
+
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).hasSize(1)
     }
 }

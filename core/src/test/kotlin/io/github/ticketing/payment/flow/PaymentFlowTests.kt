@@ -1,19 +1,6 @@
 package io.github.ticketing.payment.flow
 
 import io.github.ticketing.IntegrationTestSupport
-import io.github.ticketing.payment.PaymentRefunded
-import io.github.ticketing.payment.application.port.required.PgPort
-import io.github.ticketing.payment.application.port.required.PgPaymentRequest
-import io.github.ticketing.payment.application.port.required.PgRequestResult
-import org.springframework.modulith.events.IncompleteEventPublications
-import org.springframework.transaction.support.TransactionSynchronizationManager
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.HexFormat
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.booking.BookingExpired
@@ -24,9 +11,13 @@ import io.github.ticketing.booking.application.port.provided.RegisterScheduleSea
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
 import io.github.ticketing.payment.PaymentFailed
+import io.github.ticketing.payment.PaymentRefunded
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
+import io.github.ticketing.payment.application.port.required.PgPaymentRequest
+import io.github.ticketing.payment.application.port.required.PgPort
+import io.github.ticketing.payment.application.port.required.PgRequestResult
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
@@ -42,13 +33,14 @@ import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.modulith.events.IncompleteEventPublications
 import org.springframework.stereotype.Component
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
@@ -56,8 +48,15 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
+import java.util.HexFormat
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 @AutoConfigureMockMvc
 @Import(PaymentFlowTests.TestClockConfig::class)
@@ -88,6 +87,7 @@ class PaymentFlowTests : IntegrationTestSupport() {
 
     @TestConfiguration(proxyBeanMethods = false)
     class TestClockConfig {
+
         @Bean
         @Primary
         fun mutableClock() = MutableClock()
@@ -104,9 +104,11 @@ class PaymentFlowTests : IntegrationTestSupport() {
         val requests = CopyOnWriteArrayList<PgPaymentRequest>()
         val refunds = CopyOnWriteArrayList<Pair<String, String>>()
         val transactions = ConcurrentHashMap<String, String>()
+
         @Volatile var gate: CountDownLatch? = null
         @Volatile var paymentResult = "accepted"
         @Volatile var refundResult = "accepted"
+
         override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
             check(!TransactionSynchronizationManager.isActualTransactionActive())
             requests += request
@@ -118,6 +120,7 @@ class PaymentFlowTests : IntegrationTestSupport() {
                 else -> PgRequestResult.Accepted(transaction)
             }
         }
+
         override fun requestRefund(transactionId: String, idempotencyKey: String): PgRequestResult {
             check(!TransactionSynchronizationManager.isActualTransactionActive())
             refunds += transactionId to idempotencyKey
@@ -128,23 +131,36 @@ class PaymentFlowTests : IntegrationTestSupport() {
             }
         }
     }
-    @Autowired lateinit var pg: TestPg
-    @Autowired lateinit var incomplete: IncompleteEventPublications
-    @Autowired lateinit var mvc: MockMvc
 
-    @Autowired lateinit var register: RegisterScheduleSeatsUseCase
+    @Autowired
+    lateinit var pg: TestPg
 
-    @Autowired lateinit var redis: StringRedisTemplate
+    @Autowired
+    lateinit var incomplete: IncompleteEventPublications
 
-    @Autowired lateinit var jdbc: JdbcTemplate
+    @Autowired
+    lateinit var mvc: MockMvc
 
-    @Autowired lateinit var publisher: ApplicationEventPublisher
+    @Autowired
+    lateinit var register: RegisterScheduleSeatsUseCase
 
-    @Autowired lateinit var tx: TransactionTemplate
+    @Autowired
+    lateinit var redis: StringRedisTemplate
 
-    @Autowired lateinit var clock: MutableClock
+    @Autowired
+    lateinit var jdbc: JdbcTemplate
 
-    @Autowired lateinit var collector: EventCollector
+    @Autowired
+    lateinit var publisher: ApplicationEventPublisher
+
+    @Autowired
+    lateinit var tx: TransactionTemplate
+
+    @Autowired
+    lateinit var clock: MutableClock
+
+    @Autowired
+    lateinit var collector: EventCollector
 
     private val json = JsonMapper.builder().build()
 
@@ -207,11 +223,15 @@ class PaymentFlowTests : IntegrationTestSupport() {
     }
 
     private fun paymentStatus(id: Long): String? = jdbc.queryForList("select status from payment.payment where order_id = ?", String::class.java, id).firstOrNull()
+
     private fun publicationStatus(id: Long, listener: String): String? = jdbc.queryForList(
         "select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%$listener%", "%\"orderId\":$id%",
     ).firstOrNull()
+
     private fun awaitPayment(id: Long, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(paymentStatus(id)).isEqualTo(expected) }
+
     private fun awaitPublication(id: Long, listener: String, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(publicationStatus(id, listener)).isEqualTo(expected) }
+
     private fun resubmit(id: Long) = incomplete.resubmitIncompletePublications { publication ->
         when (val event = publication.event) {
             is PaymentRequested -> event.orderId == id
@@ -219,15 +239,19 @@ class PaymentFlowTests : IntegrationTestSupport() {
             else -> false
         }
     }
+
     private fun webhook(id: Long, type: String, eventId: String = UUID.randomUUID().toString()): ResultActions {
         val timestamp = clock.instant().epochSecond.toString()
         val raw = """{"eventId":"$eventId","type":"$type","transactionId":"tx-$id","orderId":"$id","amount":100000,"occurredAt":"${clock.instant()}","failureReason":${if (type == "PAYMENT_FAILED") "\"declined\"" else "null"}}"""
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec("test-webhook-secret".toByteArray(), "HmacSHA256"))
         val signature = HexFormat.of().formatHex(mac.doFinal("$timestamp.$raw".toByteArray()))
-        return mvc.perform(post("/api/v1/payments/webhooks/fake-pg").contentType(MediaType.APPLICATION_JSON)
-            .header("X-FakePg-Timestamp", timestamp).header("X-FakePg-Signature", signature).content(raw))
+        return mvc.perform(
+            post("/api/v1/payments/webhooks/fake-pg").contentType(MediaType.APPLICATION_JSON)
+                .header("X-FakePg-Timestamp", timestamp).header("X-FakePg-Signature", signature).content(raw),
+        )
     }
+
     private fun start(): Pair<String, Long> {
         val token = token()
         val id = book(token, newSchedule(), listOf(1))
@@ -235,6 +259,7 @@ class PaymentFlowTests : IntegrationTestSupport() {
         awaitPayment(id, "REQUESTED")
         return token to id
     }
+
     private fun count(type: Class<*>, id: Long): Int = collector.events.count {
         type.isInstance(it) && when (it) {
             is PaymentSucceeded -> it.orderId == id
@@ -243,61 +268,84 @@ class PaymentFlowTests : IntegrationTestSupport() {
             else -> false
         }
     }
-    @Test fun `승인 웹훅은 결제와 예매를 확정하고 중복을 무시한다`() {
+
+    @Test
+    fun `승인 웹훅은 결제와 예매를 확정하고 중복을 무시한다`() {
         val (token, id) = start()
         awaitPublication(id, "PaymentRequestListener", "COMPLETED")
         val event = UUID.randomUUID().toString()
+
         webhook(id, "PAYMENT_APPROVED", event).andExpect(status().isOk)
         webhook(id, "PAYMENT_APPROVED", event).andExpect(status().isOk)
         webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
         awaitStatus(token, id, "CONFIRMED")
+
         assertThat(paymentStatus(id)).isEqualTo("SUCCEEDED")
         assertThat(jdbc.queryForObject("select count(*) from booking.sold_seat where booking_id = ?", Int::class.java, id)).isEqualTo(1)
         assertThat(count(PaymentSucceeded::class.java, id)).isEqualTo(1)
     }
-    @Test fun `거절과 실패 웹훅은 예매를 취소하고 좌석을 반환한다`() {
+
+    @Test
+    fun `거절과 실패 웹훅은 예매를 취소하고 좌석을 반환한다`() {
         pg.paymentResult = "rejected"
-        val token = token(); val schedule = newSchedule(); val id = book(token, schedule, listOf(1))
+        val token = token()
+        val schedule = newSchedule()
+        val id = book(token, schedule, listOf(1))
         pay(token, id).andExpect(status().isAccepted)
         awaitStatus(token, id, "CANCELLED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE") }
+
         assertThat(count(PaymentFailed::class.java, id)).isEqualTo(1)
         assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == id }.single().reason).isEqualTo("PAYMENT_FAILED")
+
         pg.paymentResult = "accepted"
         val (otherToken, other) = start()
         awaitPublication(other, "PaymentRequestListener", "COMPLETED")
         webhook(other, "PAYMENT_FAILED").andExpect(status().isOk)
         awaitStatus(otherToken, other, "CANCELLED")
+
         assertThat(count(PaymentFailed::class.java, other)).isEqualTo(1)
         assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == other }.single().reason).isEqualTo("PAYMENT_FAILED")
     }
-    @Test fun `미확정 결제는 원 발행 재제출로 같은 키를 재사용해 복구한다`() {
+
+    @Test
+    fun `미확정 결제는 원 발행 재제출로 같은 키를 재사용해 복구한다`() {
         pg.paymentResult = "unknown"
         val (token, id) = start()
         awaitPublication(id, "PaymentRequestListener", "FAILED")
+
         pg.paymentResult = "accepted"
         resubmit(id)
         awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+
         assertThat(pg.requests.filter { it.orderId == id.toString() }.map { it.idempotencyKey }).containsExactly("booking-$id", "booking-$id")
+
         webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
         awaitStatus(token, id, "CONFIRMED")
     }
-    @Test fun `확정 취소와 만료 후 승인은 환불을 완료한다`() {
+
+    @Test
+    fun `확정 취소와 만료 후 승인은 환불을 완료한다`() {
         val (token, id) = start()
         awaitPublication(id, "PaymentRequestListener", "COMPLETED")
         webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
         awaitStatus(token, id, "CONFIRMED")
+
         cancel(token, id).andExpect(status().isOk)
+
         assertThat(statusOf(token, id)).isEqualTo("CANCELLED")
         awaitPayment(id, "REFUND_REQUESTED")
         awaitPublication(id, "RefundRequestListener", "COMPLETED")
         assertThat(pg.refunds).contains("tx-$id" to "refund-$id")
+
         webhook(id, "REFUND_COMPLETED").andExpect(status().isOk)
         awaitPayment(id, "REFUNDED")
         webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
         webhook(id, "REFUND_COMPLETED").andExpect(status().isOk)
+
         assertThat(count(PaymentSucceeded::class.java, id)).isEqualTo(1)
         assertThat(count(PaymentRefunded::class.java, id)).isEqualTo(1)
+
         val (lateToken, late) = start()
         awaitPublication(late, "PaymentRequestListener", "COMPLETED")
         clock.now = clock.now.plus(Duration.ofMinutes(6))
@@ -307,7 +355,9 @@ class PaymentFlowTests : IntegrationTestSupport() {
         webhook(late, "REFUND_COMPLETED").andExpect(status().isOk)
         awaitPayment(late, "REFUNDED")
     }
-    @Test fun `환불 거절과 미확정은 원 발행 재제출로 같은 키를 재사용한다`() {
+
+    @Test
+    fun `환불 거절과 미확정은 원 발행 재제출로 같은 키를 재사용한다`() {
         for (failure in listOf("unknown", "rejected")) {
             pg.refundResult = failure
             val (token, id) = start()
@@ -317,29 +367,42 @@ class PaymentFlowTests : IntegrationTestSupport() {
             cancel(token, id).andExpect(status().isOk)
             awaitPublication(id, "RefundRequestListener", "FAILED")
             assertThat(paymentStatus(id)).isEqualTo("REFUND_REQUESTED")
+
             pg.refundResult = "accepted"
             resubmit(id)
             awaitPublication(id, "RefundRequestListener", "COMPLETED")
+
             assertThat(pg.refunds.filter { it.first == "tx-$id" }.map { it.second }).containsExactly("refund-$id", "refund-$id")
+
             webhook(id, "REFUND_COMPLETED").andExpect(status().isOk)
             awaitPayment(id, "REFUNDED")
         }
     }
-    @Test fun `PG 응답 전에 도착한 웹훅은 거래를 연결하고 지연 응답도 상태를 유지한다`() {
+
+    @Test
+    fun `PG 응답 전에 도착한 웹훅은 거래를 연결하고 지연 응답도 상태를 유지한다`() {
         val gate = CountDownLatch(1)
         pg.gate = gate
         try {
             val (token, id) = start()
             await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pg.requests.any { it.orderId == id.toString() }).isTrue() }
+
             webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
             awaitStatus(token, id, "CONFIRMED")
+
             gate.countDown()
             awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+
             assertThat(paymentStatus(id)).isEqualTo("SUCCEEDED")
             assertThat(count(PaymentSucceeded::class.java, id)).isEqualTo(1)
-        } finally { gate.countDown(); pg.gate = null }
+        } finally {
+            gate.countDown()
+            pg.gate = null
+        }
     }
-    @Test fun `같은 웹훅의 병렬 전달과 재전송은 하나의 확정으로 수렴한다`() {
+
+    @Test
+    fun `같은 웹훅의 병렬 전달과 재전송은 하나의 확정으로 수렴한다`() {
         val (token, id) = start()
         awaitPublication(id, "PaymentRequestListener", "COMPLETED")
         val same = UUID.randomUUID().toString()
@@ -348,18 +411,24 @@ class PaymentFlowTests : IntegrationTestSupport() {
         try {
             val ready = CountDownLatch(1)
             val futures = ids.map { event -> pool.submit<Int> { ready.await(); webhook(id, "PAYMENT_APPROVED", event).andReturn().response.status } }
+
             ready.countDown()
             futures.forEachIndexed { index, result ->
                 val response = result.get(20, TimeUnit.SECONDS)
                 assertThat(response).isIn(200, 409)
                 if (response == 409) webhook(id, "PAYMENT_APPROVED", ids[index]).andExpect(status().isOk)
             }
-        } finally { pool.shutdownNow() }
+        } finally {
+            pool.shutdownNow()
+        }
+
         awaitStatus(token, id, "CONFIRMED")
         assertThat(count(PaymentSucceeded::class.java, id)).isEqualTo(1)
         assertThat(jdbc.queryForObject("select count(*) from booking.sold_seat where booking_id = ?", Int::class.java, id)).isEqualTo(1)
     }
-    @Test fun `병렬 결제 요청과 실패 발행 재제출은 하나의 거래와 결제로 수렴한다`() {
+
+    @Test
+    fun `병렬 결제 요청과 실패 발행 재제출은 하나의 거래와 결제로 수렴한다`() {
         val gate = CountDownLatch(1)
         pg.gate = gate
         pg.paymentResult = "unknown"
@@ -367,19 +436,27 @@ class PaymentFlowTests : IntegrationTestSupport() {
             val (token, id) = start()
             await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pg.requests.any { it.orderId == id.toString() }).isTrue() }
             val request = collector.of(PaymentRequested::class.java) { it.orderId == id }.single()
+
             val pool = Executors.newFixedThreadPool(2)
             try {
                 val ready = CountDownLatch(1)
-                val futures = (1..2).map { index -> pool.submit { ready.await(); tx.executeWithoutResult { publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong()))) } } }
+                val futures = (1..2).map { index ->
+                    pool.submit { ready.await(); tx.executeWithoutResult { publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong()))) } }
+                }
                 ready.countDown()
                 futures.forEach { it.get(10, TimeUnit.SECONDS) }
-            } finally { pool.shutdownNow() }
+            } finally {
+                pool.shutdownNow()
+            }
+
             await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pg.requests.count { it.orderId == id.toString() }).isGreaterThanOrEqualTo(2) }
+
             gate.countDown()
             await().atMost(Duration.ofSeconds(10)).untilAsserted {
                 val statuses = jdbc.queryForList("select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%PaymentRequestListener%", "%\"orderId\":$id%")
                 assertThat(statuses).hasSize(3).allMatch { it == "FAILED" }
             }
+
             pg.paymentResult = "accepted"
             repeat(3) {
                 resubmit(id)
@@ -392,11 +469,17 @@ class PaymentFlowTests : IntegrationTestSupport() {
                 val statuses = jdbc.queryForList("select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%PaymentRequestListener%", "%\"orderId\":$id%")
                 assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" }
             }
+
             assertThat(pg.transactions.keys.count { it == "booking-$id" }).isEqualTo(1)
             assertThat(jdbc.queryForObject("select count(*) from payment.payment where order_id = ?", Int::class.java, id)).isEqualTo(1)
+
             webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
             awaitStatus(token, id, "CONFIRMED")
-        } finally { gate.countDown(); pg.gate = null }
+        } finally {
+            gate.countDown()
+            pg.gate = null
+        }
     }
+
     private fun snapshot(scheduleId: Long, seatId: Long): String? = redis.opsForHash<String, String>().get(snapshotKey(ScheduleId(scheduleId)), seatId.toString())
 }

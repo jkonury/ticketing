@@ -22,6 +22,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
         val seatCount = DSL.field(
             DSL.selectCount().from(BOOKING_SEAT).where(BOOKING_SEAT.BOOKING_ID.eq(BOOKING.ID)),
         )
+
         val rows = dsl.select(
             BOOKING.ID, BOOKING.STATUS, SCHEDULE.PERFORMANCE_TITLE, SCHEDULE.STARTS_AT,
             seatCount, BOOKING.TOTAL_AMOUNT, BOOKING.CREATED_AT,
@@ -43,6 +44,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
                     createdAt = requireNotNull(it[BOOKING.CREATED_AT]).toInstant(),
                 )
             }
+
         val items = rows.take(size)
         return BookingPage(items, if (rows.size > size) items.last().bookingId else null)
     }

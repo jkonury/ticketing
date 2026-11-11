@@ -199,6 +199,7 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
         val token = accessToken("ORGANIZER")
         val performanceId = registerPerformance(token, registerVenue(token))
         val body = mapOf("startsAt" to "2027-02-01T10:00:00Z")
+
         postJson("/api/v1/performances/$performanceId/schedules", token, body).andExpect(status().isCreated)
 
         postJson("/api/v1/performances/$performanceId/schedules", token, body)

@@ -42,6 +42,7 @@ class BookingController(
         val result = createBooking.create(
             CreateBookingCommand(authentication.name.toLong(), idempotencyKey, request.scheduleId, request.seatIds),
         )
+
         val status = if (result.created) HttpStatus.CREATED else HttpStatus.OK
         return ResponseEntity.status(status).body(BookingResponse.from(result.booking))
     }

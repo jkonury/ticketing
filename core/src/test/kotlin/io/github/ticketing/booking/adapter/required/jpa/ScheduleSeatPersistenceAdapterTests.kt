@@ -30,10 +30,14 @@ class ScheduleSeatPersistenceAdapterTests : IntegrationTestSupport() {
         val schedule = ScheduleCopy(id, 1, "공연", 2, now, now)
         val seats = (1L..3L).map { ScheduleSeatCopy(id, SeatId(it), "VIP", "A구역 $it", BigDecimal(150000)) }
 
-        assertThat(tx.execute { port.saveIfAbsent(schedule, seats) }).isTrue()
-        assertThat(tx.execute { port.saveIfAbsent(schedule, seats) }).isFalse()
+        val firstSaved = tx.execute { port.saveIfAbsent(schedule, seats) }
+        val secondSaved = tx.execute { port.saveIfAbsent(schedule, seats) }
+
+        assertThat(firstSaved).isTrue()
+        assertThat(secondSaved).isFalse()
 
         val found = tx.execute { port.findSeats(id, listOf(SeatId(1), SeatId(3), SeatId(99))) }!!
+
         assertThat(found.map { it.seatId.value }).containsExactlyInAnyOrder(1L, 3L)
         assertThat(found.first().price).isEqualByComparingTo("150000")
     }
@@ -52,6 +56,7 @@ class ScheduleSeatPersistenceAdapterTests : IntegrationTestSupport() {
         // 회차는 jOOQ(통계 제외), 좌석 INSERT 3건만 JPA가 실행한다. merge였다면 SELECT 3건이 더해진다
         assertThat(statistics.prepareStatementCount).isEqualTo(3)
         assertThat(statistics.entityInsertCount).isEqualTo(3)
+
         statistics.isStatisticsEnabled = false
     }
 }

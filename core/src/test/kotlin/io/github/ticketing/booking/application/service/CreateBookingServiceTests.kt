@@ -103,6 +103,7 @@ class CreateBookingServiceTests {
     @Test
     fun `정상 생성하면 PENDING을 저장하고 좌석 라벨을 돌려준다`() {
         val bookings = FakeBookings()
+
         val result = service(bookings, FakeSeatHold()).create(command(1, 2))
 
         assertThat(result.created).isTrue()
@@ -137,6 +138,7 @@ class CreateBookingServiceTests {
                 assertThat(it.code).isEqualTo("SEAT_ALREADY_HELD")
                 assertThat(it.properties["seatIds"]).isEqualTo(listOf(2L))
             }
+
         assertThat(bookings.stored).isEmpty()
     }
 
@@ -148,6 +150,7 @@ class CreateBookingServiceTests {
             .isInstanceOf(SeatNotFoundException::class.java)
         assertThatThrownBy { service(FakeBookings(), hold).create(command(1, schedule = 42)) }
             .isInstanceOf(ScheduleNotFoundException::class.java)
+
         assertThat(hold.held).isEmpty()
     }
 
@@ -160,6 +163,7 @@ class CreateBookingServiceTests {
                 assertThat(it.code).isEqualTo("TOO_MANY_SEATS")
                 assertThat(it.status.value()).isEqualTo(400)
             }
+
         assertThat(hold.held).isEmpty()
     }
 }

@@ -26,10 +26,14 @@ class CatalogSeedRunnerTests : IntegrationTestSupport() {
         runner.run(DefaultApplicationArguments())
 
         val seeded = seededTitles()
+
         assertThat(seeded).hasSize(3)
         assertThat(seeded).allMatch { it.firstStartsAt != null }
+
         val detail = requireNotNull(queries.findPerformanceDetail(seeded.first().id))
+        val seatLayout = requireNotNull(queries.findSeatLayout(detail.schedules.first().id))
+
         assertThat(detail.schedules).hasSize(3)
-        assertThat(requireNotNull(queries.findSeatLayout(detail.schedules.first().id)).seats).hasSize(800)
+        assertThat(seatLayout.seats).hasSize(800)
     }
 }

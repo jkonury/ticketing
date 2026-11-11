@@ -46,12 +46,16 @@ class RedisSeatHoldAdapterTests : IntegrationTestSupport() {
         assertThat(result).isEqualTo(HoldResult.Held)
         assertThat(redis.getExpire(holdKey(schedule, SeatId(1)), TimeUnit.MILLISECONDS)).isBetween(1L, ttl.toMillis())
         assertThat(redis.opsForValue().get(holdKey(schedule, SeatId(2)))).isEqualTo("alice")
-        val exp = now.toEpochMilli() + ttl.toMillis()
-        assertThat(redis.opsForHash<String, String>().get(snapshotKey(schedule), "1")).isEqualTo("HELD:$exp")
+
+        val expiresAt = now.toEpochMilli() + ttl.toMillis()
+
+        assertThat(redis.opsForHash<String, String>().get(snapshotKey(schedule), "1")).isEqualTo("HELD:$expiresAt")
+
         val records = redis.opsForStream<String, String>().range(streamKey(schedule), org.springframework.data.domain.Range.unbounded())!!
+
         assertThat(records).hasSize(1)
         assertThat(records[0].value).containsEntry("seatIds", "1,2").containsEntry("status", "HELD")
-            .containsEntry("holdExpiresAt", exp.toString()).containsEntry("at", now.toEpochMilli().toString())
+            .containsEntry("holdExpiresAt", expiresAt.toString()).containsEntry("at", now.toEpochMilli().toString())
     }
 
     @Test
@@ -124,14 +128,17 @@ class RedisSeatHoldAdapterTests : IntegrationTestSupport() {
     @Test
     fun `좌석이 겹치는 다중 선점은 한쪽만 성공하고 실패한 쪽은 아무것도 선점하지 못한다`() {
         val results = java.util.concurrent.ConcurrentHashMap<String, HoldResult>()
+
         runConcurrently(2) { i ->
-            val s = if (i == 0) seats(1, 2) else seats(2, 3)
-            results["u$i"] = port.hold(schedule, s, HoldToken("u$i"), ttl, now)
+            val requestedSeats = if (i == 0) seats(1, 2) else seats(2, 3)
+            results["u$i"] = port.hold(schedule, requestedSeats, HoldToken("u$i"), ttl, now)
         }
 
         assertThat(results.values.count { it == HoldResult.Held }).isEqualTo(1)
+
         val winner = results.entries.first { it.value == HoldResult.Held }.key
         val owners = (1L..3L).mapNotNull { redis.opsForValue().get(holdKey(schedule, SeatId(it))) }
+
         assertThat(owners).hasSize(2).containsOnly(winner)
     }
 

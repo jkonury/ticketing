@@ -23,9 +23,12 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 class BookingPersistenceAdapterTests : IntegrationTestSupport() {
-    @Autowired lateinit var port: BookingCommandPort
 
-    @Autowired lateinit var tx: TransactionTemplate
+    @Autowired
+    lateinit var port: BookingCommandPort
+
+    @Autowired
+    lateinit var tx: TransactionTemplate
 
     private val now = Instant.parse("2026-11-10T10:00:00Z")
     private val ids = AtomicLong(System.nanoTime() % 1_000_000_000L * 100)
@@ -43,6 +46,7 @@ class BookingPersistenceAdapterTests : IntegrationTestSupport() {
     @Test
     fun `저장하고 조회하면 좌석과 상태가 그대로 복원된다`() {
         val saved = tx.execute { port.save(newBooking()) }!!
+
         val found = tx.execute { port.findById(saved.id!!) }!!
 
         assertThat(found.id).isEqualTo(saved.id)
@@ -57,11 +61,14 @@ class BookingPersistenceAdapterTests : IntegrationTestSupport() {
     fun `상태 전이를 저장하면 버전이 오르고 취소 시각이 남는다`() {
         val saved = tx.execute { port.save(newBooking()) }!!
         val loaded = tx.execute { port.findById(saved.id!!) }!!
+
         loaded.cancelByUser(loaded.memberId, now.plusSeconds(10))
         val updated = tx.execute { port.save(loaded) }!!
 
         assertThat(updated.version).isEqualTo(saved.version!! + 1)
+
         val found = tx.execute { port.findById(saved.id!!) }!!
+
         assertThat(found.status).isEqualTo(BookingStatus.CANCELLED)
         assertThat(found.cancelledAt).isEqualTo(now.plusSeconds(10))
     }
@@ -69,13 +76,14 @@ class BookingPersistenceAdapterTests : IntegrationTestSupport() {
     @Test
     fun `오래된 버전으로 저장하면 낙관적 락 예외가 난다`() {
         val saved = tx.execute { port.save(newBooking()) }!!
-        val a = tx.execute { port.findById(saved.id!!) }!!
-        val b = tx.execute { port.findById(saved.id!!) }!!
-        a.cancelByUser(a.memberId, now)
-        tx.execute { port.save(a) }
-        b.cancelByUser(b.memberId, now)
+        val firstLoaded = tx.execute { port.findById(saved.id!!) }!!
+        val secondLoaded = tx.execute { port.findById(saved.id!!) }!!
 
-        assertThatThrownBy { tx.execute { port.save(b) } }.isInstanceOf(ObjectOptimisticLockingFailureException::class.java)
+        firstLoaded.cancelByUser(firstLoaded.memberId, now)
+        tx.execute { port.save(firstLoaded) }
+        secondLoaded.cancelByUser(secondLoaded.memberId, now)
+
+        assertThatThrownBy { tx.execute { port.save(secondLoaded) } }.isInstanceOf(ObjectOptimisticLockingFailureException::class.java)
     }
 
     @Test
@@ -87,6 +95,7 @@ class BookingPersistenceAdapterTests : IntegrationTestSupport() {
         assertThat(tx.execute { port.findByMemberAndIdempotencyKey(MemberId(member), "other") }).isNull()
         assertThatThrownBy { tx.execute { port.save(newBooking(member = member, key = "key-1")) } }
             .isInstanceOf(DataIntegrityViolationException::class.java)
+
         // 다른 회원은 같은 키를 쓸 수 있다
         tx.execute { port.save(newBooking(key = "key-1")) }
     }

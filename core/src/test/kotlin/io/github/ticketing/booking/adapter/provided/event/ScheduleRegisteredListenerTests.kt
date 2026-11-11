@@ -36,6 +36,7 @@ class ScheduleRegisteredListenerTests : IntegrationTestSupport() {
         )
 
         tx.executeWithoutResult { publisher.publishEvent(event) }
+
         await().atMost(Duration.ofSeconds(10)).untilAsserted {
             assertThat(scheduleCount(scheduleId)).isEqualTo(1)
             assertThat(seatCount(scheduleId)).isEqualTo(2)

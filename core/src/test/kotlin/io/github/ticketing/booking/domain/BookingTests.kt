@@ -32,11 +32,12 @@ class BookingTests {
 
     @Test
     fun `생성하면 PENDING이고 만료 시각은 5분 뒤이며 총액은 좌석 가격의 합이다`() {
-        val b = booking(listOf(seat(1, 10_000), seat(2, 15_000)))
-        assertEquals(BookingStatus.PENDING, b.status)
-        assertEquals(t0.plusSeconds(300), b.expiresAt)
-        assertEquals(BigDecimal(25_000), b.totalPrice)
-        assertNull(b.id)
+        val createdBooking = booking(listOf(seat(1, 10_000), seat(2, 15_000)))
+
+        assertEquals(BookingStatus.PENDING, createdBooking.status)
+        assertEquals(t0.plusSeconds(300), createdBooking.expiresAt)
+        assertEquals(BigDecimal(25_000), createdBooking.totalPrice)
+        assertNull(createdBooking.id)
     }
 
     @Test
@@ -61,18 +62,21 @@ class BookingTests {
 
     @Test
     fun `만료 시각 정각부터 만료로 판정한다`() {
-        val b = booking()
-        assertFalse(b.isExpired(beforeExpiry))
-        assertTrue(b.isExpired(atExpiry))
+        val pendingBooking = booking()
+
+        assertFalse(pendingBooking.isExpired(beforeExpiry))
+        assertTrue(pendingBooking.isExpired(atExpiry))
     }
 
     @Test
     fun `미만료 PENDING은 결제를 요청할 수 있고 재요청은 시각을 바꾸지 않는다`() {
-        val b = booking()
-        b.requestPayment(t0.plusSeconds(10))
-        b.requestPayment(t0.plusSeconds(20))
-        assertEquals(t0.plusSeconds(10), b.paymentRequestedAt)
-        assertEquals(BookingStatus.PENDING, b.status)
+        val pendingBooking = booking()
+
+        pendingBooking.requestPayment(t0.plusSeconds(10))
+        pendingBooking.requestPayment(t0.plusSeconds(20))
+
+        assertEquals(t0.plusSeconds(10), pendingBooking.paymentRequestedAt)
+        assertEquals(BookingStatus.PENDING, pendingBooking.status)
     }
 
     @Test
@@ -87,41 +91,57 @@ class BookingTests {
 
     @Test
     fun `미만료 PENDING에 금액이 맞는 결제 성공이 오면 확정 대상이 되고 confirm하면 CONFIRMED가 된다`() {
-        val b = booking()
-        assertEquals(PaymentOutcome.ConfirmationRequired, b.onPaymentSucceeded(beforeExpiry, price))
-        assertEquals(BookingStatus.PENDING, b.status)
-        b.confirm(beforeExpiry)
-        assertEquals(BookingStatus.CONFIRMED, b.status)
-        assertEquals(beforeExpiry, b.confirmedAt)
+        val pendingBooking = booking()
+
+        val outcome = pendingBooking.onPaymentSucceeded(beforeExpiry, price)
+
+        assertEquals(PaymentOutcome.ConfirmationRequired, outcome)
+        assertEquals(BookingStatus.PENDING, pendingBooking.status)
+
+        pendingBooking.confirm(beforeExpiry)
+
+        assertEquals(BookingStatus.CONFIRMED, pendingBooking.status)
+        assertEquals(beforeExpiry, pendingBooking.confirmedAt)
     }
 
     @Test
     fun `만료된 PENDING에 결제 성공이 오면 EXPIRED가 되고 환불이 필요하다`() {
-        val b = booking()
-        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED), b.onPaymentSucceeded(atExpiry, price))
-        assertEquals(BookingStatus.EXPIRED, b.status)
+        val pendingBooking = booking()
+
+        val outcome = pendingBooking.onPaymentSucceeded(atExpiry, price)
+
+        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED), outcome)
+        assertEquals(BookingStatus.EXPIRED, pendingBooking.status)
     }
 
     @Test
     fun `미만료 PENDING에 금액이 다른 결제 성공이 오면 AMOUNT_MISMATCH로 CANCELLED가 된다`() {
-        val b = booking()
-        assertEquals(PaymentOutcome.AmountMismatch, b.onPaymentSucceeded(beforeExpiry, BigDecimal(9_999)))
-        assertEquals(BookingStatus.CANCELLED, b.status)
-        assertEquals(CancelReason.AMOUNT_MISMATCH, b.cancelReason)
-        assertEquals(beforeExpiry, b.cancelledAt)
-        assertNull(b.confirmedAt)
+        val pendingBooking = booking()
+
+        val outcome = pendingBooking.onPaymentSucceeded(beforeExpiry, BigDecimal(9_999))
+
+        assertEquals(PaymentOutcome.AmountMismatch, outcome)
+        assertEquals(BookingStatus.CANCELLED, pendingBooking.status)
+        assertEquals(CancelReason.AMOUNT_MISMATCH, pendingBooking.cancelReason)
+        assertEquals(beforeExpiry, pendingBooking.cancelledAt)
+        assertNull(pendingBooking.confirmedAt)
     }
 
     @Test
     fun `금액은 값이 같으면 스케일이 달라도 일치한다`() {
-        assertEquals(PaymentOutcome.ConfirmationRequired, booking().onPaymentSucceeded(beforeExpiry, BigDecimal("10000.00")))
+        val outcome = booking().onPaymentSucceeded(beforeExpiry, BigDecimal("10000.00"))
+
+        assertEquals(PaymentOutcome.ConfirmationRequired, outcome)
     }
 
     @Test
     fun `만료된 PENDING은 금액이 달라도 만료가 먼저 판정된다`() {
-        val b = booking()
-        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED), b.onPaymentSucceeded(atExpiry, BigDecimal(1)))
-        assertEquals(BookingStatus.EXPIRED, b.status)
+        val pendingBooking = booking()
+
+        val outcome = pendingBooking.onPaymentSucceeded(atExpiry, BigDecimal(1))
+
+        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED), outcome)
+        assertEquals(BookingStatus.EXPIRED, pendingBooking.status)
     }
 
     @Test
@@ -131,53 +151,79 @@ class BookingTests {
 
     @Test
     fun `결제 성공이 두 번 와도 상태가 다시 바뀌지 않는다`() {
-        val b = booking()
-        b.onPaymentSucceeded(beforeExpiry, price)
-        b.confirm(beforeExpiry)
-        assertEquals(PaymentOutcome.AlreadyConfirmed, b.onPaymentSucceeded(atExpiry.plusSeconds(60), price))
-        assertEquals(BookingStatus.CONFIRMED, b.status)
-        assertEquals(beforeExpiry, b.confirmedAt)
+        val pendingBooking = booking()
+
+        pendingBooking.onPaymentSucceeded(beforeExpiry, price)
+        pendingBooking.confirm(beforeExpiry)
+        val outcome = pendingBooking.onPaymentSucceeded(atExpiry.plusSeconds(60), price)
+
+        assertEquals(PaymentOutcome.AlreadyConfirmed, outcome)
+        assertEquals(BookingStatus.CONFIRMED, pendingBooking.status)
+        assertEquals(beforeExpiry, pendingBooking.confirmedAt)
     }
 
     @Test
     fun `EXPIRED에 결제 성공이 오면 환불이 필요하고 상태는 그대로다`() {
-        val b = booking().also { it.expire(atExpiry) }
-        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED), b.onPaymentSucceeded(atExpiry, price))
-        assertEquals(BookingStatus.EXPIRED, b.status)
+        val expiredBooking = booking().also { it.expire(atExpiry) }
+
+        val outcome = expiredBooking.onPaymentSucceeded(atExpiry, price)
+
+        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED), outcome)
+        assertEquals(BookingStatus.EXPIRED, expiredBooking.status)
     }
 
     @Test
     fun `CANCELLED에 결제 성공이 오면 환불이 필요하고 상태는 그대로다`() {
-        val b = booking().also { it.cancelByUser(owner, t0) }
-        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_CANCELLED), b.onPaymentSucceeded(t0, price))
-        assertEquals(BookingStatus.CANCELLED, b.status)
-        assertEquals(CancelReason.USER_REQUESTED, b.cancelReason)
+        val cancelledBooking = booking().also { it.cancelByUser(owner, t0) }
+
+        val outcome = cancelledBooking.onPaymentSucceeded(t0, price)
+
+        assertEquals(PaymentOutcome.RefundRequired(RefundReason.BOOKING_CANCELLED), outcome)
+        assertEquals(BookingStatus.CANCELLED, cancelledBooking.status)
+        assertEquals(CancelReason.USER_REQUESTED, cancelledBooking.cancelReason)
     }
 
     @Test
     fun `결제 실패가 오면 PENDING이 PAYMENT_FAILED 사유로 CANCELLED가 된다`() {
-        val b = booking()
-        b.onPaymentFailed(t0)
-        assertEquals(BookingStatus.CANCELLED, b.status)
-        assertEquals(CancelReason.PAYMENT_FAILED, b.cancelReason)
+        val pendingBooking = booking()
+
+        pendingBooking.onPaymentFailed(t0)
+
+        assertEquals(BookingStatus.CANCELLED, pendingBooking.status)
+        assertEquals(CancelReason.PAYMENT_FAILED, pendingBooking.cancelReason)
     }
 
     @Test
     fun `결제 실패가 PENDING이 아닌 예매에 오면 무시한다`() {
-        val c = confirmed().also { it.onPaymentFailed(t0) }
-        assertEquals(BookingStatus.CONFIRMED, c.status)
-        val e = booking().also { it.expire(atExpiry); it.onPaymentFailed(atExpiry) }
-        assertEquals(BookingStatus.EXPIRED, e.status)
-        val x = booking().also { it.onPaymentFailed(t0); it.onPaymentFailed(t0) }
-        assertEquals(CancelReason.PAYMENT_FAILED, x.cancelReason)
+        val confirmedBooking = confirmed()
+
+        confirmedBooking.onPaymentFailed(t0)
+
+        assertEquals(BookingStatus.CONFIRMED, confirmedBooking.status)
+
+        val expiredBooking = booking()
+        expiredBooking.expire(atExpiry)
+
+        expiredBooking.onPaymentFailed(atExpiry)
+
+        assertEquals(BookingStatus.EXPIRED, expiredBooking.status)
+
+        val failedTwiceBooking = booking()
+
+        failedTwiceBooking.onPaymentFailed(t0)
+        failedTwiceBooking.onPaymentFailed(t0)
+
+        assertEquals(CancelReason.PAYMENT_FAILED, failedTwiceBooking.cancelReason)
     }
 
     @Test
     fun `확정 실패는 PENDING을 SEAT_ALREADY_SOLD 사유로 CANCELLED로 바꾼다`() {
-        val b = booking()
-        b.failConfirmation(beforeExpiry)
-        assertEquals(BookingStatus.CANCELLED, b.status)
-        assertEquals(CancelReason.SEAT_ALREADY_SOLD, b.cancelReason)
+        val pendingBooking = booking()
+
+        pendingBooking.failConfirmation(beforeExpiry)
+
+        assertEquals(BookingStatus.CANCELLED, pendingBooking.status)
+        assertEquals(CancelReason.SEAT_ALREADY_SOLD, pendingBooking.cancelReason)
     }
 
     @Test
@@ -187,9 +233,11 @@ class BookingTests {
 
     @Test
     fun `만료 시각이 지난 PENDING은 만료 처리된다`() {
-        val b = booking()
-        b.expire(atExpiry)
-        assertEquals(BookingStatus.EXPIRED, b.status)
+        val pendingBooking = booking()
+
+        pendingBooking.expire(atExpiry)
+
+        assertEquals(BookingStatus.EXPIRED, pendingBooking.status)
     }
 
     @Test
@@ -204,18 +252,24 @@ class BookingTests {
 
     @Test
     fun `PENDING을 본인이 취소하면 선점 해제 결과와 USER_REQUESTED 사유를 얻는다`() {
-        val b = booking()
-        assertEquals(CancelOutcome.ReleasedHold, b.cancelByUser(owner, t0))
-        assertEquals(BookingStatus.CANCELLED, b.status)
-        assertEquals(CancelReason.USER_REQUESTED, b.cancelReason)
+        val pendingBooking = booking()
+
+        val outcome = pendingBooking.cancelByUser(owner, t0)
+
+        assertEquals(CancelOutcome.ReleasedHold, outcome)
+        assertEquals(BookingStatus.CANCELLED, pendingBooking.status)
+        assertEquals(CancelReason.USER_REQUESTED, pendingBooking.cancelReason)
     }
 
     @Test
     fun `CONFIRMED를 본인이 취소하면 환불이 필요하다`() {
-        val b = confirmed()
-        assertEquals(CancelOutcome.RefundRequired, b.cancelByUser(owner, beforeExpiry))
-        assertEquals(BookingStatus.CANCELLED, b.status)
-        assertEquals(CancelReason.USER_REQUESTED, b.cancelReason)
+        val confirmedBooking = confirmed()
+
+        val outcome = confirmedBooking.cancelByUser(owner, beforeExpiry)
+
+        assertEquals(CancelOutcome.RefundRequired, outcome)
+        assertEquals(BookingStatus.CANCELLED, confirmedBooking.status)
+        assertEquals(CancelReason.USER_REQUESTED, confirmedBooking.cancelReason)
     }
 
     @Test
@@ -225,9 +279,12 @@ class BookingTests {
 
     @Test
     fun `EXPIRED와 CANCELLED는 취소할 수 없다`() {
-        val e = booking().also { it.expire(atExpiry) }
-        assertEquals(INVALID_BOOKING_STATE, codeOf { e.cancelByUser(owner, atExpiry) })
-        val c = booking().also { it.cancelByUser(owner, t0) }
-        assertEquals(INVALID_BOOKING_STATE, codeOf { c.cancelByUser(owner, t0) })
+        val expiredBooking = booking().also { it.expire(atExpiry) }
+
+        assertEquals(INVALID_BOOKING_STATE, codeOf { expiredBooking.cancelByUser(owner, atExpiry) })
+
+        val cancelledBooking = booking().also { it.cancelByUser(owner, t0) }
+
+        assertEquals(INVALID_BOOKING_STATE, codeOf { cancelledBooking.cancelByUser(owner, t0) })
     }
 }

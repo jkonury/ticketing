@@ -42,6 +42,7 @@ class CreateBookingService(
         val requested = command.seatIds.map { SeatId(it) }
         val copies = scheduleSeats.findSeats(scheduleId, requested).associateBy { it.seatId }
         if (copies.isEmpty() && !scheduleSeats.existsSchedule(scheduleId)) throw ScheduleNotFoundException()
+
         val seats = requested.map { id ->
             val copy = copies[id] ?: throw SeatNotFoundException()
             BookedSeat(id, copy.price)

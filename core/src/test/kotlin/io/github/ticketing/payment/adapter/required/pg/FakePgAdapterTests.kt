@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class FakePgAdapterTests {
+
     private val builder = RestClient.builder().baseUrl("http://localhost:8090")
     private val server = MockRestServiceServer.bindTo(builder).build()
     private val adapter = FakePgAdapter(builder.build())
@@ -36,7 +37,9 @@ class FakePgAdapterTests {
             .andExpect(content().json("""{"orderId":"order-1","amount":1000}"""))
             .andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
                 .body("""{"transactionId":"tx-1","status":"PENDING"}"""))
+
         assertThat(adapter.requestPayment(payment)).isEqualTo(PgRequestResult.Accepted("tx-1"))
+
         server.verify()
     }
 
@@ -47,7 +50,9 @@ class FakePgAdapterTests {
             .andExpect(content().string(""))
             .andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
                 .body("""{"transactionId":"tx-1","status":"REFUNDED"}"""))
+
         assertThat(adapter.requestRefund("tx-1", "refund-1")).isEqualTo(PgRequestResult.Accepted("tx-1"))
+
         server.verify()
     }
 
@@ -55,6 +60,7 @@ class FakePgAdapterTests {
     fun `클라이언트 오류는 거절하고 서버 오류는 미확정으로 분류한다`() {
         server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.CONFLICT).body("secret"))
         server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body("secret"))
+
         assertThat(adapter.requestPayment(payment)).isEqualTo(PgRequestResult.Rejected("HTTP_4XX"))
         assertThat(adapter.requestPayment(payment)).isEqualTo(PgRequestResult.Unknown("HTTP_ERROR"))
     }
@@ -64,6 +70,7 @@ class FakePgAdapterTests {
         server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.OK))
         server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).body("invalid"))
         server.expect(requestTo("http://localhost:8090/v1/payments/tx-1/refund")).andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).body("""{"transactionId":"tx-2","status":"REFUNDED"}"""))
+
         assertThat(adapter.requestPayment(payment)).isInstanceOf(PgRequestResult.Unknown::class.java)
         assertThat(adapter.requestPayment(payment)).isInstanceOf(PgRequestResult.Unknown::class.java)
         assertThat(adapter.requestRefund("tx-1", "refund-1")).isInstanceOf(PgRequestResult.Unknown::class.java)
@@ -88,9 +95,11 @@ class FakePgAdapterTests {
             exchange.close()
         }
         http.start()
+
         try {
             val properties = PaymentPgProperties(baseUrl = "http://127.0.0.1:${http.address.port}", readTimeout = Duration.ofMillis(100), webhookSecret = "secret")
             val realAdapter = PaymentPgConfiguration().fakePgAdapter(RestClient.builder(), properties)
+
             assertThat(realAdapter.requestPayment(payment)).isInstanceOf(PgRequestResult.Unknown::class.java)
             assertThat(realAdapter.requestPayment(payment.copy(idempotencyKey = "close"))).isInstanceOf(PgRequestResult.Unknown::class.java)
         } finally {

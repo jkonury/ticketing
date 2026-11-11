@@ -19,13 +19,18 @@ import java.math.BigDecimal
 import java.time.Instant
 
 class CatalogRepositoryTests : IntegrationTestSupport() {
-    @Autowired lateinit var venues: VenueRepository
 
-    @Autowired lateinit var performances: PerformanceRepository
+    @Autowired
+    lateinit var venues: VenueRepository
 
-    @Autowired lateinit var schedules: ScheduleRepository
+    @Autowired
+    lateinit var performances: PerformanceRepository
 
-    @Autowired lateinit var tx: TransactionTemplate
+    @Autowired
+    lateinit var schedules: ScheduleRepository
+
+    @Autowired
+    lateinit var tx: TransactionTemplate
 
     private val now = Instant.parse("2026-01-01T00:00:00Z")
 
@@ -34,10 +39,12 @@ class CatalogRepositoryTests : IntegrationTestSupport() {
     @Test
     fun `공연장과 좌석을 저장하고 조회한다`() {
         val saved = venues.save(venue())
+
         val seats =
             tx.execute {
                 venues.findById(requireNotNull(saved.id)).orElseThrow().seats.map { it.key to it.grade }
             }
+
         assertThat(seats).hasSize(2)
         assertThat(seats).contains(venue().seats[0].key to SeatGrade.VIP)
     }
@@ -49,10 +56,13 @@ class CatalogRepositoryTests : IntegrationTestSupport() {
             performances.save(
                 Performance(7, "공연", "설명", venueId, mapOf(SeatGrade.VIP to BigDecimal(150000), SeatGrade.R to BigDecimal(100000)), now),
             )
+
         val prices = tx.execute { performances.findById(requireNotNull(saved.id)).orElseThrow().prices.toMap() }
+
         assertThat(prices).containsEntry(SeatGrade.VIP, BigDecimal(150000))
 
         val schedule = schedules.save(Schedule(requireNotNull(saved.id), now.plusSeconds(3600), now))
+
         assertThat(schedules.findById(requireNotNull(schedule.id))).isPresent
     }
 
@@ -62,6 +72,7 @@ class CatalogRepositoryTests : IntegrationTestSupport() {
         val performanceId =
             requireNotNull(performances.save(Performance(7, "공연", "설명", venueId, mapOf(SeatGrade.VIP to BigDecimal.ONE), now)).id)
         schedules.save(Schedule(performanceId, now, now))
+
         assertThatThrownBy { schedules.saveAndFlush(Schedule(performanceId, now, now)) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
     }
@@ -69,13 +80,17 @@ class CatalogRepositoryTests : IntegrationTestSupport() {
     @Test
     fun `DB는 같은 공연장의 중복 좌석 키를 거부한다`() {
         val venueId = requireNotNull(venues.save(venue()).id)
+
         assertThatThrownBy {
             tx.executeWithoutResult {
-                val v = venues.findById(venueId).orElseThrow()
+                val loadedVenue = venues.findById(venueId).orElseThrow()
+
                 // 도메인 검증을 우회해 DB 제약만 검증한다
-                val dup = Venue::class.java.getDeclaredField("_seats").apply { isAccessible = true }
+                val seatsField = Venue::class.java.getDeclaredField("_seats").apply { isAccessible = true }
+
                 @Suppress("UNCHECKED_CAST")
-                (dup.get(v) as MutableList<VenueSeat>).add(VenueSeat("A", "1", 1, SeatGrade.S))
+                (seatsField.get(loadedVenue) as MutableList<VenueSeat>).add(VenueSeat("A", "1", 1, SeatGrade.S))
+
                 venues.flush()
             }
         }.isInstanceOf(DataIntegrityViolationException::class.java)

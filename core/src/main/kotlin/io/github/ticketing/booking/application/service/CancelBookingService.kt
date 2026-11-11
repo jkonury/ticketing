@@ -38,6 +38,7 @@ class CancelBookingService(
 
     override fun cancel(memberId: Long, bookingId: Long): BookingResult = translatingRuleViolations {
         val member = MemberId(memberId)
+
         val saved = tx.execute {
             val booking = bookings.findById(BookingId(bookingId)) ?: throw BookingNotFoundException()
             if (booking.memberId != member) throw NotBookingOwnerException()
@@ -55,7 +56,9 @@ class CancelBookingService(
             )
             saved to if (refundRequired) After.MarkAvailable else After.ReleaseHold
         }
+
         val (booking, after) = requireNotNull(saved)
+
         // Redis 반영은 커밋 후에 한다. 실패해도 선점은 TTL이 만료시키고 DB 제약이 중복 판매를 막는다
         val seatIds = booking.seats.map { it.seatId }
         when (after) {
@@ -65,7 +68,9 @@ class CancelBookingService(
             After.MarkAvailable -> runCatching { seatHold.markAvailable(booking.scheduleId, seatIds, clock.instant()) }
                 .onFailure { log.warn("확정 예매 취소 후 좌석 반환에 실패했다. bookingId={}", bookingId, it) }
         }
+
         if (after != After.Nothing) log.info("예매 취소 bookingId={} memberId={} confirmed={}", bookingId, memberId, after == After.MarkAvailable)
+
         val labels = scheduleSeats.findSeats(booking.scheduleId, booking.seats.map { it.seatId }).associate { it.seatId to it.label }
         booking.toResult(labels)
     }
