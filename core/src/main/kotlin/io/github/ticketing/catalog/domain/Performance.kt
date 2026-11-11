@@ -20,16 +20,16 @@ import java.time.Instant
 @Table(schema = "catalog", name = "performance")
 class Performance(
     @Column(name = "organizer_id", nullable = false, updatable = false)
-    val organizerId: Long,
+    var organizerId: Long,
     @Column(nullable = false)
-    val title: String,
+    var title: String,
     @Column(nullable = false)
-    val description: String,
+    var description: String,
     @Column(name = "venue_id", nullable = false, updatable = false)
-    val venueId: Long,
+    var venueId: Long,
     prices: Map<SeatGrade, BigDecimal>,
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant,
+    var createdAt: Instant,
 ) {
     init {
         require(title.isNotBlank()) { "공연 제목은 비어 있을 수 없다" }
@@ -39,7 +39,7 @@ class Performance(
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null
+    var id: Long? = null
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(
@@ -50,7 +50,7 @@ class Performance(
     @MapKeyColumn(name = "grade")
     @MapKeyEnumerated(EnumType.STRING)
     @Column(name = "price", nullable = false)
-    private val _prices: MutableMap<SeatGrade, BigDecimal> = prices.toMutableMap()
+    private var _prices: MutableMap<SeatGrade, BigDecimal> = prices.toMutableMap()
 
     val prices: Map<SeatGrade, BigDecimal> get() = _prices
 

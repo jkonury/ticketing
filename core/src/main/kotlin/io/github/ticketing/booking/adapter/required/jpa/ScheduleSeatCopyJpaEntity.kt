@@ -15,22 +15,22 @@ import java.math.BigDecimal
 @Embeddable
 data class ScheduleSeatKey(
     @Column(name = "schedule_id")
-    val scheduleId: Long = 0,
+    var scheduleId: Long = 0,
     @Column(name = "seat_id")
-    val seatId: Long = 0,
+    var seatId: Long = 0,
 ) : Serializable
 
 @Entity
 @Table(schema = "booking", name = "schedule_seat")
 class ScheduleSeatCopyJpaEntity(
     @EmbeddedId
-    val key: ScheduleSeatKey,
+    var key: ScheduleSeatKey,
     @Column(name = "grade", nullable = false)
-    val grade: String,
+    var grade: String,
     @Column(name = "label", nullable = false)
-    val label: String,
+    var label: String,
     @Column(name = "price", nullable = false)
-    val price: BigDecimal,
+    var price: BigDecimal,
 ) : Persistable<ScheduleSeatKey> {
     // 식별자를 직접 할당하므로 신규 여부를 알리지 않으면 save가 merge(사전 SELECT)로 간다
     @Transient

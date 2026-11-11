@@ -16,10 +16,10 @@ import java.time.Instant
 @Table(schema = "catalog", name = "venue")
 class Venue(
     @Column(nullable = false)
-    val name: String,
+    var name: String,
     seats: List<VenueSeat>,
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant,
+    var createdAt: Instant,
 ) {
     init {
         require(name.isNotBlank()) { "공연장 이름은 비어 있을 수 없다" }
@@ -30,11 +30,11 @@ class Venue(
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null
+    var id: Long? = null
 
     @OneToMany(fetch = FetchType.LAZY, cascade = [CascadeType.PERSIST], orphanRemoval = true)
     @JoinColumn(name = "venue_id", nullable = false, updatable = false)
-    private val _seats: MutableList<VenueSeat> = seats.toMutableList()
+    private var _seats: MutableList<VenueSeat> = seats.toMutableList()
 
     val seats: List<VenueSeat> get() = _seats
 

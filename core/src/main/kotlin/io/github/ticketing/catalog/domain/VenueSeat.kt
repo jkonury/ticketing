@@ -14,18 +14,18 @@ import jakarta.persistence.Table
 @Table(schema = "catalog", name = "venue_seat")
 class VenueSeat(
     @Column(nullable = false, updatable = false)
-    val section: String,
+    var section: String,
     @Column(name = "row_label", nullable = false, updatable = false)
-    val rowLabel: String,
+    var rowLabel: String,
     @Column(name = "seat_number", nullable = false, updatable = false)
-    val seatNumber: Int,
+    var seatNumber: Int,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    val grade: SeatGrade,
+    var grade: SeatGrade,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null
+    var id: Long? = null
 
     /** 같은 공연장 안에서 좌석을 식별하는 자연키. */
     val key: SeatKey get() = SeatKey(section, rowLabel, seatNumber)

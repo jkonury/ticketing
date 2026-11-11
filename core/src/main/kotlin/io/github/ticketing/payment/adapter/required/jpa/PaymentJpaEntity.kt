@@ -8,15 +8,15 @@ import java.time.Instant
 @Table(schema = "payment", name = "payment")
 class PaymentJpaEntity(
     @Column(name = "order_id", nullable = false, updatable = false)
-    val orderId: Long,
+    var orderId: Long,
     @Column(name = "member_id", nullable = false, updatable = false)
-    val memberId: Long,
+    var memberId: Long,
     @Column(nullable = false, updatable = false, precision = 12, scale = 0)
-    val amount: BigDecimal,
+    var amount: BigDecimal,
     @Column(name = "idempotency_key", nullable = false, updatable = false)
-    val idempotencyKey: String,
+    var idempotencyKey: String,
     @Column(name = "requested_at", nullable = false, updatable = false)
-    val requestedAt: Instant,
+    var requestedAt: Instant,
 
     @Column(nullable = false)
     var status: String,

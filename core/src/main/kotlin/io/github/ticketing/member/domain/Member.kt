@@ -14,20 +14,20 @@ import java.time.Instant
 @Table(schema = "member", name = "member")
 class Member(
     @Column(nullable = false, updatable = false)
-    val email: String,
+    var email: String,
     @Column(name = "password_hash", nullable = false)
-    val passwordHash: String,
+    var passwordHash: String,
     @Column(nullable = false)
-    val name: String,
+    var name: String,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    val role: Role,
+    var role: Role,
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant,
+    var createdAt: Instant,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null
+    var id: Long? = null
 
     override fun equals(other: Any?): Boolean = this === other || (other is Member && id != null && id == other.id)
 

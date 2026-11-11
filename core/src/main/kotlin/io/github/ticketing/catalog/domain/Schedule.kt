@@ -13,15 +13,15 @@ import java.time.Instant
 @Table(schema = "catalog", name = "schedule")
 class Schedule(
     @Column(name = "performance_id", nullable = false, updatable = false)
-    val performanceId: Long,
+    var performanceId: Long,
     @Column(name = "starts_at", nullable = false, updatable = false)
-    val startsAt: Instant,
+    var startsAt: Instant,
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant,
+    var createdAt: Instant,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null
+    var id: Long? = null
 
     override fun equals(other: Any?): Boolean = this === other || (other is Schedule && id != null && id == other.id)
 

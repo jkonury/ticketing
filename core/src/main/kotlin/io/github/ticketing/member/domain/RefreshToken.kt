@@ -12,17 +12,17 @@ import java.time.Instant
 @Table(schema = "member", name = "refresh_token")
 class RefreshToken(
     @Column(name = "member_id", nullable = false, updatable = false)
-    val memberId: Long,
+    var memberId: Long,
     @Column(name = "token_hash", nullable = false, updatable = false)
-    val tokenHash: String,
+    var tokenHash: String,
     @Column(name = "expires_at", nullable = false, updatable = false)
-    val expiresAt: Instant,
+    var expiresAt: Instant,
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant,
+    var createdAt: Instant,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null
+    var id: Long? = null
 
     @Column(name = "revoked_at")
     var revokedAt: Instant? = null

@@ -23,19 +23,19 @@ import java.time.Instant
 @Table(schema = "booking", name = "booking")
 class BookingJpaEntity(
     @Column(name = "member_id", nullable = false, updatable = false)
-    val memberId: Long,
+    var memberId: Long,
     @Column(name = "schedule_id", nullable = false, updatable = false)
-    val scheduleId: Long,
+    var scheduleId: Long,
     @Column(name = "status", nullable = false)
     var status: String,
     @Column(name = "total_amount", nullable = false, updatable = false)
-    val totalAmount: BigDecimal,
+    var totalAmount: BigDecimal,
     @Column(name = "hold_token", nullable = false, updatable = false)
-    val holdToken: String,
+    var holdToken: String,
     @Column(name = "idempotency_key", nullable = false, updatable = false)
-    val idempotencyKey: String,
+    var idempotencyKey: String,
     @Column(name = "expires_at", nullable = false, updatable = false)
-    val expiresAt: Instant,
+    var expiresAt: Instant,
     @Column(name = "payment_requested_at")
     var paymentRequestedAt: Instant?,
     @Column(name = "confirmed_at")
@@ -45,7 +45,7 @@ class BookingJpaEntity(
     @Column(name = "cancel_reason")
     var cancelReason: String?,
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant,
+    var createdAt: Instant,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -56,15 +56,15 @@ class BookingJpaEntity(
     var version: Long = 0
 
     @OneToMany(mappedBy = "booking", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
-    val seats: MutableList<BookingSeatJpaEntity> = mutableListOf()
+    var seats: MutableList<BookingSeatJpaEntity> = mutableListOf()
 }
 
 @Embeddable
 data class BookingSeatKey(
     @Column(name = "booking_id")
-    val bookingId: Long = 0,
+    var bookingId: Long = 0,
     @Column(name = "seat_id")
-    val seatId: Long = 0,
+    var seatId: Long = 0,
 ) : Serializable
 
 @Entity
@@ -73,11 +73,11 @@ class BookingSeatJpaEntity(
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("bookingId")
     @JoinColumn(name = "booking_id")
-    val booking: BookingJpaEntity,
+    var booking: BookingJpaEntity,
     seatId: Long,
     @Column(name = "price", nullable = false)
-    val price: BigDecimal,
+    var price: BigDecimal,
 ) {
     @EmbeddedId
-    val key: BookingSeatKey = BookingSeatKey(booking.id ?: 0, seatId)
+    var key: BookingSeatKey = BookingSeatKey(booking.id ?: 0, seatId)
 }
