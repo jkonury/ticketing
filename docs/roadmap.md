@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2·M3-1·M3-2 완료, M3-3 대기 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
+- 상태: M0·M1·M2·M3 완료, M4 대기 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -52,8 +52,8 @@
 - [x] PostgreSQL 의존이 없음을 빌드 의존성으로 확인
 
 ### M3-3. 검증
-- [ ] 입장 토큰 없이 예매 API 호출 시 차단
-- [ ] 실시간 앱 인스턴스 2개에서 순번·좌석 push 일관성
+- [x] 입장 토큰 없이 예매 API 호출 시 차단
+- [x] 실시간 앱 인스턴스 2개에서 순번·좌석 push 일관성
 
 **완료 기준**: 대기열 진입 → 순번 SSE 수신 → 입장 토큰 발급 → Gateway 통과 → 예매 확정, 그리고 다른 사용자의 화면에 좌석 변경이 SSE로 도달.
 
