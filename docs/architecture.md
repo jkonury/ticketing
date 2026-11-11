@@ -91,8 +91,8 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 | `member` | 회원 가입, 로그인, JWT 발급, 역할 | 계층형 |
 | `catalog` | 공연, 회차, 공연장, 좌석 배치 | 계층형 |
 | `booking` | 좌석 선점, 예매 생성·확정·만료·취소 | 헥사고날 |
-| `payment` | 결제 요청, 웹훅 처리, 환불 | 헥사고날 |
-| `settlement` | 정산, 결제 대사 (Batch). M2에서 구현 | 헥사고날 |
+| `payment` | 결제 요청, 웹훅 처리, 환불, 결제 대사 (Batch) | 헥사고날 |
+| `settlement` | 정산 (Batch). M2에서 구현 | 헥사고날 |
 | `notification` | 알림 (초기에는 로그 출력). M1-6에서 구현 | 계층형 |
 
 대기열(`queue`)은 코어가 아니라 `realtime` 앱 소유다. 코어는 대기열의 존재를 모른다.
@@ -146,9 +146,9 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `PaymentSucceeded` | payment | booking | `paymentId`, `orderId`, `amount`, `paidAt` |
 | `PaymentFailed` | payment | booking | `paymentId`, `orderId`, `reason`, `failedAt` |
 | `PaymentRefunded` | payment | booking | `paymentId`, `orderId`, `refundedAt` |
-| `BookingConfirmed` | booking | notification (settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `seatIds`, `amount`, `confirmedAt` |
-| `BookingCancelled` | booking | notification (settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `reason`, `refundRequired`, `cancelledAt` |
-| `BookingExpired` | booking | 없음(notification, settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
+| `BookingConfirmed` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `seatIds`, `amount`, `confirmedAt` |
+| `BookingCancelled` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `reason`, `refundRequired`, `cancelledAt` |
+| `BookingExpired` | booking | 없음(notification) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 모듈이 소유한다. 발행자는 위 표와 같지만 클래스는 `payment` 루트 패키지에 있다.
 - 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.
@@ -500,9 +500,16 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 | 일별 정산 | 공연·주최자별 매출 집계, 수수료 계산. jOOQ reader, chunk 처리 |
 | 미결제 예매 정리 | `PENDING`으로 남은 건을 `EXPIRED`로 전환 (Redis TTL 누락분 보정) |
 | 좌석 스냅샷 보정 | 커밋 후 Redis 반영 실패로 DB와 어긋난 좌석 스냅샷을 DB 기준으로 보정 |
-| 결제 대사 | 가짜 PG 거래 내역과 내부 결제 기록의 불일치 검출 |
+| 결제 대사 (`payment`) | 가짜 PG 거래 내역과 내부 결제 기록의 불일치 검출 |
 
-코어와 같은 코드베이스의 별도 실행 모듈로 두고, 추후 k8s CronJob으로 옮긴다.
+Batch Job은 데이터를 소유한 모듈의 `adapter.provided.batch`에 두고 `@Profile("batch")`로 활성화한다. Batch는 웹 컨트롤러와 같은 입력 어댑터다. `core-batch`는 웹 서버 없이 `batch` 프로필로 core 컨텍스트를 띄우며 `spring.batch.job.name`으로 Job 하나를 실행한다. 웹 앱에서는 Job 빈을 만들지 않고 자동 실행도 끈다. 이 결정의 대안과 근거는 [ADR 0019](./adr/0019-batch-jobs-in-owning-modules.md)를 참고한다.
+
+- Batch 메타데이터는 Spring Batch 공식 PostgreSQL DDL을 Flyway 마이그레이션으로 `batch` 스키마에 만든다.
+- 정산일은 이벤트 시각의 Asia/Seoul 날짜다. 그날 매출은 `BookingConfirmed` 금액 합, 환불은 `refundRequired=true`인 `BookingCancelled` 중 확정 사본이 있는 예매의 금액 합이다. 지난 날짜의 정산은 다시 계산하지 않는다. 수수료는 `(매출 − 환불) × 수수료율`(설정값, 기본 `0.10`)이며 원 미만은 0 방향으로 절사한다. 지급액은 `매출 − 환불 − 수수료`이고 `(정산일, 공연)` 단위로 upsert한다.
+- 결제를 요청하지 않은 `PENDING` 예매는 `expiresAt` 경과 시, 결제를 요청한 `PENDING` 예매는 `expiresAt + 유예`(설정값, 기본 30분) 경과 시 `EXPIRED`로 전환한다. 이후 도착한 결제 성공은 기존 자동 환불 경로로 처리한다.
+- 좌석 스냅샷 보정은 시작 전 회차를 대상으로 `sold_seat`와 선점 키를 기준으로 스냅샷을 다시 쓴다.
+- 결제 대사는 Asia/Seoul 날짜 기준으로 받은 PG 거래와 같은 날 요청된 내부 결제를 `orderId`로 비교하고 불일치를 기록한다. 자동 보정은 하지 않는다.
+- 같은 대상 날짜로 재실행해도 결과가 같도록 upsert 또는 날짜 단위 삭제 후 재적재로 쓴다.
 
 ## 10. 외부 연동
 
@@ -512,6 +519,7 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 ### fake-pg 연동 계약
 
 - 결제: `POST /v1/payments`, `Idempotency-Key`, 본문 `{orderId: string, amount: 정수 원 단위}`. 환불: `POST /v1/payments/{transactionId}/refund`, `Idempotency-Key`. 유효한 접수 응답은 202다.
+- 거래 조회: `GET /v1/transactions?date=YYYY-MM-DD`의 요청 날짜는 Asia/Seoul 기준이다.
 - 웹훅: 코어의 `POST /api/v1/payments/webhooks/fake-pg`로 승인·실패·환불 완료를 전송한다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.
 - 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). 코어와 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
 - 어댑터 기본 주소는 `http://localhost:8090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 6.4절 정책을 따른다.
