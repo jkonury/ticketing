@@ -9,6 +9,8 @@ interface ScheduleSeatCommandPort {
     /** 이미 있으면 아무것도 하지 않는다(멱등). 새로 저장했으면 true */
     fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>): Boolean
 
+    fun findSchedule(scheduleId: ScheduleId): ScheduleCopy?
+
     fun existsSchedule(scheduleId: ScheduleId): Boolean
 
     fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy>

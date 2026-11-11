@@ -242,7 +242,10 @@ class BookingPaymentFlowTests(
         }
 
         assertThat(soldSeatCount(id)).isEqualTo(2)
-        assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }.single().seatIds).containsExactlyInAnyOrder(1L, 2L)
+        val confirmed = collector.of(BookingConfirmed::class.java) { it.bookingId == id }.single()
+        assertThat(confirmed.performanceId).isEqualTo(1L)
+        assertThat(confirmed.organizerId).isEqualTo(2L)
+        assertThat(confirmed.seatIds).containsExactlyInAnyOrder(1L, 2L)
     }
 
     @Test
@@ -258,6 +261,8 @@ class BookingPaymentFlowTests(
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE") }
 
         val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(cancelled.performanceId).isEqualTo(1L)
+        assertThat(cancelled.organizerId).isEqualTo(2L)
 
         assertThat(cancelled.reason).isEqualTo("PAYMENT_FAILED")
         assertThat(cancelled.refundRequired).isFalse()
@@ -334,6 +339,8 @@ class BookingPaymentFlowTests(
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }.single().reason).isEqualTo("AMOUNT_MISMATCH")
 
         val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(cancelled.performanceId).isEqualTo(1L)
+        assertThat(cancelled.organizerId).isEqualTo(2L)
 
         assertThat(cancelled.reason).isEqualTo("AMOUNT_MISMATCH")
         assertThat(cancelled.refundRequired).isTrue()
@@ -400,7 +407,10 @@ class BookingPaymentFlowTests(
         assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE")
         assertThat(snapshot(schedule, 2)).isEqualTo("AVAILABLE")
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).hasSize(1)
-        assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == id }.single().refundRequired).isTrue()
+        val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(cancelled.performanceId).isEqualTo(1L)
+        assertThat(cancelled.organizerId).isEqualTo(2L)
+        assertThat(cancelled.refundRequired).isTrue()
 
         cancel(token, id).andExpect(status().isOk)
 

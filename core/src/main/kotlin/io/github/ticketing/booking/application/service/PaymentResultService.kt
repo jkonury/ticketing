@@ -5,6 +5,7 @@ import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.booking.BookingExpired
 import io.github.ticketing.booking.application.port.provided.HandlePaymentResultUseCase
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
+import io.github.ticketing.booking.application.port.required.ScheduleSeatCommandPort
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingId
@@ -35,6 +36,7 @@ import java.time.Instant
 class PaymentResultService(
     private val bookings: BookingCommandPort,
     private val seatHold: SeatHoldPort,
+    private val scheduleSeats: ScheduleSeatCommandPort,
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
     private val clock: Clock,
@@ -67,11 +69,14 @@ class PaymentResultService(
                     booking.confirm(now)
                     val saved = bookings.save(booking)
 
+                    val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
                     events.publishEvent(
                         BookingConfirmed(
                             bookingId.value,
                             booking.memberId.value,
                             booking.scheduleId.value,
+                            schedule.performanceId,
+                            schedule.organizerId,
                             seatIds.map {
                                 it.value
                             },
@@ -113,8 +118,20 @@ class PaymentResultService(
 
     private fun cancelWithRefund(booking: Booking, reason: String, now: Instant) {
         val id = requireNotNull(booking.id).value
+        val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
         events.publishEvent(RefundRequested(id, reason, now))
-        events.publishEvent(BookingCancelled(id, booking.memberId.value, booking.scheduleId.value, reason, true, now))
+        events.publishEvent(
+            BookingCancelled(
+                id,
+                booking.memberId.value,
+                booking.scheduleId.value,
+                schedule.performanceId,
+                schedule.organizerId,
+                reason,
+                true,
+                now,
+            ),
+        )
     }
 
     private fun refund(
@@ -148,8 +165,18 @@ class PaymentResultService(
                 val now = clock.instant()
                 booking.onPaymentFailed(now)
                 val saved = bookings.save(booking)
+                val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
                 events.publishEvent(
-                    BookingCancelled(bookingId, booking.memberId.value, booking.scheduleId.value, "PAYMENT_FAILED", false, now),
+                    BookingCancelled(
+                        bookingId,
+                        booking.memberId.value,
+                        booking.scheduleId.value,
+                        schedule.performanceId,
+                        schedule.organizerId,
+                        "PAYMENT_FAILED",
+                        false,
+                        now,
+                    ),
                 )
                 log.info("결제 실패로 예매 취소 bookingId={} paymentId={} reason={}", bookingId, paymentId, reason)
                 After.Release(saved)

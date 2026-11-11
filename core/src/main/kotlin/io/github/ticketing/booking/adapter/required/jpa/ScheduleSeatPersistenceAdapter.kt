@@ -31,6 +31,18 @@ internal class ScheduleSeatPersistenceAdapter(private val seatRepository: Schedu
         return true
     }
 
+    override fun findSchedule(scheduleId: ScheduleId): ScheduleCopy? =
+        dsl.selectFrom(SCHEDULE).where(SCHEDULE.SCHEDULE_ID.eq(scheduleId.value)).fetchOne()?.let {
+            ScheduleCopy(
+                scheduleId,
+                requireNotNull(it.performanceId),
+                requireNotNull(it.performanceTitle),
+                requireNotNull(it.organizerId),
+                requireNotNull(it.startsAt).toInstant(),
+                requireNotNull(it.receivedAt).toInstant(),
+            )
+        }
+
     override fun existsSchedule(scheduleId: ScheduleId): Boolean = dsl.fetchExists(SCHEDULE, SCHEDULE.SCHEDULE_ID.eq(scheduleId.value))
 
     override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> {

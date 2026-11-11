@@ -51,8 +51,18 @@ class CancelBookingService(
                 bookings.deleteSoldSeats(BookingId(bookingId))
                 events.publishEvent(RefundRequested(bookingId, CancelReason.USER_REQUESTED.name, now))
             }
+            val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
             events.publishEvent(
-                BookingCancelled(bookingId, memberId, booking.scheduleId.value, CancelReason.USER_REQUESTED.name, refundRequired, now),
+                BookingCancelled(
+                    bookingId,
+                    memberId,
+                    booking.scheduleId.value,
+                    schedule.performanceId,
+                    schedule.organizerId,
+                    CancelReason.USER_REQUESTED.name,
+                    refundRequired,
+                    now,
+                ),
             )
             saved to if (refundRequired) After.MarkAvailable else After.ReleaseHold
         }

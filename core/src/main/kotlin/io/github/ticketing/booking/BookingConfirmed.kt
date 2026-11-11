@@ -8,6 +8,8 @@ data class BookingConfirmed(
     val bookingId: Long,
     val memberId: Long,
     val scheduleId: Long,
+    val performanceId: Long,
+    val organizerId: Long,
     val seatIds: List<Long>,
     val amount: BigDecimal,
     val confirmedAt: Instant,
