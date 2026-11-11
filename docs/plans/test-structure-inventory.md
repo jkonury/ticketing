@@ -123,3 +123,16 @@ DB 유니크 제약·낙관적 및 비관적 잠금·실제 이벤트 전달과 
 ## 기존 성능 기록
 
 [통합 테스트 재사용 개선](../test-performance.md)의 2026-11-11 core 단독 측정은 테스트 161개, 테스트 스위트 시간 합계 67.131초 → 52.752초, Spring 컨텍스트 9 → 7회, PostgreSQL과 Redis 컨테이너 각각 9 → 1회다. 각 1회 측정이며 스위트 시간 합계는 JVM 전체 시간이나 Gradle 전체 시간이 아니다. Ryuk과 jOOQ 생성 컨테이너도 기동 수에서 제외한다. 이번 전체 모듈 기준선과 단위 테스트 JVM 시간은 별도 측정이 필요하다.
+
+## 추가한 서비스 단위 검증 대응
+
+| 기존 통합 검증 | 직접 생성하는 단위 테스트 | 통합에서 유지하는 보장 |
+| --- | --- | --- |
+| BookingPaymentFlowTests·BookingApiIntegrationTests·예매 Batch·조회 | BookingServicesTests, 기존 CreateBookingServiceTests | HTTP·좌석 유니크 제약·잠금·이벤트 전달·실제 Redis |
+| PaymentApplicationTests·PaymentFlowTests·PaymentWebhookHttpTests | PaymentServiceTests | 트랜잭션 롤백·중복 동시 전달·서명·HTTP·발행 레지스트리 |
+| SettlementModuleTests·DailySettlementJobTests | RecordBookingEventTests, 기존 DailySettlementCalculatorTests | 실제 사본 저장·정산 Job 재실행 |
+| MemberAuthIntegrationTests | MemberServiceTests | 실제 해시·인가·refresh 동시 잠금·폐기 커밋 |
+| CatalogRegisterApiTests | CatalogRegistrationServiceTests | 실제 DB 제약·HTTP·이벤트 수신 |
+| NotificationModuleTests | 기존 BookingNotificationListenerTests | Modulith 전달 |
+
+여러 시나리오를 같은 테스트 메서드의 순차 상태 전이로 검사하는 경우가 있으므로 테스트 개수만으로 대응 여부를 판단하지 않는다. 대체 경계와 남긴 검증은 [fake 대체 경계](./test-structure-boundaries.md)를 따른다.

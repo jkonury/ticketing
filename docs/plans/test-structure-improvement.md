@@ -1,7 +1,7 @@
 # 테스트 구조 개선 실행 계획
 
 - 작성일: 2026-11-12
-- 상태: Step 3 완료, Step 4 진행 예정
+- 상태: Step 4 완료, Step 5 검증 중
 - 기준: [아키텍처](../architecture.md), [로드맵](../roadmap.md), [백엔드 규칙](../rules/backend.md)
 - 기존 측정: [통합 테스트 재사용 개선](../test-performance.md)
 
@@ -21,7 +21,7 @@
 - [x] Step 1. 기준선 측정과 설계 결정 기록
 - [x] Step 2. 단위·통합 테스트 실행 경로 분리
 - [x] Step 3. 운영 저장소 최소화
-- [ ] Step 4. core 단위 테스트 전환
+- [x] Step 4. core 단위 테스트 전환
 - [ ] Step 5. gateway·realtime·fake-pg 단위 테스트 전환
 - [ ] Step 6. 통합 테스트 컨텍스트 통합
 - [ ] Step 7. Stop 훅·git hook 연결
@@ -184,3 +184,10 @@
 - 테스트만 쓰던 Venue flush·Schedule save/findById는 운영 인터페이스에 추가하지 않았다. 카탈로그 영속 검증은 기존 saveAndFlush·테스트 EntityManager 재조회·트랜잭션 커밋 시 제약 검증으로 유지했다. 직접 flush 예외 타입 차이로 첫 실행에서 실패한 뒤 기존 DataIntegrityViolationException 검증을 복원했다.
 - `./scripts/agent/test/run-tests.sh :core:integrationTest` 141개와 `./scripts/agent/test/check-summary.sh ktlintCheck detekt` 통과(Step 2의 환경 옵션 적용). 공식 Spring Data JPA 4.1.2 문서와 실제 저장·잠금·동시성 통합 검증으로 확인했다. 모듈 의존·API·스키마·서비스 흐름 변경이 없어 E2E는 생략했다.
 - 로그: `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`.
+
+### Step 4
+
+- booking·payment/settlement·member/catalog/notification을 분담해 서비스 직접 생성과 포트·최소 저장소 fake로 비즈니스 분기를 검증했다. 회원 단위 테스트는 빠른 PasswordEncoder를 사용한다. 각 테스트의 fake와 Clock은 독립적이다.
+- core 단위 92개(기존 57개에서 35개 증가), 통합·구조 141개를 모두 통과했다. `:core:check`로 ktlint·detekt까지 확인했다. 최초 PasswordEncoder null 허용 시그니처 컴파일 오류를 수정한 후 통과했다. 테스트 코드만 바뀌어 E2E는 생략했다.
+- [단위 시나리오 대응](./test-structure-inventory.md#추가한-서비스-단위-검증-대응), [fake 대체 경계와 통합 유지 사유](./test-structure-boundaries.md)를 기록했다. 통합 리스너 MockitoBean 5개는 다른 모듈 동작을 차단하는 용도라 Step 6에서 전환한다.
+- 검증 명령: 전용 test 스크립트 `:core:test`, check 스크립트 `:core:check`(Step 2 환경 옵션). 로그: `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`.
