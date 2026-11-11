@@ -2,6 +2,18 @@
 
 구현 순서와 진행 상태는 [roadmap.md](./roadmap.md), 결정별 대안과 선택 이유는 [adr/](./adr/README.md)를 본다.
 
+## 문서 구성
+
+이 문서는 전체 그림(§1–§4, §11)을 담고, 구현 상세는 아래 문서로 나눈다. 절 번호는 분리 전과 같다.
+
+| 문서 | 절 | 내용 |
+|---|---|---|
+| [architecture/erd.md](./architecture/erd.md) | §5 | PostgreSQL 스키마 규칙, ERD, JPA·jOOQ 역할 분담 |
+| [architecture/redis.md](./architecture/redis.md) | §5 | Redis 용도, 대기열·좌석 선점 키 형식 |
+| [architecture/flows.md](./architecture/flows.md) | §6 | 대기열·입장, 좌석 선점, 예매 시퀀스, 상태 전이, 결제 |
+| [architecture/integrations.md](./architecture/integrations.md) | §7, §8, §10 | 인증·인가, BFF, 외부 연동(fake-pg 계약) |
+| [architecture/batch.md](./architecture/batch.md) | §9 | Batch Job과 정산·대사 규칙 |
+
 ## 1. 프로젝트 개요
 
 | 항목 | 내용 |
@@ -155,481 +167,34 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 ## 5. 데이터
 
-### PostgreSQL
-
-- 인스턴스 하나, **모듈별 스키마 분리**: `member`, `catalog`, `booking`, `payment`, `settlement`, `batch`
-- **모듈 간 외래 키·조인 금지**
-- `settlement`의 집계에 필요한 타 모듈 데이터는 이벤트로 받아 자기 스키마에 사본으로 쌓는다.
-- 스키마 관리는 Flyway, jOOQ 코드는 Flyway가 만든 스키마에서 생성한다.
-
-### booking 스키마 데이터
-
-- **좌석 사본**: `booking`은 `catalog`의 `ScheduleRegistered`를 받아 `booking.schedule`과 `booking.schedule_seat`에 회차와 좌석·가격 사본을 둔다. `catalog`를 직접 조회하지 않는다.
-- **`booking.sold_seat (schedule_id, seat_id)`**: 확정 시에만 행을 넣고 취소 시 지우는 테이블이며 여기에 유니크 제약을 둔다. 예매 좌석 테이블에 유니크를 걸면 취소·만료된 예매가 좌석을 계속 점유하기 때문이다.
-
-### 테이블 구조 (ERD)
-
-스키마별로 그린다. 스키마를 넘는 관계는 FK가 없고 값으로만 참조하므로 선을 긋지 않고 주석으로 표시한다. 원본은 `core/src/main/resources/db/migration/V*.sql`이다. 이 외에 `public.event_publication`(Modulith 이벤트 발행 레지스트리)과 `batch` 스키마(Spring Batch 메타데이터, 공식 DDL)가 있다.
-
-#### member
-
-```mermaid
-erDiagram
-    member ||--o{ refresh_token : "member_id"
-    member {
-        bigint id PK
-        varchar email UK
-        varchar password_hash
-        varchar name
-        varchar role
-        timestamptz created_at
-    }
-    refresh_token {
-        bigint id PK
-        bigint member_id FK
-        varchar token_hash UK "SHA-256 해시만 저장"
-        timestamptz expires_at
-        timestamptz revoked_at
-        timestamptz created_at
-    }
-```
-
-#### catalog
-
-```mermaid
-erDiagram
-    venue ||--o{ venue_seat : "venue_id"
-    venue ||--o{ performance : "venue_id"
-    performance ||--o{ performance_price : "performance_id"
-    performance ||--o{ schedule : "performance_id"
-    venue {
-        bigint id PK
-        varchar name
-        timestamptz created_at
-    }
-    venue_seat {
-        bigint id PK
-        bigint venue_id FK
-        varchar section
-        varchar row_label
-        int seat_number
-        varchar grade "UK(venue_id, section, row_label, seat_number)"
-    }
-    performance {
-        bigint id PK
-        bigint organizer_id "member.member.id 값 참조"
-        bigint venue_id FK
-        varchar title
-        text description
-        timestamptz created_at
-    }
-    performance_price {
-        bigint performance_id PK, FK
-        varchar grade PK
-        numeric price
-    }
-    schedule {
-        bigint id PK
-        bigint performance_id FK
-        timestamptz starts_at "UK(performance_id, starts_at)"
-        timestamptz created_at
-    }
-```
-
-#### booking
-
-`schedule`, `schedule_seat`는 `ScheduleRegistered`로 받은 catalog 사본이다.
-
-```mermaid
-erDiagram
-    booking ||--o{ booking_seat : "booking_id"
-    schedule ||--o{ schedule_seat : "schedule_id (FK 없음)"
-    schedule {
-        bigint schedule_id PK "catalog.schedule.id 사본"
-        bigint performance_id
-        varchar performance_title
-        bigint organizer_id
-        timestamptz starts_at
-        timestamptz received_at
-    }
-    schedule_seat {
-        bigint schedule_id PK
-        bigint seat_id PK
-        varchar grade
-        varchar label
-        numeric price
-    }
-    booking {
-        bigint id PK
-        bigint member_id "member 값 참조"
-        bigint schedule_id "값 참조, FK 없음"
-        varchar status
-        numeric total_amount
-        varchar hold_token
-        varchar idempotency_key "UK(member_id, idempotency_key)"
-        timestamptz expires_at
-        timestamptz payment_requested_at
-        timestamptz confirmed_at
-        timestamptz cancelled_at
-        varchar cancel_reason
-        timestamptz created_at
-        bigint version "낙관적 락"
-    }
-    booking_seat {
-        bigint booking_id PK, FK
-        bigint seat_id PK
-        numeric price
-    }
-    sold_seat {
-        bigint schedule_id PK "유니크: (schedule_id, seat_id)"
-        bigint seat_id PK
-        bigint booking_id "값 참조, FK 없음"
-        timestamptz sold_at
-    }
-```
-
-#### payment
-
-```mermaid
-erDiagram
-    payment {
-        bigint id PK
-        bigint order_id UK "booking.booking.id 값 참조"
-        bigint member_id "member 값 참조"
-        numeric(12,0) amount
-        varchar status "REQUESTED, SUCCEEDED, FAILED, REFUND_REQUESTED, REFUNDED"
-        varchar idempotency_key UK
-        varchar pg_transaction_id UK
-        text failure_reason
-        timestamptz requested_at
-        timestamptz approved_at
-        timestamptz failed_at
-        timestamptz refund_requested_at
-        timestamptz refunded_at
-        bigint version
-    }
-    webhook_event {
-        varchar event_id PK "웹훅 중복 제거"
-        varchar type
-        varchar transaction_id "pg_transaction_id 값 참조"
-        timestamptz received_at
-    }
-    pg_transaction_snapshot {
-        date target_date PK
-        varchar(100) transaction_id PK
-        bigint order_id "booking 값 참조"
-        numeric amount
-        varchar(32) status
-        timestamptz requested_at
-        timestamptz approved_at
-        timestamptz refunded_at
-        timestamptz fetched_at
-    }
-    reconciliation_mismatch {
-        date target_date PK
-        bigint order_id PK "booking 값 참조"
-        varchar(32) mismatch_type PK
-        varchar(100) pg_transaction_id
-        varchar(32) pg_status
-        numeric pg_amount
-        bigint internal_payment_id
-        varchar internal_status
-        numeric internal_amount
-        timestamptz detected_at
-    }
-```
-
-#### settlement
-
-```mermaid
-erDiagram
-    booking_sale {
-        bigint booking_id PK
-        bigint performance_id
-        bigint organizer_id
-        bigint schedule_id
-        numeric(12,0) amount
-        timestamptz confirmed_at
-        timestamptz received_at
-    }
-    booking_refund {
-        bigint booking_id PK
-        bigint performance_id
-        bigint organizer_id
-        varchar reason
-        timestamptz cancelled_at
-        timestamptz received_at
-    }
-    daily_settlement {
-        date settlement_date PK
-        bigint performance_id PK
-        bigint organizer_id
-        integer sale_count
-        numeric sale_amount
-        integer refund_count
-        numeric refund_amount
-        numeric net_amount
-        numeric(5,4) fee_rate
-        numeric fee_amount
-        numeric payout_amount
-        timestamptz calculated_at
-    }
-```
-
-### JPA와 jOOQ 역할 분담
-
-- 명령(쓰기): JPA. JPA로 표현할 수 없는 쓰기(`ON CONFLICT` upsert, 엔티티 없는 테이블)는 jOOQ DSL. 문자열 SQL은 쓰지 않는다
-- 조회(목록, 통계, 정산 집계): jOOQ
-- 출력 포트를 `CommandPort` / `QueryPort`로 나누고 어댑터를 각각 구현한다.
-
-### Redis 용도
-
-| 용도 | 자료구조 | 소유 |
-|---|---|---|
-| 좌석 임시 선점 | `SET NX` + TTL, 다중 좌석은 Lua | 코어 `booking` |
-| 좌석 현황 스냅샷 | Hash 등 (회차별) | 코어가 유지, 실시간 앱이 읽음 |
-| 좌석 상태 변경 전달 | Streams | 코어 발행, 실시간 앱 구독 |
-| 대기열 | Sorted Set (`queue:waiting:{<scheduleId>}` 등) | 실시간 앱 |
-| 입장 토큰 | `queue:admission:<token>` Hash (`memberId`, `scheduleId`), TTL; 조회 키 `queue:admitted:{<scheduleId>}:<memberId>` | 실시간 앱 발급, Gateway 검증 |
-| SSE 티켓 | `sse:ticket:<ticket>` String (회원 ID), TTL 30초 | 코어 `member` 발급, Gateway 1회 소비 |
-| rate limit | SCG `RedisRateLimiter` 내부 키 | Gateway |
-| 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
-
-`catalog` 캐시는 트랜잭션 안의 변경을 커밋 뒤 적용하고, Redis 쓰기·삭제 완료를 기다린다(`RedisCacheWriter.immediateWrites`).
-
-#### 대기열 키 형식 (realtime)
-
-realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`queue:admission:<token>`, `queue:active` 제외).
-
-| 키 | 자료구조 | 내용 |
-|---|---|---|
-| `queue:seq:{<scheduleId>}` | String (`INCR`) | 대기 순번 일련번호 |
-| `queue:waiting:{<scheduleId>}` | Sorted Set | 회원 ID를 member로, 일련번호를 score로 저장 |
-| `queue:seen:{<scheduleId>}` | Sorted Set | 회원 ID를 member로, 마지막 신호 epoch ms를 score로 저장 |
-| `queue:admitted:{<scheduleId>}:<memberId>` | String, 토큰 TTL | 해당 회원의 입장 토큰 조회 |
-| `queue:admit-lock:{<scheduleId>}` | String, PX | 입장 주기 동안 회차별 처리 락 |
-| `queue:active` | Set | 대기자가 있는 회차 ID |
-| `queue:admission:<token>` | Hash, TTL | `memberId`, `scheduleId`; Gateway 검증 계약은 [ADR 0020](./adr/0020-gateway-verification-contracts.md) 참조 |
-
-회차별 Lua 처리는 같은 `{scheduleId}` 해시 태그를 가진 키만 대상으로 한다. `queue:admission:<token>`은 해시 태그가 없으므로 Lua 밖에서 기록한다.
-
-#### 좌석 선점 키 형식 (코어 `booking`, realtime이 읽음)
-
-모든 키에 `{scheduleId}` 해시 태그를 넣어 Lua가 다루는 키를 같은 슬롯에 둔다.
-
-| 키 | 자료구조 | 내용 |
-|---|---|---|
-| `booking:hold:{<scheduleId>}:<seatId>` | String, PX TTL | 값은 선점 소유자(`HoldToken`) |
-| `booking:seats:{<scheduleId>}` | Hash | field `seatId` → `AVAILABLE` / `HELD:<만료 epoch ms>` / `SOLD` |
-| `booking:seat-events:{<scheduleId>}` | Stream, `MAXLEN ~ 10000` | `seatIds`(쉼표 구분), `status`, `holdExpiresAt`(HELD일 때), `at`(epoch ms) |
-
-- 스냅샷의 `HELD:<만료 시각>`: 선점 키 TTL이 끝나도 Redis는 알려 주지 않으므로 읽는 쪽이 만료를 직접 판정한다.
-- 선점 가능 여부의 판단 기준은 스냅샷이 아니라 선점 키와 `SOLD`다.
-- 선점·해제·판매·판매 해제는 각각 Lua 스크립트 한 번으로 처리하며, 같은 스크립트에서 스냅샷과 Stream을 갱신한다.
-- DB 커밋 뒤 Redis 반영이 실패하면 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다(6.4절).
+- PostgreSQL은 인스턴스 하나에 모듈별 스키마(`member`, `catalog`, `booking`, `payment`, `settlement`, `batch`)를 두고 모듈 간 외래 키·조인을 금지한다. 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
+- Redis는 좌석 선점·스냅샷·Streams, 대기열, 입장 토큰, SSE 티켓, rate limit, 조회 캐시에 쓴다. 용도와 키 형식은 [redis.md](./architecture/redis.md)를 본다.
 
 ## 6. 핵심 흐름
 
-### 6.1 대기열과 입장
+상세는 [flows.md](./architecture/flows.md)를 본다.
 
-1. 사용자가 예매 페이지 진입 시 실시간 앱의 대기열(Sorted Set)에 등록된다.
-2. 실시간 앱이 순번을 SSE로 push한다.
-3. 차례가 되면 **짧은 수명의 입장 토큰**을 발급한다.
-4. Gateway가 예매 API 요청에서 입장 토큰을 검증한다. 코어는 관여하지 않는다.
-
-Gateway 규칙 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)):
-
-- `/api/v1/queues/**`와 `/api/v1/streams/**`는 각각 `realtime-queues`, `realtime-streams` 라우트로 realtime에 전달한다. `POST /api/v1/bookings`는 `core-bookings-create`, 그 밖의 `/api/v1/**`는 `core-api` 라우트로 core에 전달한다.
-- 입장 토큰은 `POST /api/v1/bookings`에만 적용하고, 검증된 회원과 요청 본문의 회차를 대조한다. 토큰이 없으면 403 `ADMISSION_TOKEN_REQUIRED`, 무효·만료·불일치면 403 `ADMISSION_TOKEN_INVALID`로 응답하며 클라이언트는 두 코드에 대기열로 돌려보낸다.
-- 예매 생성 본문의 크기 상한은 `ticketing.gateway.booking-body-max-bytes`로 설정하며 기본값은 16KB다. 상한 초과나 잘못된 본문은 400 `INVALID_REQUEST_BODY`로 응답한다.
-- SSE 티켓은 `/api/v1/streams/**`에서 `?ticket=`으로 받아 한 번 소비한다. 검증 실패 시 401 `SSE_TICKET_INVALID`로 응답한다.
-- 스트림 CORS는 `/api/v1/streams/**`에만 설정된 web origin(기본 `http://localhost:3000`)과 GET을 허용하며 자격 증명은 허용하지 않는다.
-- rate limit은 `core-api`와 `realtime-queues`에 `default`(초당 보충 20, 버스트 40), 예매 생성에 `booking-create`(2, 5), 스트림에 `streams`(5, 10) 설정을 적용한다. 키는 검증된 회원의 `member:<id>` 또는 비회원의 `ip:<주소>`이며, `X-Forwarded-For`는 설정된 신뢰 프록시 홉 수(기본 1)만 사용한다. 초과 시 429 `RATE_LIMITED`와 `X-RateLimit-*` 헤더를 반환한다. Redis 오류 시 Spring Cloud Gateway `RedisRateLimiter`의 기본 동작에 따라 요청을 허용한다.
-
-realtime 규칙 ([ADR 0021](./adr/0021-realtime-queue-and-sse-contracts.md)):
-
-- 대기열 API는 `POST /api/v1/queues/{scheduleId}/entries`(등록), `GET /api/v1/queues/{scheduleId}/entries/me`(상태 조회), `DELETE /api/v1/queues/{scheduleId}/entries/me`(이탈)다. 상태는 `WAITING` 또는 `ADMITTED`다.
-- 대기열 응답 필드는 `status`와 상태별 `position`(WAITING), `admissionToken`·`expiresAt`(ADMITTED)다.
-- 설정 접두사는 `ticketing.realtime.queue.*`이며 기본값은 `admission-interval=PT1S`, `admission-batch-size=50`, `admission-token-ttl=PT10M`, `presence-grace=PT30S`, `position-poll-interval=PT1S`, `heartbeat-interval=PT15S`다. `admission-enabled`는 기본 활성화다.
-- 입장 스케줄러는 기본 1초 주기로 회차별 최대 50명을 입장시키며, 입장 토큰 TTL 기본값은 10분이다.
-- SSE heartbeat와 대기 상태 조회는 마지막 신호를 기록한다. 기본 30초 유예를 넘긴 대기자는 입장 직전에 제거한다.
-- 순번 SSE 경로는 `GET /api/v1/streams/queues/{scheduleId}`이며 `position`(본문 `position`), `admitted`(본문 `admissionToken`, `expiresAt`), `removed` 이벤트를 보낸다. 좌석 SSE 경로는 `GET /api/v1/streams/schedules/{scheduleId}/seats`이며 `snapshot`(본문 `seats`), `seat`(본문 `seatIds`, `status`, `holdExpiresAt`, `at`) 이벤트를 보낸다. 두 스트림 모두 15초마다 heartbeat 주석을 보낸다.
-- 좌석 SSE의 `Last-Event-ID`가 Stream에 남아 있으면 이후 변경을 재생하고, 형식이 잘못됐거나 Stream에서 잘려 나간 ID면 스냅샷부터 보낸다.
-- 인증된 회원 ID가 없거나 숫자가 아니면 401 `UNAUTHORIZED`, 코어가 만든 회차 좌석 스냅샷 키가 없으면 404 `SCHEDULE_NOT_FOUND`, 회원의 대기열 항목이 없으면 404 `QUEUE_ENTRY_NOT_FOUND`로 응답한다.
-- 좌석 SSE는 인스턴스마다 회차별 공유 리더가 비블로킹 `XREAD`를 주기적으로 실행한다.
-
-코어가 Gateway를 우회해 직접 노출되지 않도록 하는 네트워크 구성은 M6(k8s)에서 적용한다 ([ADR 0008](./adr/0008-queue-in-realtime-app.md)).
-
-### 6.2 좌석 선점
-
-- 1회 예매 최대 **4매**
-- 선점 유지 시간(TTL) **5분**
-- 여러 좌석은 Lua 스크립트로 **전부 성공하거나 전부 실패**
-- 최종 확정은 결제 성공 시 DB 기록. `booking.sold_seat`의 `(회차, 좌석)` **유니크 제약**이 마지막 방어선
-- API 흐름: `POST /api/v1/bookings`가 Redis 선점과 `PENDING` 생성을 하고, `POST /api/v1/bookings/{id}/payments`가 결제 요청 이벤트를 발행한다.
-- 선점·해제·확정 시 좌석 상태 변경을 Redis Streams로 발행하고 스냅샷을 갱신한다.
-
-### 6.2.1 예매 흐름 시퀀스 (대기열 제외)
-
-```mermaid
-sequenceDiagram
-    actor U as 사용자
-    participant B as booking
-    participant R as Redis
-    participant P as payment
-    participant PG as fake-pg
-
-    U->>B: POST /api/v1/bookings
-    B->>R: 좌석 선점 (Lua, TTL 5분)
-    B->>B: PENDING 예매 저장
-    B-->>U: 201 (같은 멱등 키 재요청은 200)
-
-    U->>B: POST /api/v1/bookings/{id}/payments
-    alt 이미 만료
-        B->>B: EXPIRED 전환
-        B-->>U: 409 BOOKING_EXPIRED
-    else 이미 요청함
-        B-->>U: 202 (이벤트 재발행 없음)
-    else 정상
-        B-->>U: 202
-        B-)P: PaymentRequested
-        P->>PG: POST /v1/payments (Idempotency-Key)
-        PG-->>P: 202 접수
-    end
-
-    PG-)P: 웹훅 (서명, eventId)
-    alt 웹훅 중복 (같은 eventId)
-        P->>P: webhook_event 중복이라 무시
-    else 결제 실패
-        P-)B: PaymentFailed
-        B->>B: CANCELLED(PAYMENT_FAILED)
-        B->>R: 좌석 반환 (커밋 후)
-    else 결제 성공
-        P-)B: PaymentSucceeded
-        alt 만료 후 성공
-            B->>B: EXPIRED 전환
-            B-)P: RefundRequested
-            P->>PG: 환불 요청 (자동 환불)
-            B->>R: 좌석 반환 (커밋 후)
-        else 확정 시 유니크 위반
-            B->>B: sold_seat 충돌 → CANCELLED(SEAT_ALREADY_SOLD)
-            B-)P: RefundRequested
-            P->>PG: 환불 요청
-            B->>R: 좌석 반환 (커밋 후)
-        else 정상 확정
-            B->>B: sold_seat 삽입, CONFIRMED
-            B->>R: SOLD 표시 (커밋 후)
-        end
-    end
-```
-
-- 금액 불일치(`AMOUNT_MISMATCH`)도 환불 경로이며 위 유니크 위반과 같은 모양이다.
-- `PaymentRequested`, `PaymentSucceeded` 같은 화살표(`-)`)는 Modulith 이벤트(비동기)다.
-
-### 6.3 예매 상태 전이
-
-```
-PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요청)──▶ CANCELLED(USER_REQUESTED)
-   │
-   ├──시간 초과──▶ EXPIRED
-   ├──사용자 취소──▶ CANCELLED(USER_REQUESTED)
-   ├──결제 실패──▶ CANCELLED(PAYMENT_FAILED)
-   ├──결제 금액 불일치──▶ CANCELLED(AMOUNT_MISMATCH) + 환불 요청
-   └──확정 시 이미 판매된 좌석──▶ CANCELLED(SEAT_ALREADY_SOLD) + 환불 요청
-```
-
-- **만료는 지연 판정**: 예매는 `expiresAt = 생성 시각 + 5분`을 갖는다. 결제 요청이나 결제 결과가 도착했을 때 `Clock`과 비교해 `EXPIRED`로 전환한다. 일괄 정리는 M2 Batch가 한다.
-- **결제 실패**: `PENDING → CANCELLED`(사유 `PAYMENT_FAILED`)로 바꾸고 좌석을 반환한다. 재결제는 없다.
-- **확정 예매 취소**: 즉시 `CANCELLED`(`USER_REQUESTED`)로 바꾸고 `RefundRequested`를 발행한다. 환불은 비동기다.
-- **결제 금액 불일치**: 결제는 성공했지만 금액(`compareTo`)이 `totalPrice`와 다르면 확정하지 않는다. `PENDING → CANCELLED`(`AMOUNT_MISMATCH`)로 바꾸고 `RefundRequested`(사유 `AMOUNT_MISMATCH`)와 `BookingCancelled`(`refundRequired=true`)를 발행하며 커밋 후 선점을 해제한다. `sold_seat`는 넣지 않는다. 만료 판정이 먼저라서 만료됐으면 불일치여도 `EXPIRED` 환불 경로다.
-- **결제 재요청**(`POST /api/v1/bookings/{id}/payments`): `PENDING`이면 이미 요청했어도 `202`(이벤트는 다시 발행하지 않는다). 이미 요청했다면 만료 시각이 지나도 결제가 진행 중이므로 `202`다. `CONFIRMED`, `CANCELLED`는 `409 INVALID_BOOKING_STATE`, `EXPIRED`는 `409 BOOKING_EXPIRED`.
-- **동시 수정 충돌**: HTTP 요청 경로에서 `Booking`의 낙관적 락(`@Version`) 충돌이 나면 `ApiExceptionHandler`가 `409 CONCURRENT_MODIFICATION`으로 변환하며 클라이언트가 다시 시도한다. 이벤트 리스너 경로는 예외를 그대로 던져 이벤트 발행 레지스트리가 재시도한다.
-- 같은 결제 결과 이벤트가 다시 와도 상태는 다시 바뀌지 않는다(멱등).
-
-### 6.4 결제 (이벤트 기반)
-
-1. `booking`이 결제 요청 이벤트 발행
-2. `payment`가 가짜 PG에 결제 요청 (멱등 키 포함)
-3. 가짜 PG가 웹훅으로 결과 통지 (지연, 실패, 중복 가능)
-4. `payment`가 멱등 키로 중복을 걸러내고 결과 이벤트 발행
-5. `booking`이 `CONFIRMED` 또는 실패 처리(`CANCELLED`, 사유 `PAYMENT_FAILED`, 좌석 반환)
-
-**자동 환불 조건**: 결제는 성공했는데 (a) 예매가 이미 만료됐거나(`EXPIRED`로 전환), (b) 확정 시 `booking.sold_seat` 유니크 제약에 걸려 좌석이 이미 판매된 경우(`CANCELLED`, 사유 `SEAT_ALREADY_SOLD`), `booking`이 `RefundRequested`를 발행해 자동 환불한다.
-
-**결제 결과 처리의 트랜잭션 구조**
-- 결과 이벤트는 `@ApplicationModuleListener`(비동기 + 새 트랜잭션)로 받고, DB 작업은 그 리스너 트랜잭션 하나에 참여한다. 내부에서 `REQUIRES_NEW`를 또 열지 않는다. 리스너가 가상 스레드로 상한 없이 동시에 돌아 커넥션을 두 개씩 잡으면 풀 고갈과 교착이 생기기 때문이다.
-- 확정 순서는 확정 가능 여부 판정 → `sold_seat` 삽입(`ON CONFLICT DO NOTHING`) → 전부 들어가면 `CONFIRMED`, 일부라도 충돌하면 같은 트랜잭션에서 이 예매의 `sold_seat`를 지우고 `SEAT_ALREADY_SOLD`로 취소한다. 충돌해도 트랜잭션이 깨지지 않아 롤백 후 재시도가 필요 없다.
-- Redis 반영(SOLD 표시, 선점 해제)은 트랜잭션 `afterCommit`에서 한다. 롤백되면 Redis를 건드리지 않는다.
-- **커밋 후 Redis 반영이 실패하면** 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다. 중복 판매는 DB 유니크 제약이 막는다.
-- 낙관적 락 충돌은 삼키지 않고 던져 이벤트 발행 레지스트리가 다시 시도하게 한다.
-
-이 구조는 MSA 전환 시 Saga로 그대로 이어진다.
-
-**payment 구현 세부**
-
-- PG를 호출하는 결제·환불 리스너는 `@ApplicationModuleListener(propagation = NOT_SUPPORTED)`로 실행한다. 준비 저장 → 트랜잭션 밖 PG 호출 → 최신 행 재조회·결과 반영으로 나눈다. 위의 booking 결제 결과 리스너 트랜잭션 구조와는 역할이 다르다.
-- 결제 상태는 `REQUESTED`, `SUCCEEDED`, `FAILED`, `REFUND_REQUESTED`, `REFUNDED`다. 결제의 미확정 결과(타임아웃·연결 실패·5xx)는 REQUESTED를 유지하고 예외를 전파해 원 이벤트를 미완료로 남긴다. 확정적 거절만 PaymentFailed로 처리한다.
-- 환불 거절·미확정은 REFUND_REQUESTED를 유지하고 예외를 전파한다. 해당 상태에서도 동일한 `refund-{orderId}` 키로 PG에 다시 요청한다. REFUNDED면 종료한다.
-- 재시작·명시적 이벤트 재제출 시 같은 키와 본문으로 재처리한다. 미완료 기록 자체가 즉시 재시도를 뜻하지 않으며, 주기적 스케줄러는 M1-5에 추가하지 않는다. 웹훅과 M2 대사는 별도 복구 경로다.
-- 웹훅 중복 기록·결제 상태 저장·결과 이벤트 발행은 한 트랜잭션이다. 오류 시 중복 기록도 롤백한다. 웹훅 선도착과 지연 PG 응답이 최신 상태를 되돌리지 않게 한다. 병렬 재처리의 HTTP 호출 횟수 대신 실제 거래·환불과 커밋된 상태 전이·이벤트의 중복 방지를 보장한다.
-- 설계 근거는 [ADR 0018](./adr/0018-payment-retry-boundaries.md), 별도 세션 지시서(`phases/3-payment`)는 완료 후 삭제되어 git 히스토리에만 남아 있다. `PaymentListenerTests`와 `PaymentFlowTests`에서 트랜잭션 경계, 실제 예매 연계와 원 발행 재제출을 검증한다.
+- [6.1 대기열과 입장](./architecture/flows.md#61-대기열과-입장): 대기열 등록, 입장 토큰, Gateway·realtime 규칙
+- [6.2 좌석 선점](./architecture/flows.md#62-좌석-선점): 1회 최대 4매, TTL 5분, Lua 전부 성공 또는 전부 실패
+- [6.2.1 예매 흐름 시퀀스](./architecture/flows.md#621-예매-흐름-시퀀스-대기열-제외)
+- [6.3 예매 상태 전이](./architecture/flows.md#63-예매-상태-전이)
+- [6.4 결제(이벤트 기반)](./architecture/flows.md#64-결제-이벤트-기반): 가짜 PG, 자동 환불 조건, 트랜잭션 구조
 
 ## 7. 인증·인가
 
-- `member` 모듈이 JWT(access/refresh)를 직접 발급한다.
-- **BFF가 토큰을 보관·갱신**한다. 브라우저에는 httpOnly 쿠키 세션만 내려가고 토큰은 노출되지 않는다.
-- 구현 세부 (M1-1):
-  - access JWT는 HS256(대칭키, `JWT_SECRET` 환경 변수), 수명 15분, `sub`=회원 ID, `role` 클레임. 비대칭키(JWKS)는 MSA 전환 시 재검토한다.
-  - refresh 토큰은 불투명 난수(수명 14일)이고 SHA-256 해시만 `member.refresh_token`에 저장한다. 갱신할 때마다 이전 토큰을 폐기(로테이션)하며, 폐기된 토큰이 재사용되면 그 회원의 모든 refresh 토큰을 폐기한다.
-  - 비밀번호는 BCrypt. 가입 시 역할을 직접 고를 수 있다(플랫폼 관리자가 없어 주최자 승인 절차를 두지 않는다).
-- Gateway는 `Authorization: Bearer`가 있으면 모든 경로에서 같은 HS256 비밀로 JWT 서명을 검증하고, 실패 시 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지우며 realtime 경로에만 검증된 회원 ID를 전달한다. 코어도 JWT를 자체 검증한다 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)).
-- `POST /api/v1/sse-tickets`는 JWT 인증된 요청에서 코어 `member`가 티켓을 발급한다. 티켓은 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초이며, Gateway가 한 번 소비한다 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)).
-- 역할: **일반 사용자**(예매), **주최자**(공연·회차 등록, 정산 조회). 역할 기반 인가 적용.
-- SSE는 BFF를 거치지 않는다. BFF가 발급한 **단기 SSE 티켓**으로 브라우저가 Gateway에 직접 연결한다. (Node 프로세스가 장기 연결을 붙드는 것을 피하기 위함)
+`member` 모듈이 JWT를 발급하고 BFF가 토큰을 보관·갱신한다. SSE는 BFF를 거치지 않고 단기 SSE 티켓으로 Gateway에 직접 연결한다. 상세는 [integrations.md](./architecture/integrations.md)를 본다.
 
 ## 8. BFF (Next.js)
 
-- 일반 API 요청은 전부 BFF를 거친다.
-- 조합(Aggregation) 화면
-  - 공연 상세: 공연 정보 + 회차별 잔여 좌석 + 내 예매 여부
-  - 마이페이지: 예매 내역 + 결제 상태
-  - 주최자 대시보드: 판매 현황 + 정산
-- 주최자 화면은 최소한으로 만들고, 초기 공연 데이터는 시드 스크립트로 넣는다.
+일반 API 요청은 모두 BFF를 거치며 조합 화면(공연 상세, 마이페이지, 주최자 대시보드)을 만든다. 상세는 [integrations.md](./architecture/integrations.md)를 본다.
 
 ## 9. Batch
 
-| Job | 소유 모듈 | 파라미터 |
-|---|---|---|
-| `dailySettlementJob` | `settlement` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
-| `expirePendingBookingsJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
-| `reconcileSeatSnapshotJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
-| `paymentReconciliationJob` | `payment` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
-
-일별 정산은 공연·주최자별 매출 집계와 수수료 계산을 수행하며 jOOQ reader와 chunk 처리를 사용한다. 미결제 예매 정리는 `PENDING` 예매를 `EXPIRED`로 전환하고, 좌석 스냅샷 보정은 DB 기준으로 Redis 상태를 맞춘다. 결제 대사는 가짜 PG 거래 내역과 내부 결제 기록의 불일치를 검출한다.
-
-Batch Job은 데이터를 소유한 모듈의 `adapter.provided.batch`에 두고 `@Profile("batch")`로 활성화한다. Batch는 웹 컨트롤러와 같은 입력 어댑터다. `core-batch`는 웹 서버 없이 `batch` 프로필로 core 컨텍스트를 띄우며 `spring.batch.job.name`으로 Job 하나를 실행한다. 웹 앱에서는 Job 빈을 만들지 않고 자동 실행도 끈다. 이 결정의 대안과 근거는 [ADR 0019](./adr/0019-batch-jobs-in-owning-modules.md)를 참고한다.
-
-- 실행: `./gradlew :core-batch:bootRun --args='--spring.batch.job.name=dailySettlementJob targetDate=2026-11-10,java.time.LocalDate run.id=1,java.lang.Long'`. 완료된 같은 날짜를 다시 계산할 때는 식별 파라미터 `run.id`를 새 값으로 바꾼다. 실패한 실행은 같은 `targetDate`와 `run.id`로 재시작한다.
-- Batch 메타데이터는 Spring Batch 공식 PostgreSQL DDL을 Flyway 마이그레이션으로 `batch` 스키마에 만든다.
-- 정산일은 이벤트 시각의 Asia/Seoul 날짜다. 그날 매출은 `BookingConfirmed` 금액 합, 환불은 `refundRequired=true`인 `BookingCancelled` 중 확정 사본이 있는 예매의 금액 합이다. 지난 날짜의 정산은 다시 계산하지 않는다. 수수료는 `(매출 − 환불) × 수수료율`(설정값, 기본 `0.10`)이며 원 미만은 0 방향으로 절사한다. 지급액은 `매출 − 환불 − 수수료`이고 `(정산일, 공연)` 단위로 upsert한다.
-- 결제를 요청하지 않은 `PENDING` 예매는 `expiresAt` 경과 시, 결제를 요청한 `PENDING` 예매는 `expiresAt + 유예`(설정값, 기본 30분) 경과 시 `EXPIRED`로 전환한다. 이후 도착한 결제 성공은 기존 자동 환불 경로로 처리한다.
-- 좌석 스냅샷 보정은 시작 전 회차를 대상으로 `sold_seat`와 선점 키를 기준으로 스냅샷을 다시 쓴다.
-- 결제 대사는 Asia/Seoul 날짜 기준으로 받은 PG 거래와 같은 날 요청된 내부 결제를 `orderId`로 비교하고 불일치를 기록한다. 자동 보정은 하지 않는다.
-- 같은 대상 날짜로 재실행해도 결과가 같도록 upsert 또는 날짜 단위 삭제 후 재적재로 쓴다.
+Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJob`, `paymentReconciliationJob` 네 개다. 파라미터와 규칙은 [batch.md](./architecture/batch.md)를 본다.
 
 ## 10. 외부 연동
 
-- 결제: **가짜 PG 서버**를 직접 만든다. 지연, 타임아웃, 실패, 중복 웹훅을 설정으로 재현한다. 출력 포트로 추상화하여 추후 실제 PG 어댑터를 추가할 수 있게 한다.
-- 알림: 로그 출력으로 시작.
-
-### fake-pg 연동 계약
-
-- 결제: `POST /v1/payments`, `Idempotency-Key`, 본문 `{orderId: string, amount: 정수 원 단위}`. 환불: `POST /v1/payments/{transactionId}/refund`, `Idempotency-Key`. 유효한 접수 응답은 202다.
-- 거래 조회: `GET /v1/transactions?date=YYYY-MM-DD`의 요청 날짜는 Asia/Seoul 기준이다.
-- 웹훅: 코어의 `POST /api/v1/payments/webhooks/fake-pg`로 승인·실패·환불 완료를 전송한다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.
-- 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). 코어와 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
-- 어댑터 기본 주소는 `http://localhost:8090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 6.4절 정책을 따른다.
-- SUCCESS·FAIL·TIMEOUT·DELAYED·DUPLICATE_WEBHOOK 시나리오는 PG 설정으로 제어한다. TIMEOUT은 HTTP 응답만 늦어도 승인이 진행될 수 있다. fake-pg 자체의 메모리 거래 저장소는 재시작하면 초기화된다.
+결제는 직접 만든 가짜 PG 서버로 대체하고 출력 포트로 추상화한다. 알림은 로그 출력으로 시작한다. fake-pg 연동 계약은 [integrations.md](./architecture/integrations.md)를 본다.
 
 ## 11. 개발 환경과 테스트
 
