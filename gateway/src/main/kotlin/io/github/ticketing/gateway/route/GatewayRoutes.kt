@@ -1,5 +1,6 @@
 package io.github.ticketing.gateway.route
 
+import io.github.ticketing.gateway.admission.AdmissionTokenFilter
 import io.github.ticketing.gateway.auth.GatewayAttributes
 import io.github.ticketing.gateway.auth.MEMBER_HEADER
 import io.github.ticketing.gateway.support.writeProblem
@@ -13,8 +14,14 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
 
+private const val DEFAULT_BOOKING_BODY_MAX_BYTES = 16384
+
 @ConfigurationProperties("ticketing.gateway")
-data class GatewayProperties(val coreUri: String = "http://localhost:8080", val realtimeUri: String = "http://localhost:8081")
+data class GatewayProperties(
+    val coreUri: String = "http://localhost:8080",
+    val realtimeUri: String = "http://localhost:8081",
+    val bookingBodyMaxBytes: Int = DEFAULT_BOOKING_BODY_MAX_BYTES,
+)
 
 private const val QUEUE_ROUTE_ORDER = -2
 
@@ -22,7 +29,7 @@ private const val QUEUE_ROUTE_ORDER = -2
 @EnableConfigurationProperties(GatewayProperties::class)
 class GatewayRoutes {
     @Bean
-    fun routes(builder: RouteLocatorBuilder, properties: GatewayProperties): RouteLocator {
+    fun routes(builder: RouteLocatorBuilder, properties: GatewayProperties, admissionTokenFilter: AdmissionTokenFilter): RouteLocator {
         val requireMember = GatewayFilter { exchange, chain ->
             val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
             if (memberId == null) {
@@ -32,12 +39,23 @@ class GatewayRoutes {
                 chain.filter(exchange.mutate().request(request).build())
             }
         }
+        val requireBookingMember = GatewayFilter { exchange, chain ->
+            if (exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID) == null) {
+                exchange.writeProblem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다.")
+            } else {
+                chain.filter(exchange)
+            }
+        }
         return builder.routes {
             route(id = "realtime-queues", order = QUEUE_ROUTE_ORDER, uri = properties.realtimeUri) {
                 path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember) }
             }
             route(id = "realtime-streams", order = -1, uri = properties.realtimeUri) {
                 path("/api/v1/streams/**")
+            }
+            route(id = "core-bookings-create", order = -1, uri = properties.coreUri) {
+                path("/api/v1/bookings").and().method(org.springframework.http.HttpMethod.POST)
+                    .filters { filters -> filters.filter(requireBookingMember).filter(admissionTokenFilter) }
             }
             route(id = "core-api", order = 0, uri = properties.coreUri) {
                 path("/api/v1/**")
