@@ -52,6 +52,7 @@ M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 �
 docker compose up -d                 # PostgreSQL, Redis, fake-pg
 ./gradlew build                      # 전체 빌드 + 테스트
 ./gradlew :core:bootRun
+./gradlew :realtime:bootRun
 ./gradlew :gateway:bootRun           # BFF·클라이언트는 Gateway(8000)를 거쳐 호출
 cd web && npm run dev
 ```

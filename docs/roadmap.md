@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2·M3-1 완료 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md)), M3-2 대기
+- 상태: M0·M1·M2·M3-1·M3-2 완료, M3-3 대기 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -44,12 +44,12 @@
 - [x] rate limit (Redis)
 
 ### M3-2. realtime (WebFlux + Coroutines)
-- [ ] 대기열: Redis Sorted Set 등록·순번 조회
-- [ ] 입장 스케줄러: 일정 인원씩 입장 토큰 발급
-- [ ] SSE: 대기 순번 push
-- [ ] SSE: 좌석 현황 push (접속 시 스냅샷, 이후 Redis Streams 구독분)
-- [ ] 연결 종료·재연결 처리 (`Last-Event-ID`)
-- [ ] PostgreSQL 의존이 없음을 빌드 의존성으로 확인
+- [x] 대기열: Redis Sorted Set 등록·순번 조회
+- [x] 입장 스케줄러: 일정 인원씩 입장 토큰 발급
+- [x] SSE: 대기 순번 push
+- [x] SSE: 좌석 현황 push (접속 시 스냅샷, 이후 Redis Streams 구독분)
+- [x] 연결 종료·재연결 처리 (`Last-Event-ID`)
+- [x] PostgreSQL 의존이 없음을 빌드 의존성으로 확인
 
 ### M3-3. 검증
 - [ ] 입장 토큰 없이 예매 API 호출 시 차단
