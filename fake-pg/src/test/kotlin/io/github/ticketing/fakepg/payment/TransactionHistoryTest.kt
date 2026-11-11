@@ -11,10 +11,10 @@ import kotlin.test.assertTrue
 class TransactionHistoryTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
 
     @Test
-    fun `거래 내역은 요청 시각의 UTC 날짜로 필터링한다`() {
-        clock.set(Instant.parse("2031-05-05T23:59:30Z"))
+    fun `거래 내역은 요청 시각의 한국 날짜로 필터링한다`() {
+        clock.set(Instant.parse("2031-05-05T14:59:30Z"))
         val dayOne = transactionIdOf(requestPayment("order-day1", scenario = "DELAYED"))
-        clock.set(Instant.parse("2031-05-06T00:00:30Z"))
+        clock.set(Instant.parse("2031-05-05T15:00:30Z"))
         val dayTwo = transactionIdOf(requestPayment("order-day2", scenario = "DELAYED"))
 
         val first = listTransactions("2031-05-05")
@@ -26,9 +26,21 @@ class TransactionHistoryTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTest
         assertEquals("order-day1", tx.get("orderId").asString())
         assertEquals(12000, tx.get("amount").asLong())
         assertEquals("PENDING", tx.get("status").asString())
-        assertEquals("2031-05-05T23:59:30Z", tx.get("requestedAt").asString())
+        assertEquals("2031-05-05T14:59:30Z", tx.get("requestedAt").asString())
         assertTrue(tx.get("approvedAt").isNull)
         assertTrue(tx.get("refundedAt").isNull)
+    }
+
+    @Test
+    fun `UTC 전날 자정 이후 거래는 한국 날짜로만 조회된다`() {
+        clock.set(Instant.parse("2026-11-10T15:30:00Z"))
+        val transactionId = transactionIdOf(requestPayment("order-kst-boundary", scenario = "DELAYED"))
+
+        val followingDay = listTransactions("2026-11-11")
+        val previousDay = listTransactions("2026-11-10")
+
+        assertEquals(listOf(transactionId), followingDay.map { it.get("transactionId").asString() })
+        assertTrue(previousDay.none { it.get("transactionId").asString() == transactionId })
     }
 
     @Test

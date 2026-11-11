@@ -3,7 +3,7 @@ package io.github.ticketing.fakepg.payment.service
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 
 data class PaymentCommand(val orderId: String, val amount: Long, val scenario: Scenario?)
@@ -15,6 +15,8 @@ data class RefundResult(val transaction: Transaction, val created: Boolean)
 /** 메모리 거래 저장소. 재시작하면 내역이 사라진다. */
 @Component
 class TransactionStore {
+
+    private val requestedDateZone = ZoneId.of("Asia/Seoul")
 
     private val transactions = ConcurrentHashMap<String, Transaction>()
     private val paymentKeys = ConcurrentHashMap<String, PaymentKeyEntry>()
@@ -68,6 +70,6 @@ class TransactionStore {
     } ?: throw TransactionNotFoundException(transactionId)
 
     fun findByRequestedDate(date: LocalDate): List<Transaction> = transactions.values
-        .filter { LocalDate.ofInstant(it.requestedAt, ZoneOffset.UTC) == date }
+        .filter { LocalDate.ofInstant(it.requestedAt, requestedDateZone) == date }
         .sortedWith(compareBy({ it.requestedAt }, { it.transactionId }))
 }
