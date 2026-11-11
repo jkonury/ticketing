@@ -5,7 +5,6 @@ import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
@@ -23,7 +22,6 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@AutoConfigureMockMvc
 @Import(PaymentFlowTests.TestClockConfig::class)
 abstract class FlowSupport(
     val mvc: MockMvc,

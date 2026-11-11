@@ -11,7 +11,6 @@ import io.github.ticketing.catalog.service.CatalogRegistrationService.RegisterVe
 import io.github.ticketing.catalog.service.CatalogRegistrationService.SeatSpec
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.cache.CacheManager
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -21,7 +20,6 @@ import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.time.Instant
 
-@AutoConfigureMockMvc
 class CatalogQueryApiTests(
     private val mvc: MockMvc,
     private val registration: CatalogRegistrationService,

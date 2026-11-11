@@ -21,7 +21,6 @@ import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
@@ -48,7 +47,6 @@ import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
-@AutoConfigureMockMvc
 @Import(BookingPaymentFlowTests.TestClockConfig::class)
 class BookingPaymentFlowTests(
     private val mvc: MockMvc,

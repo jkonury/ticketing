@@ -9,7 +9,6 @@ import io.github.ticketing.payment.domain.Payment
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
@@ -31,7 +30,6 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@AutoConfigureMockMvc
 @Import(PaymentWebhookHttpTests.FixedClock::class)
 class PaymentWebhookHttpTests(
     private val mvc: MockMvc,

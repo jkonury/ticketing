@@ -3,7 +3,6 @@ package io.github.ticketing.catalog
 import io.github.ticketing.IntegrationTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
@@ -16,7 +15,6 @@ import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.util.UUID
 
-@AutoConfigureMockMvc
 @RecordApplicationEvents
 class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport() {
 

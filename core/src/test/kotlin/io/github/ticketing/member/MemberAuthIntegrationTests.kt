@@ -2,7 +2,6 @@ package io.github.ticketing.member
 
 import io.github.ticketing.IntegrationTestSupport
 import org.junit.jupiter.api.Test
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -12,7 +11,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.json.JsonMapper
 import java.util.UUID
 
-@AutoConfigureMockMvc
 class MemberAuthIntegrationTests(private val mvc: MockMvc) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()

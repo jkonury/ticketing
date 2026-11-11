@@ -10,7 +10,6 @@ import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
 import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -25,7 +24,6 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
-@AutoConfigureMockMvc
 class BookingApiIntegrationTests(
     private val mvc: MockMvc,
     private val register: RegisterScheduleSeatsUseCase,
