@@ -12,25 +12,17 @@ import io.github.ticketing.catalog.repository.VenueRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.time.Instant
 
-class CatalogRepositoryTests : IntegrationTestSupport() {
-
-    @Autowired
-    lateinit var venues: VenueRepository
-
-    @Autowired
-    lateinit var performances: PerformanceRepository
-
-    @Autowired
-    lateinit var schedules: ScheduleRepository
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
+class CatalogRepositoryTests(
+    private val venues: VenueRepository,
+    private val performances: PerformanceRepository,
+    private val schedules: ScheduleRepository,
+    private val tx: TransactionTemplate,
+) : IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-01-01T00:00:00Z")
 

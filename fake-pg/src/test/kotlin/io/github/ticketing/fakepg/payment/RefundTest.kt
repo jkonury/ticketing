@@ -3,13 +3,14 @@ package io.github.ticketing.fakepg.payment
 import org.awaitility.kotlin.await
 import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.Test
+import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Duration
 import kotlin.test.assertEquals
 
-class RefundTest : FakePgTestSupport() {
+class RefundTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
 
     private fun approvedTransaction(orderId: String): String {
         val id = transactionIdOf(requestPayment(orderId, scenario = "SUCCESS").andExpect(status().isAccepted))

@@ -6,7 +6,6 @@ import io.github.ticketing.catalog.ScheduleSeat
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
@@ -14,12 +13,11 @@ import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
 
-class ScheduleRegisteredListenerTests : IntegrationTestSupport() {
-    @Autowired lateinit var publisher: ApplicationEventPublisher
-
-    @Autowired lateinit var tx: TransactionTemplate
-
-    @Autowired lateinit var jdbc: JdbcTemplate
+class ScheduleRegisteredListenerTests(
+    private val publisher: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
+    private val jdbc: JdbcTemplate,
+) : IntegrationTestSupport() {
 
     private fun seatCount(scheduleId: Long) =
         jdbc.queryForObject("select count(*) from booking.schedule_seat where schedule_id = ?", Long::class.java, scheduleId)!!

@@ -10,17 +10,15 @@ import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.time.Instant
 
-class ScheduleSeatPersistenceAdapterTests : IntegrationTestSupport() {
-    @Autowired lateinit var port: ScheduleSeatCommandPort
-
-    @Autowired lateinit var tx: TransactionTemplate
-
-    @Autowired lateinit var emf: EntityManagerFactory
+class ScheduleSeatPersistenceAdapterTests(
+    private val port: ScheduleSeatCommandPort,
+    private val tx: TransactionTemplate,
+    private val emf: EntityManagerFactory,
+) : IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-11-10T10:00:00Z")
 

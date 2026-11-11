@@ -1,14 +1,10 @@
 package io.github.ticketing
 
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import kotlin.test.assertEquals
 
-class TicketingApplicationTests : IntegrationTestSupport() {
-
-    @Autowired
-    lateinit var jdbc: JdbcTemplate
+class TicketingApplicationTests(private val jdbc: JdbcTemplate) : IntegrationTestSupport() {
 
     @Test
     fun `컨텍스트가 뜨고 모듈별 스키마가 생성된다`() {

@@ -22,7 +22,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationEventPublisher
@@ -60,7 +59,18 @@ import javax.crypto.spec.SecretKeySpec
 
 @AutoConfigureMockMvc
 @Import(PaymentFlowTests.TestClockConfig::class)
-class PaymentFlowTests : IntegrationTestSupport() {
+class PaymentFlowTests(
+    private val pg: TestPg,
+    private val incomplete: IncompleteEventPublications,
+    private val mvc: MockMvc,
+    private val register: RegisterScheduleSeatsUseCase,
+    private val redis: StringRedisTemplate,
+    private val jdbc: JdbcTemplate,
+    private val publisher: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
+    private val clock: MutableClock,
+    private val collector: EventCollector,
+) : IntegrationTestSupport() {
 
     class MutableClock : Clock() {
         @Volatile var now: Instant = Instant.now()
@@ -133,36 +143,6 @@ class PaymentFlowTests : IntegrationTestSupport() {
             }
         }
     }
-
-    @Autowired
-    lateinit var pg: TestPg
-
-    @Autowired
-    lateinit var incomplete: IncompleteEventPublications
-
-    @Autowired
-    lateinit var mvc: MockMvc
-
-    @Autowired
-    lateinit var register: RegisterScheduleSeatsUseCase
-
-    @Autowired
-    lateinit var redis: StringRedisTemplate
-
-    @Autowired
-    lateinit var jdbc: JdbcTemplate
-
-    @Autowired
-    lateinit var publisher: ApplicationEventPublisher
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
-
-    @Autowired
-    lateinit var clock: MutableClock
-
-    @Autowired
-    lateinit var collector: EventCollector
 
     private val json = JsonMapper.builder().build()
 

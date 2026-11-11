@@ -4,7 +4,6 @@ import com.sun.net.httpserver.HttpServer
 import org.awaitility.kotlin.await
 import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.BeforeEach
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -106,13 +105,7 @@ object TestWebhookReceiver {
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestClockConfig::class)
-abstract class FakePgTestSupport {
-
-    @Autowired
-    protected lateinit var mockMvc: MockMvc
-
-    @Autowired
-    protected lateinit var clock: MutableClock
+abstract class FakePgTestSupport(protected val mockMvc: MockMvc, protected val clock: MutableClock) {
 
     protected val mapper: JsonMapper = JsonMapper.builder().build()
 

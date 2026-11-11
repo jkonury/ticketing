@@ -8,7 +8,6 @@ import io.github.ticketing.payment.domain.OrderId
 import io.github.ticketing.payment.domain.Payment
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
@@ -34,7 +33,12 @@ import javax.crypto.spec.SecretKeySpec
 
 @AutoConfigureMockMvc
 @Import(PaymentWebhookHttpTests.FixedClock::class)
-class PaymentWebhookHttpTests : IntegrationTestSupport() {
+class PaymentWebhookHttpTests(
+    private val mvc: MockMvc,
+    private val payments: PaymentCommandPort,
+    private val tx: TransactionTemplate,
+    private val jdbc: JdbcTemplate,
+) : IntegrationTestSupport() {
 
     @TestConfiguration(proxyBeanMethods = false)
     class FixedClock {
@@ -46,18 +50,6 @@ class PaymentWebhookHttpTests : IntegrationTestSupport() {
 
     @MockitoBean
     lateinit var bookingListener: PaymentResultListener
-
-    @Autowired
-    lateinit var mvc: MockMvc
-
-    @Autowired
-    lateinit var payments: PaymentCommandPort
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
-
-    @Autowired
-    lateinit var jdbc: JdbcTemplate
 
     private val now = Instant.parse("2026-11-11T00:00:00Z")
     private val path = "/api/v1/payments/webhooks/fake-pg"

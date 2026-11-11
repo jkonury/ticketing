@@ -4,6 +4,7 @@ import io.github.ticketing.fakepg.payment.service.WebhookSender
 import org.awaitility.kotlin.await
 import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.Test
+import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Duration
@@ -12,7 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class PaymentScenarioTest : FakePgTestSupport() {
+class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
 
     @Test
     fun `SUCCESS는 202 PENDING을 돌려주고 승인 웹훅 1건을 보낸다`() {

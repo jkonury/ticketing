@@ -10,7 +10,6 @@ import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
 import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
@@ -27,16 +26,14 @@ import java.time.Instant
 import java.util.UUID
 
 @AutoConfigureMockMvc
-class BookingApiIntegrationTests : IntegrationTestSupport() {
+class BookingApiIntegrationTests(
+    private val mvc: MockMvc,
+    private val register: RegisterScheduleSeatsUseCase,
+    private val redis: StringRedisTemplate,
+) : IntegrationTestSupport() {
     @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
 
     @MockitoBean lateinit var refundRequestListener: RefundRequestListener
-
-    @Autowired lateinit var mvc: MockMvc
-
-    @Autowired lateinit var register: RegisterScheduleSeatsUseCase
-
-    @Autowired lateinit var redis: StringRedisTemplate
 
     private val json = JsonMapper.builder().build()
 

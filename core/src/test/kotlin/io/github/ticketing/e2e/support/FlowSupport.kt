@@ -5,7 +5,6 @@ import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -26,18 +25,15 @@ import javax.crypto.spec.SecretKeySpec
 
 @AutoConfigureMockMvc
 @Import(PaymentFlowTests.TestClockConfig::class)
-abstract class FlowSupport : IntegrationTestSupport() {
-    @Autowired lateinit var mvc: MockMvc
+abstract class FlowSupport(
+    val mvc: MockMvc,
+    val jdbc: JdbcTemplate,
+    val redis: StringRedisTemplate,
+    val pg: PaymentFlowTests.TestPg,
+    val clock: PaymentFlowTests.MutableClock,
+    val collector: PaymentFlowTests.EventCollector,
+) : IntegrationTestSupport() {
 
-    @Autowired lateinit var jdbc: JdbcTemplate
-
-    @Autowired lateinit var redis: StringRedisTemplate
-
-    @Autowired lateinit var pg: PaymentFlowTests.TestPg
-
-    @Autowired lateinit var clock: PaymentFlowTests.MutableClock
-
-    @Autowired lateinit var collector: PaymentFlowTests.EventCollector
     private val json = JsonMapper.builder().build()
     data class Schedule(val id: Long, val seats: List<Long>)
 

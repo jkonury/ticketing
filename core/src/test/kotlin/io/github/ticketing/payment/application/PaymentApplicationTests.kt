@@ -22,7 +22,6 @@ import io.github.ticketing.payment.domain.PaymentStatus
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
 import org.springframework.transaction.support.TransactionSynchronizationManager
@@ -35,22 +34,12 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 @RecordApplicationEvents
-class PaymentApplicationTests : IntegrationTestSupport() {
-
-    @Autowired
-    lateinit var transactions: PaymentTransactionService
-
-    @Autowired
-    lateinit var webhook: PaymentWebhookService
-
-    @Autowired
-    lateinit var payments: PaymentCommandPort
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
-
-    @Autowired
-    lateinit var events: ApplicationEvents
+class PaymentApplicationTests(
+    private val transactions: PaymentTransactionService,
+    private val webhook: PaymentWebhookService,
+    private val payments: PaymentCommandPort,
+    private val tx: TransactionTemplate,
+) : IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-11-11T00:00:00Z")
     private val order = ids.incrementAndGet()
@@ -113,7 +102,7 @@ class PaymentApplicationTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `지연된 거절은 먼저 승인된 웹훅을 덮어쓰지 않는다`() {
+    fun `지연된 거절은 먼저 승인된 웹훅을 덮어쓰지 않는다`(events: ApplicationEvents) {
         val pg = FakePg()
         pg.payment = {
             webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED))
@@ -128,7 +117,7 @@ class PaymentApplicationTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `웹훅 실패 기록은 롤백하고 동일 결과는 한 번만 발행한다`() {
+    fun `웹훅 실패 기록은 롤백하고 동일 결과는 한 번만 발행한다`(events: ApplicationEvents) {
         transactions.preparePayment(command)
         val id = UUID.randomUUID().toString()
 
@@ -145,7 +134,7 @@ class PaymentApplicationTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `환불 거절과 미확정은 같은 키로 복구하고 완료 후 재호출하지 않는다`() {
+    fun `환불 거절과 미확정은 같은 키로 복구하고 완료 후 재호출하지 않는다`(events: ApplicationEvents) {
         val pg = FakePg()
         PaymentRequestService(transactions, pg).request(command)
         webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED))
@@ -176,7 +165,7 @@ class PaymentApplicationTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `실패 웹훅의 잘못된 입력은 중복 기록을 롤백한다`() {
+    fun `실패 웹훅의 잘못된 입력은 중복 기록을 롤백한다`(events: ApplicationEvents) {
         transactions.preparePayment(command)
         val id = UUID.randomUUID().toString()
 
@@ -192,7 +181,7 @@ class PaymentApplicationTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `지연된 접수 응답과 웹훅 중복은 승인 상태를 유지한다`() {
+    fun `지연된 접수 응답과 웹훅 중복은 승인 상태를 유지한다`(events: ApplicationEvents) {
         val pg = FakePg()
         pg.payment = {
             webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED))

@@ -12,7 +12,6 @@ import io.github.ticketing.booking.domain.SeatId
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.time.Duration
 import java.time.Instant
@@ -21,10 +20,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-class RedisSeatHoldAdapterTests : IntegrationTestSupport() {
-    @Autowired lateinit var port: SeatHoldPort
-
-    @Autowired lateinit var redis: StringRedisTemplate
+class RedisSeatHoldAdapterTests(private val port: SeatHoldPort, private val redis: StringRedisTemplate) : IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-11-10T10:00:00Z")
     private val ttl = Duration.ofMinutes(5)

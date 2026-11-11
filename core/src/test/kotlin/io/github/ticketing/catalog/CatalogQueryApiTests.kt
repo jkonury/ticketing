@@ -11,7 +11,6 @@ import io.github.ticketing.catalog.service.CatalogRegistrationService.RegisterVe
 import io.github.ticketing.catalog.service.CatalogRegistrationService.SeatSpec
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.cache.CacheManager
 import org.springframework.test.web.servlet.MockMvc
@@ -23,13 +22,11 @@ import java.math.BigDecimal
 import java.time.Instant
 
 @AutoConfigureMockMvc
-class CatalogQueryApiTests : IntegrationTestSupport() {
-
-    @Autowired lateinit var mvc: MockMvc
-
-    @Autowired lateinit var registration: CatalogRegistrationService
-
-    @Autowired lateinit var cacheManager: CacheManager
+class CatalogQueryApiTests(
+    private val mvc: MockMvc,
+    private val registration: CatalogRegistrationService,
+    private val cacheManager: CacheManager,
+) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
     private val organizerId = 7L

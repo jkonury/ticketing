@@ -3,7 +3,6 @@ package io.github.ticketing.catalog
 import io.github.ticketing.IntegrationTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.test.context.event.ApplicationEvents
@@ -19,11 +18,7 @@ import java.util.UUID
 
 @AutoConfigureMockMvc
 @RecordApplicationEvents
-class CatalogRegisterApiTests : IntegrationTestSupport() {
-
-    @Autowired lateinit var mvc: MockMvc
-
-    @Autowired lateinit var events: ApplicationEvents
+class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
 
@@ -156,7 +151,7 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `회차를 등록하면 좌석 수만큼의 좌석과 가격을 담은 이벤트가 발행된다`() {
+    fun `회차를 등록하면 좌석 수만큼의 좌석과 가격을 담은 이벤트가 발행된다`(events: ApplicationEvents) {
         val token = accessToken("ORGANIZER")
         val performanceId = registerPerformance(token, registerVenue(token))
 
@@ -180,7 +175,7 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `다른 주최자의 공연에는 회차를 등록할 수 없고 이벤트도 발행되지 않는다`() {
+    fun `다른 주최자의 공연에는 회차를 등록할 수 없고 이벤트도 발행되지 않는다`(events: ApplicationEvents) {
         val owner = accessToken("ORGANIZER")
         val other = accessToken("ORGANIZER")
         val performanceId = registerPerformance(owner, registerVenue(owner))
@@ -201,7 +196,7 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `같은 시작 시각의 회차를 다시 등록하면 409이고 이벤트는 한 번만 발행된다`() {
+    fun `같은 시작 시각의 회차를 다시 등록하면 409이고 이벤트는 한 번만 발행된다`(events: ApplicationEvents) {
         val token = accessToken("ORGANIZER")
         val performanceId = registerPerformance(token, registerVenue(token))
         val body = mapOf("startsAt" to "2027-02-01T10:00:00Z")

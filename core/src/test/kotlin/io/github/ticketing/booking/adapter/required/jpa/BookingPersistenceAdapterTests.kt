@@ -13,7 +13,6 @@ import io.github.ticketing.booking.domain.SeatId
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.support.TransactionTemplate
@@ -22,13 +21,8 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-class BookingPersistenceAdapterTests : IntegrationTestSupport() {
-
-    @Autowired
-    lateinit var port: BookingCommandPort
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
+class BookingPersistenceAdapterTests(private val port: BookingCommandPort, private val tx: TransactionTemplate) :
+    IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-11-10T10:00:00Z")
     private val ids = AtomicLong(System.nanoTime() % 1_000_000_000L * 100)

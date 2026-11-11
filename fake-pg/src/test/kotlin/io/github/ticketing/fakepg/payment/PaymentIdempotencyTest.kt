@@ -2,13 +2,14 @@ package io.github.ticketing.fakepg.payment
 
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
+import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.assertEquals
 
-class PaymentIdempotencyTest : FakePgTestSupport() {
+class PaymentIdempotencyTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
 
     @Test
     fun `같은 Idempotency-Key로 다시 요청하면 같은 transactionId를 돌려주고 웹훅은 한 번만 나간다`() {

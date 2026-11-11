@@ -20,7 +20,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.ApplicationEventPublisher
@@ -51,7 +50,16 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 @AutoConfigureMockMvc
 @Import(BookingPaymentFlowTests.TestClockConfig::class)
-class BookingPaymentFlowTests : IntegrationTestSupport() {
+class BookingPaymentFlowTests(
+    private val mvc: MockMvc,
+    private val register: RegisterScheduleSeatsUseCase,
+    private val redis: StringRedisTemplate,
+    private val jdbc: JdbcTemplate,
+    private val publisher: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
+    private val clock: MutableClock,
+    private val collector: EventCollector,
+) : IntegrationTestSupport() {
 
     @MockitoBean
     lateinit var paymentRequestListener: PaymentRequestListener
@@ -92,30 +100,6 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         @Bean
         fun eventCollector() = EventCollector()
     }
-
-    @Autowired
-    lateinit var mvc: MockMvc
-
-    @Autowired
-    lateinit var register: RegisterScheduleSeatsUseCase
-
-    @Autowired
-    lateinit var redis: StringRedisTemplate
-
-    @Autowired
-    lateinit var jdbc: JdbcTemplate
-
-    @Autowired
-    lateinit var publisher: ApplicationEventPublisher
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
-
-    @Autowired
-    lateinit var clock: MutableClock
-
-    @Autowired
-    lateinit var collector: EventCollector
 
     private val json = JsonMapper.builder().build()
 

@@ -1,13 +1,14 @@
 package io.github.ticketing.fakepg.payment
 
 import org.junit.jupiter.api.Test
+import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class TransactionHistoryTest : FakePgTestSupport() {
+class TransactionHistoryTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
 
     @Test
     fun `거래 내역은 요청 시각의 UTC 날짜로 필터링한다`() {

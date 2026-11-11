@@ -1,12 +1,23 @@
 package io.github.ticketing.e2e
 
 import io.github.ticketing.e2e.support.FlowSupport
+import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-class BookingFlowE2ETests : FlowSupport() {
+class BookingFlowE2ETests(
+    mvc: MockMvc,
+    jdbc: JdbcTemplate,
+    redis: StringRedisTemplate,
+    pg: PaymentFlowTests.TestPg,
+    clock: PaymentFlowTests.MutableClock,
+    collector: PaymentFlowTests.EventCollector,
+) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
 
     @Test
     fun `공연 등록부터 두 좌석 결제 확정까지 진행한다`() {

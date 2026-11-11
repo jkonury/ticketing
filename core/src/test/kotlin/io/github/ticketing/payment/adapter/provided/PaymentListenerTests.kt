@@ -13,7 +13,6 @@ import io.github.ticketing.payment.domain.Payment
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
@@ -31,7 +30,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 @Import(PaymentListenerTests.FixedClock::class)
-class PaymentListenerTests : IntegrationTestSupport() {
+class PaymentListenerTests(
+    private val pg: TestPg,
+    private val payments: PaymentCommandPort,
+    private val tx: TransactionTemplate,
+    private val publisher: ApplicationEventPublisher,
+    private val jdbc: JdbcTemplate,
+) : IntegrationTestSupport() {
 
     @TestConfiguration(proxyBeanMethods = false)
     class FixedClock {
@@ -66,21 +71,6 @@ class PaymentListenerTests : IntegrationTestSupport() {
             return if (transactionId.startsWith("reject")) PgRequestResult.Rejected("rejected") else PgRequestResult.Accepted(transactionId)
         }
     }
-
-    @Autowired
-    lateinit var pg: TestPg
-
-    @Autowired
-    lateinit var payments: PaymentCommandPort
-
-    @Autowired
-    lateinit var tx: TransactionTemplate
-
-    @Autowired
-    lateinit var publisher: ApplicationEventPublisher
-
-    @Autowired
-    lateinit var jdbc: JdbcTemplate
 
     private val now = Instant.parse("2026-11-11T00:00:00Z")
 

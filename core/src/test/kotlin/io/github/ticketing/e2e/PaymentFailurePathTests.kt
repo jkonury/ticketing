@@ -2,12 +2,23 @@ package io.github.ticketing.e2e
 
 import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.e2e.support.FlowSupport
+import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.web.servlet.MockMvc
 import java.time.Duration
 import java.util.UUID
 
-class PaymentFailurePathTests : FlowSupport() {
+class PaymentFailurePathTests(
+    mvc: MockMvc,
+    jdbc: JdbcTemplate,
+    redis: StringRedisTemplate,
+    pg: PaymentFlowTests.TestPg,
+    clock: PaymentFlowTests.MutableClock,
+    collector: PaymentFlowTests.EventCollector,
+) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
 
     @Test
     fun `결제 실패는 예매를 취소하고 좌석을 반환한다`() {

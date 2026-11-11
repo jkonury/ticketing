@@ -5,16 +5,12 @@ import io.github.ticketing.catalog.query.CatalogQueryRepository
 import io.github.ticketing.catalog.seed.CatalogSeedRunner
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.DefaultApplicationArguments
 import org.springframework.test.context.ActiveProfiles
 
 @ActiveProfiles("seed")
-class CatalogSeedRunnerTests : IntegrationTestSupport() {
-
-    @Autowired lateinit var runner: CatalogSeedRunner
-
-    @Autowired lateinit var queries: CatalogQueryRepository
+class CatalogSeedRunnerTests(private val runner: CatalogSeedRunner, private val queries: CatalogQueryRepository) :
+    IntegrationTestSupport() {
 
     private fun seededTitles() = queries.findPerformances(null, 100).items.filter { it.title.startsWith("시드 ") }
 

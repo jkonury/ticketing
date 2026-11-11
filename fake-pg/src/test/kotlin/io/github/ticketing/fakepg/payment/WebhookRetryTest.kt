@@ -1,9 +1,10 @@
 package io.github.ticketing.fakepg.payment
 
 import org.junit.jupiter.api.Test
+import org.springframework.test.web.servlet.MockMvc
 import kotlin.test.assertEquals
 
-class WebhookRetryTest : FakePgTestSupport() {
+class WebhookRetryTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
 
     @Test
     fun `수신 측이 2xx가 아니면 성공할 때까지 같은 이벤트를 재시도한다`() {

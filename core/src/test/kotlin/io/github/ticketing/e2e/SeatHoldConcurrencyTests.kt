@@ -1,17 +1,28 @@
 package io.github.ticketing.e2e
 
 import io.github.ticketing.e2e.support.FlowSupport
+import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-class SeatHoldConcurrencyTests : FlowSupport() {
+class SeatHoldConcurrencyTests(
+    mvc: MockMvc,
+    jdbc: JdbcTemplate,
+    redis: StringRedisTemplate,
+    pg: PaymentFlowTests.TestPg,
+    clock: PaymentFlowTests.MutableClock,
+    collector: PaymentFlowTests.EventCollector,
+) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
 
     private fun concurrent(requests: List<() -> MvcResult>): List<MvcResult> {
         val ready = CountDownLatch(requests.size)
