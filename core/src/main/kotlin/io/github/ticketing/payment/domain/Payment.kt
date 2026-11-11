@@ -71,12 +71,12 @@ class Payment private constructor(
 
     init {
         require(amount > BigDecimal.ZERO && amount.stripTrailingZeros().scale() <= 0 && amount <= BigDecimal("999999999999"))
-        require(idempotencyKey.isNotBlank() && idempotencyKey.length <= 100)
-        require(pgTransactionId == null || (pgTransactionId.isNotBlank() && pgTransactionId.length <= 100))
+        require(idempotencyKey.isNotBlank() && idempotencyKey.length <= MAX_IDENTIFIER_LENGTH)
+        require(pgTransactionId == null || (pgTransactionId.isNotBlank() && pgTransactionId.length <= MAX_IDENTIFIER_LENGTH))
     }
 
     fun attachPgTransaction(transactionId: String) {
-        require(transactionId.isNotBlank() && transactionId.length <= 100)
+        require(transactionId.isNotBlank() && transactionId.length <= MAX_IDENTIFIER_LENGTH)
         if (pgTransactionId != null && pgTransactionId != transactionId) throw PaymentContractMismatchException()
         pgTransactionId = transactionId
     }
@@ -152,7 +152,11 @@ class Payment private constructor(
             failedAt: Instant?,
             refundRequestedAt: Instant?,
             refundedAt: Instant?,
-        ): Payment =
-            Payment(id, orderId, memberId, amount, idempotencyKey, requestedAt, version, status, pgTransactionId, failureReason, approvedAt, failedAt, refundRequestedAt, refundedAt)
+        ): Payment = Payment(
+            id, orderId, memberId, amount, idempotencyKey, requestedAt, version, status, pgTransactionId,
+            failureReason, approvedAt, failedAt, refundRequestedAt, refundedAt,
+        )
     }
 }
+
+private const val MAX_IDENTIFIER_LENGTH = 100

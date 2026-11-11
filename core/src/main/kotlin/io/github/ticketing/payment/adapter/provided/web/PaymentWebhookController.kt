@@ -32,13 +32,13 @@ class PaymentWebhookController(
         val command = try {
             parse(rawBody)
         } catch (e: Exception) {
-            throw InvalidPaymentWebhookException()
+            throw InvalidPaymentWebhookException().also { it.initCause(e) }
         }
 
         try {
             webhooks.handle(command)
         } catch (e: PaymentRuleException) {
-            throw PaymentWebhookRuleException(e.code)
+            throw PaymentWebhookRuleException(e.code).also { it.initCause(e) }
         }
     }
 

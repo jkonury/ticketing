@@ -43,11 +43,11 @@ class PaymentWebhookSignatureVerifier(private val properties: PaymentPgPropertie
             mac.update('.'.code.toByte())
             require(MessageDigest.isEqual(mac.doFinal(body), HexFormat.of().parseHex(signature)))
         } catch (e: IllegalArgumentException) {
-            throw InvalidWebhookSignatureException()
+            throw InvalidWebhookSignatureException().also { it.initCause(e) }
         } catch (e: ArithmeticException) {
-            throw InvalidWebhookSignatureException()
+            throw InvalidWebhookSignatureException().also { it.initCause(e) }
         } catch (e: java.time.DateTimeException) {
-            throw InvalidWebhookSignatureException()
+            throw InvalidWebhookSignatureException().also { it.initCause(e) }
         }
     }
 }

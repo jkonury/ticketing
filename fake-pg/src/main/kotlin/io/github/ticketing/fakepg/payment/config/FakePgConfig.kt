@@ -33,7 +33,9 @@ class FakePgConfig {
     @Bean(destroyMethod = "close")
     fun webhookHttpClient(): HttpClient = HttpClient.newBuilder()
         .version(HttpClient.Version.HTTP_1_1)
-        .connectTimeout(Duration.ofSeconds(3))
+        .connectTimeout(Duration.ofSeconds(WEBHOOK_CONNECT_TIMEOUT_SECONDS))
         .executor(Executors.newVirtualThreadPerTaskExecutor())
         .build()
 }
+
+private const val WEBHOOK_CONNECT_TIMEOUT_SECONDS = 3L

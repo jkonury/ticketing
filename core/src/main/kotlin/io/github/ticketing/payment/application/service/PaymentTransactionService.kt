@@ -4,7 +4,13 @@ import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.application.port.provided.RequestPaymentCommand
 import io.github.ticketing.payment.application.port.provided.RequestRefundCommand
 import io.github.ticketing.payment.application.port.required.PaymentCommandPort
-import io.github.ticketing.payment.domain.*
+import io.github.ticketing.payment.domain.MemberId
+import io.github.ticketing.payment.domain.OrderId
+import io.github.ticketing.payment.domain.Payment
+import io.github.ticketing.payment.domain.PaymentContractMismatchException
+import io.github.ticketing.payment.domain.PaymentRuleException
+import io.github.ticketing.payment.domain.PaymentStatus
+import io.github.ticketing.payment.domain.TransitionResult
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -60,8 +66,7 @@ class PaymentTransactionService(
     fun prepareRefund(command: RequestRefundCommand): Payment? {
         val payment = find(command.orderId)
         if (payment.status == PaymentStatus.REFUNDED) return null
-        if (payment.requestRefund(command.requestedAt) == TransitionResult.Applied) return payments.save(payment)
-        return payment
+        return if (payment.requestRefund(command.requestedAt) == TransitionResult.Applied) payments.save(payment) else payment
     }
 
     private fun find(orderId: Long): Payment = payments.findByOrderId(OrderId(orderId)) ?: throw PaymentRuleException("PAYMENT_NOT_FOUND")

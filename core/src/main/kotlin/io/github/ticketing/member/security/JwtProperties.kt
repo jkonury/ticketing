@@ -7,10 +7,14 @@ import java.time.Duration
 @ConfigurationProperties("ticketing.jwt")
 data class JwtProperties(
     val secret: String,
-    val accessTtl: Duration = Duration.ofMinutes(15),
-    val refreshTtl: Duration = Duration.ofDays(14),
+    val accessTtl: Duration = Duration.ofMinutes(DEFAULT_ACCESS_TTL_MINUTES),
+    val refreshTtl: Duration = Duration.ofDays(DEFAULT_REFRESH_TTL_DAYS),
 ) {
     init {
-        require(secret.toByteArray().size >= 32) { "ticketing.jwt.secret은 32바이트 이상이어야 합니다." }
+        require(secret.toByteArray().size >= MIN_SECRET_BYTES) { "ticketing.jwt.secret은 32바이트 이상이어야 합니다." }
     }
 }
+
+private const val DEFAULT_ACCESS_TTL_MINUTES = 15L
+private const val DEFAULT_REFRESH_TTL_DAYS = 14L
+private const val MIN_SECRET_BYTES = 32

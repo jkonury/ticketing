@@ -79,11 +79,11 @@ class SecurityConfig {
     }
 
     private fun authenticationEntryPoint() = AuthenticationEntryPoint { _, response, _ ->
-        writeProblem(response, 401, "UNAUTHORIZED", "인증이 필요합니다.")
+        writeProblem(response, org.springframework.http.HttpStatus.UNAUTHORIZED.value(), "UNAUTHORIZED", "인증이 필요합니다.")
     }
 
     private fun accessDeniedHandler() = AccessDeniedHandler { _, response, _ ->
-        writeProblem(response, 403, "FORBIDDEN", "접근 권한이 없습니다.")
+        writeProblem(response, org.springframework.http.HttpStatus.FORBIDDEN.value(), "FORBIDDEN", "접근 권한이 없습니다.")
     }
 
     // 필터 단계 오류는 @RestControllerAdvice가 닿지 않으므로 같은 ProblemDetail 형태로 직접 쓴다. 메시지는 고정 문자열이다

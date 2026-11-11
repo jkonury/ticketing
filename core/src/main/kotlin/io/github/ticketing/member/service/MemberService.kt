@@ -27,7 +27,7 @@ class MemberService(private val members: MemberRepository, private val passwordE
         return try {
             members.saveAndFlush(member)
         } catch (e: DataIntegrityViolationException) {
-            throw EmailAlreadyExistsException()
+            throw EmailAlreadyExistsException().also { it.initCause(e) }
         }
     }
 

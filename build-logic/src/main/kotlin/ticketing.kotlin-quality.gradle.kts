@@ -9,7 +9,8 @@ val libs = versionCatalogs.named("libs")
 ktlint {
     version.set(libs.findVersion("ktlint").get().requiredVersion)
     filter {
-        exclude("**/build/**")
+        exclude("**/ticketing/jooq/**")
+        exclude { element -> element.file.invariantSeparatorsPath.contains("/build/generated-sources/") }
     }
 }
 

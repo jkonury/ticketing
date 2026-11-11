@@ -11,10 +11,10 @@ import java.time.Duration
 @ConfigurationProperties("ticketing.payment.fake-pg")
 class PaymentPgProperties(
     val baseUrl: String = "http://localhost:8090",
-    val connectTimeout: Duration = Duration.ofSeconds(3),
-    val readTimeout: Duration = Duration.ofSeconds(3),
+    val connectTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
+    val readTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
     val webhookSecret: String,
-    val webhookTimestampTolerance: Duration = Duration.ofMinutes(5),
+    val webhookTimestampTolerance: Duration = Duration.ofMinutes(DEFAULT_WEBHOOK_TOLERANCE_MINUTES),
 )
 
 @Configuration(proxyBeanMethods = false)
@@ -29,3 +29,6 @@ class PaymentPgConfiguration {
         return FakePgAdapter(builder.baseUrl(properties.baseUrl).requestFactory(factory).build())
     }
 }
+
+private const val DEFAULT_TIMEOUT_SECONDS = 3L
+private const val DEFAULT_WEBHOOK_TOLERANCE_MINUTES = 5L

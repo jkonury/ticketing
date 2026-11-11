@@ -2,8 +2,12 @@ package io.github.ticketing.payment.adapter.required.jpa
 
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.payment.application.port.required.PaymentCommandPort
-import io.github.ticketing.payment.domain.*
-import org.assertj.core.api.Assertions.*
+import io.github.ticketing.payment.domain.MemberId
+import io.github.ticketing.payment.domain.OrderId
+import io.github.ticketing.payment.domain.Payment
+import io.github.ticketing.payment.domain.PaymentStatus
+import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException

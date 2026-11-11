@@ -7,6 +7,5 @@ import org.springframework.boot.test.context.SpringBootTest
 class FakePgApplicationTests {
 
     @Test
-    fun `컨텍스트가 뜬다`() {
-    }
+    fun `컨텍스트가 뜬다`() = Unit
 }

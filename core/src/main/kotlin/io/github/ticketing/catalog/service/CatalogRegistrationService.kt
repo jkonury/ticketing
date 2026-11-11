@@ -68,7 +68,7 @@ class CatalogRegistrationService(
         val schedule = try {
             schedules.saveAndFlush(Schedule(performanceId, command.startsAt, clock.instant()))
         } catch (e: DataIntegrityViolationException) {
-            throw DuplicateScheduleException()
+            throw DuplicateScheduleException().also { it.initCause(e) }
         }
 
         val venue = venues.findById(performance.venueId).orElseThrow { VenueNotFoundException() }

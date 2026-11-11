@@ -18,7 +18,11 @@ data class ScheduleSeatKey(
     var scheduleId: Long = 0,
     @Column(name = "seat_id")
     var seatId: Long = 0,
-) : Serializable
+) : Serializable {
+    private companion object {
+        private const val serialVersionUID = 1L
+    }
+}
 
 @Entity
 @Table(schema = "booking", name = "schedule_seat")

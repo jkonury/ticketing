@@ -117,7 +117,9 @@ abstract class FlowSupport : IntegrationTestSupport() {
     }
     fun webhook(id: Long, type: String, amount: Int = 100000, eventId: String = UUID.randomUUID().toString()): MvcResult {
         val timestamp = clock.instant().epochSecond.toString()
-        val raw = """{"eventId":"$eventId","type":"$type","transactionId":"tx-$id","orderId":"$id","amount":$amount,"occurredAt":"${clock.instant()}","failureReason":${if (type == "PAYMENT_FAILED") "\"declined\"" else "null"}}"""
+        val failureReason = if (type == "PAYMENT_FAILED") "\"declined\"" else "null"
+        val raw = """{"eventId":"$eventId","type":"$type","transactionId":"tx-$id","orderId":"$id","amount":$amount,""" +
+            """"occurredAt":"${clock.instant()}","failureReason":$failureReason}"""
         val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec("test-webhook-secret".toByteArray(), "HmacSHA256")) }
         val signature = HexFormat.of().formatHex(mac.doFinal("$timestamp.$raw".toByteArray()))
         return mvc.perform(

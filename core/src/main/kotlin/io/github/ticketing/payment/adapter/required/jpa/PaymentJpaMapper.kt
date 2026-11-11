@@ -1,6 +1,10 @@
 package io.github.ticketing.payment.adapter.required.jpa
 
-import io.github.ticketing.payment.domain.*
+import io.github.ticketing.payment.domain.MemberId
+import io.github.ticketing.payment.domain.OrderId
+import io.github.ticketing.payment.domain.Payment
+import io.github.ticketing.payment.domain.PaymentId
+import io.github.ticketing.payment.domain.PaymentStatus
 
 internal fun Payment.toNewEntity() = PaymentJpaEntity(
     orderId.value, memberId.value, amount, idempotencyKey, requestedAt,

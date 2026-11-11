@@ -256,7 +256,9 @@ class PaymentFlowTests : IntegrationTestSupport() {
 
     private fun webhook(id: Long, type: String, eventId: String = UUID.randomUUID().toString()): ResultActions {
         val timestamp = clock.instant().epochSecond.toString()
-        val raw = """{"eventId":"$eventId","type":"$type","transactionId":"tx-$id","orderId":"$id","amount":100000,"occurredAt":"${clock.instant()}","failureReason":${if (type == "PAYMENT_FAILED") "\"declined\"" else "null"}}"""
+        val failureReason = if (type == "PAYMENT_FAILED") "\"declined\"" else "null"
+        val raw = """{"eventId":"$eventId","type":"$type","transactionId":"tx-$id","orderId":"$id","amount":100000,""" +
+            """"occurredAt":"${clock.instant()}","failureReason":$failureReason}"""
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec("test-webhook-secret".toByteArray(), "HmacSHA256"))
         val signature = HexFormat.of().formatHex(mac.doFinal("$timestamp.$raw".toByteArray()))

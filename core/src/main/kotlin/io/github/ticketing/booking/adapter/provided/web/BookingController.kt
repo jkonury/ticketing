@@ -63,6 +63,7 @@ class BookingController(
         BookingResponse.from(cancelBooking.cancel(authentication.name.toLong(), id))
 
     @PostMapping("/{id}/payments")
+    @Suppress("UnusedParameter")
     fun pay(
         authentication: Authentication,
         @PathVariable id: Long,

@@ -32,7 +32,7 @@ class CatalogCacheConfig {
         val mapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
 
         fun <T : Any> config(type: Class<T>) = RedisCacheConfiguration.defaultCacheConfig()
-            .entryTtl(Duration.ofMinutes(10))
+            .entryTtl(Duration.ofMinutes(CACHE_TTL_MINUTES))
             .disableCachingNullValues()
             .serializeKeysWith(SerializationPair.fromSerializer(StringRedisSerializer.UTF_8))
             .serializeValuesWith(SerializationPair.fromSerializer(JacksonJsonRedisSerializer(mapper, type)))
@@ -48,3 +48,5 @@ class CatalogCacheConfig {
             .build()
     }
 }
+
+private const val CACHE_TTL_MINUTES = 10L
