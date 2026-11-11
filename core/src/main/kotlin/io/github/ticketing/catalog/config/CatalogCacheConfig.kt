@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.cache.RedisCacheConfiguration
 import org.springframework.data.redis.cache.RedisCacheManager
+import org.springframework.data.redis.cache.RedisCacheWriter
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair
@@ -36,7 +37,9 @@ class CatalogCacheConfig {
             .serializeKeysWith(SerializationPair.fromSerializer(StringRedisSerializer.UTF_8))
             .serializeValuesWith(SerializationPair.fromSerializer(JacksonJsonRedisSerializer(mapper, type)))
 
-        return RedisCacheManager.builder(connectionFactory)
+        // Spring Data Redis 4.x의 비동기 기본값 대신 커밋 후 캐시 변경이 끝난 뒤 반환한다.
+        val writer = RedisCacheWriter.create(connectionFactory) { it.immediateWrites() }
+        return RedisCacheManager.builder(writer)
             .withCacheConfiguration(CatalogCaches.PERFORMANCE, config(PerformanceDetail::class.java))
             .withCacheConfiguration(CatalogCaches.SCHEDULE_SEATS, config(SeatLayout::class.java))
             .disableCreateOnMissingCache()

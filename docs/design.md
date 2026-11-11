@@ -158,6 +158,8 @@ io.github.ticketing.booking
 | 입장 토큰 | 단기 키 | 실시간 앱 발급, Gateway 검증 |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
 
+`catalog` 캐시는 트랜잭션 안의 변경을 커밋 뒤 적용하고, Redis 쓰기·삭제 완료를 기다린다(`RedisCacheWriter.immediateWrites`).
+
 #### 좌석 선점 키 형식 (코어 `booking`, realtime이 읽음)
 
 모든 키에 `{scheduleId}` 해시 태그를 넣어 Lua가 다루는 키를 같은 슬롯에 둔다.
@@ -230,14 +232,14 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 이 구조는 MSA 전환 시 Saga로 그대로 이어진다.
 
-**M1-5 payment 구현 합의 (2026-11-11, 구현 전)**
+**M1-5 payment 구현과 검증 (2026-11-11)**
 
 - PG를 호출하는 결제·환불 리스너는 `@ApplicationModuleListener(propagation = NOT_SUPPORTED)`로 실행한다. 준비 저장 → 트랜잭션 밖 PG 호출 → 최신 행 재조회·결과 반영으로 나눈다. 위의 booking 결제 결과 리스너 트랜잭션 구조와는 역할이 다르다.
 - 결제 상태는 `REQUESTED`, `SUCCEEDED`, `FAILED`, `REFUND_REQUESTED`, `REFUNDED`다. 결제의 미확정 결과(타임아웃·연결 실패·5xx)는 REQUESTED를 유지하고 예외를 전파해 원 이벤트를 미완료로 남긴다. 확정적 거절만 PaymentFailed로 처리한다.
 - 환불 거절·미확정은 REFUND_REQUESTED를 유지하고 예외를 전파한다. 해당 상태에서도 동일한 `refund-{orderId}` 키로 PG에 다시 요청한다. REFUNDED면 종료한다.
 - 재시작·명시적 이벤트 재제출 시 같은 키와 본문으로 재처리한다. 미완료 기록 자체가 즉시 재시도를 뜻하지 않으며, 주기적 스케줄러는 M1-5에 추가하지 않는다. 웹훅과 M2 대사는 별도 복구 경로다.
 - 웹훅 중복 기록·결제 상태 저장·결과 이벤트 발행은 한 트랜잭션이다. 오류 시 중복 기록도 롤백한다. 웹훅 선도착과 지연 PG 응답이 최신 상태를 되돌리지 않게 한다. 병렬 재처리의 HTTP 호출 횟수 대신 실제 거래·환불과 커밋된 상태 전이·이벤트의 중복 방지를 보장한다.
-- 설계 근거는 [ADR 0018](./adr/0018-payment-retry-boundaries.md), 별도 세션 지시서는 [payment phase](../phases/3-payment/README.md)다. 현재 payment는 루트 이벤트 계약만 있으며 M1-5 구현·검증은 미완료다.
+- 설계 근거는 [ADR 0018](./adr/0018-payment-retry-boundaries.md), 별도 세션 지시서는 [payment phase](../phases/3-payment/README.md)다. `PaymentListenerTests`와 `PaymentFlowTests`에서 트랜잭션 경계, 실제 예매 연계와 원 발행 재제출을 검증한다.
 
 ## 7. 인증·인가
 
@@ -275,7 +277,7 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 - 결제: **가짜 PG 서버**를 직접 만든다. 지연, 타임아웃, 실패, 중복 웹훅을 설정으로 재현한다. 출력 포트로 추상화하여 추후 실제 PG 어댑터를 추가할 수 있게 한다.
 - 알림: 로그 출력으로 시작.
 
-### fake-pg 연동 계약 (M1-5 구현 예정)
+### fake-pg 연동 계약
 
 - 결제: `POST /v1/payments`, `Idempotency-Key`, 본문 `{orderId: string, amount: 정수 원 단위}`. 환불: `POST /v1/payments/{transactionId}/refund`, `Idempotency-Key`. 유효한 접수 응답은 202다.
 - 웹훅: 코어의 `POST /api/v1/payments/webhooks/fake-pg`로 승인·실패·환불 완료를 전송한다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.

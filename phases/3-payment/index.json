@@ -60,7 +60,7 @@
     {
       "step": 4,
       "name": "payment-flow-verification",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/test/kotlin/io/github/ticketing/payment/flow/PaymentFlowTests.kt",
         "! rg -n 'import io\\.github\\.ticketing\\.booking' core/src/main/kotlin/io/github/ticketing/payment",
@@ -73,7 +73,8 @@
         "rg -q '^- \\[x\\] 환불, 만료 후 결제 성공 시 자동 환불' docs/roadmap.md"
       ],
       "model": "opus",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "실제 예매·결제·서명 웹훅·환불과 원 발행 재제출, 병렬 경합을 검증하고 설계·로드맵 동기화. 전체 테스트·check·문서 검사 통과."
     }
   ]
 }
