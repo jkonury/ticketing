@@ -1,0 +1,118 @@
+package io.github.ticketing.settlement.adapter.provided.batch
+
+import io.github.ticketing.BatchIntegrationTestSupport
+import io.github.ticketing.settlement.adapter.required.jooq.DailySettlementJooqAdapter
+import io.github.ticketing.settlement.application.port.provided.RecordRefundCommand
+import io.github.ticketing.settlement.application.port.provided.RecordSaleCommand
+import io.github.ticketing.settlement.application.port.required.DailySettlementCommandPort
+import io.github.ticketing.settlement.application.port.required.SettlementCopyCommandPort
+import io.github.ticketing.settlement.domain.DailySettlement
+import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.jooq.DSLContext
+import org.junit.jupiter.api.Test
+import org.springframework.batch.core.BatchStatus
+import org.springframework.batch.core.job.Job
+import org.springframework.batch.core.job.parameters.JobParametersBuilder
+import org.springframework.batch.core.launch.JobLauncher
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
+import org.springframework.test.context.TestPropertySource
+import ticketing.jooq.settlement.tables.references.DAILY_SETTLEMENT
+import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
+
+@Import(DailySettlementJobTests.TestConfig::class)
+@TestPropertySource(properties = ["ticketing.settlement.chunk-size=1"])
+class DailySettlementJobTests(
+    private val launcher: JobLauncher,
+    private val dailySettlementJob: Job,
+    private val copies: SettlementCopyCommandPort,
+    private val dsl: DSLContext,
+    private val writer: FailingWriter,
+) : BatchIntegrationTestSupport() {
+    @TestConfiguration(proxyBeanMethods = false)
+    class TestConfig {
+        @Bean
+        @Primary
+        fun failingWriter(adapter: DailySettlementJooqAdapter): FailingWriter = FailingWriter(adapter)
+    }
+
+    class FailingWriter(private val delegate: DailySettlementJooqAdapter) : DailySettlementCommandPort {
+        val failNext = AtomicBoolean(false)
+        var failingPerformance = 0L
+
+        override fun upsertAll(settlements: List<DailySettlement>) {
+            if (settlements.any { it.performanceId == failingPerformance } && failNext.compareAndSet(true, false)) {
+                error("의도된 두 번째 청크 실패")
+            }
+            delegate.upsertAll(settlements)
+        }
+    }
+
+    private fun sale(booking: Long, performance: Long, instant: String, amount: String = "101") {
+        copies.insertSaleIfAbsent(
+            RecordSaleCommand(booking, performance, 987, 1, BigDecimal(amount), Instant.parse(instant)),
+            Instant.EPOCH,
+        )
+    }
+
+    private fun refund(booking: Long, performance: Long, instant: String) {
+        copies.insertRefundIfAbsent(
+            RecordRefundCommand(booking, performance, 987, "REFUND", Instant.parse(instant)),
+            Instant.EPOCH,
+        )
+    }
+
+    private fun params(date: String, run: Long = 0) = JobParametersBuilder()
+        .addLocalDate("targetDate", LocalDate.parse(date)).addLong("run.id", run).toJobParameters()
+
+    @Test
+    fun `KST 경계와 다른 날 확정된 환불을 정산하고 같은 날짜 재실행은 중복되지 않는다`() {
+        sale(97001, 97001, "2026-11-10T14:59:59Z")
+        sale(97002, 97002, "2026-11-10T15:00:00Z")
+        refund(97001, 97001, "2026-11-10T15:00:00Z")
+        refund(97003, 97003, "2026-11-10T15:00:00Z")
+        val previous = LocalDate.parse("2026-11-10")
+        val today = LocalDate.parse("2026-11-11")
+
+        assertThat(launcher.run(dailySettlementJob, params(previous.toString())).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(launcher.run(dailySettlementJob, params(today.toString())).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(launcher.run(dailySettlementJob, params(today.toString(), 1)).status).isEqualTo(BatchStatus.COMPLETED)
+
+        val rows = dsl.selectFrom(DAILY_SETTLEMENT).where(DAILY_SETTLEMENT.PERFORMANCE_ID.between(97001L, 97003L)).fetch()
+        assertThat(rows).hasSize(3)
+        val old = rows.single { it.settlementDate == previous }
+        assertThat(old.saleAmount).isEqualByComparingTo("101")
+        assertThat(old.refundAmount).isEqualByComparingTo("0")
+        val refunded = rows.single { it.settlementDate == today && it.performanceId == 97001L }
+        assertThat(refunded.netAmount).isEqualByComparingTo("-101")
+        assertThat(refunded.feeAmount).isEqualByComparingTo("-10")
+        assertThat(refunded.payoutAmount).isEqualByComparingTo("-91")
+        assertThat(rows.single { it.performanceId == 97002L }.saleAmount).isEqualByComparingTo("101")
+    }
+
+    @Test
+    fun `실패한 두 번째 청크는 같은 파라미터로 재시작한다`() {
+        sale(97101, 97101, "2027-01-10T00:00:00Z")
+        sale(97102, 97102, "2027-01-10T00:00:00Z")
+        writer.failingPerformance = 97102
+        writer.failNext.set(true)
+        val parameters = params("2027-01-10")
+
+        assertThat(launcher.run(dailySettlementJob, parameters).status).isEqualTo(BatchStatus.FAILED)
+        assertThat(launcher.run(dailySettlementJob, parameters).status).isEqualTo(BatchStatus.COMPLETED)
+
+        assertThat(dsl.fetchCount(DAILY_SETTLEMENT, DAILY_SETTLEMENT.PERFORMANCE_ID.between(97101L, 97102L))).isEqualTo(2)
+    }
+
+    @Test
+    fun `대상 날짜가 없으면 실행하지 않는다`() {
+        assertThatThrownBy { launcher.run(dailySettlementJob, JobParametersBuilder().toJobParameters()) }
+            .hasMessageContaining("targetDate")
+    }
+}
