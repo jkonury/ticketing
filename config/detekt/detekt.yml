@@ -1,0 +1,10 @@
+# 기본 규칙 위에 저장소 코딩 규칙을 적용한다. 포맷 규칙은 ktlint가 검사한다.
+config:
+  validation: true
+  warningsAsErrors: true
+
+style:
+  MaxLineLength:
+    active: false
+  WildcardImport:
+    active: false

@@ -8,6 +8,10 @@ spring-dependency-management = "1.1.7"
 spring-modulith = "2.1.1"
 spring-cloud = "2025.1.4"
 archunit = "1.5.1"
+ktlint = "1.8.0"
+ktlint-gradle = "14.2.0"
+# Kotlin 2.3.21·JDK 25 지원. 1.23.8은 Kotlin 2.0.21·JDK 21 기준이다.
+detekt = "2.0.0-alpha.3"
 
 [libraries]
 # convention plugin이 쓰는 Gradle 플러그인 아티팩트
@@ -18,3 +22,6 @@ spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gra
 spring-dependency-management-plugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "spring-dependency-management" }
 
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+
+gradle-ktlint = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlint-gradle" }
+gradle-detekt = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }

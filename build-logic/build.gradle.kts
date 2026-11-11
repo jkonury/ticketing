@@ -8,4 +8,6 @@ dependencies {
     implementation(libs.kotlin.noarg)
     implementation(libs.spring.boot.gradle.plugin)
     implementation(libs.spring.dependency.management.plugin)
+    implementation(libs.gradle.ktlint)
+    implementation(libs.gradle.detekt)
 }

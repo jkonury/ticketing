@@ -3,6 +3,7 @@ plugins {
     kotlin("plugin.spring")
     id("org.springframework.boot")
     id("io.spring.dependency-management")
+    id("ticketing.kotlin-quality")
 }
 
 val libs = the<VersionCatalogsExtension>().named("libs")
