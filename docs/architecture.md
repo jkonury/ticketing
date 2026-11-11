@@ -198,6 +198,7 @@ Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJ
 
 ## 11. 개발 환경과 테스트
 
+- 테스트 실행 정책과 필요한 저장소 메서드만 노출하는 결정은 [ADR 0022](./adr/0022-test-structure-and-repositories.md)를 따른다. 단계적 전환 현황은 [계획](./plans/test-structure-improvement.md)에 기록한다.
 - 로컬 실행: Docker Compose (PostgreSQL, Redis, 가짜 PG)
 - 통합 테스트: Testcontainers
 - 모듈 테스트: Modulith 모듈 단위 테스트(`@ApplicationModuleTest`)

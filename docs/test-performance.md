@@ -39,3 +39,18 @@
 - [Spring 컨텍스트 캐시 키](https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/ctx-management/caching.html)
 - [DynamicPropertyRegistrar](https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/ctx-management/dynamic-property-sources.html)
 - [Testcontainers 싱글턴 컨테이너](https://java.testcontainers.org/test_framework_integration/manual_lifecycle_control/)
+
+## 테스트 구조 개선 전 전체 기준선 (2026-11-12)
+
+변경 전 저장소에서 다른 Gradle 검사 없이 `./scripts/agent/test/run-tests.sh --rerun`을 필터 없이 한 번 실행했다. Linux x86_64 환경이며 Gradle 빌드 캐시가 활성화되어 컴파일 태스크에는 캐시·UP-TO-DATE가 적용됐다. `--rerun`은 테스트 태스크를 재실행한다. 결과는 전체 통과이며 `/usr/bin/time -p` 벽시계 시간은 **88.26초**다. 이 값에는 Gradle 설정·컴파일 확인·테스트가 포함되며, 단위 테스트 JVM 시간 목표와 직접 비교할 수 없다.
+
+| 모듈 | 테스트 수 | 테스트 스위트 시간 합계 | Spring 컨텍스트 기동 | PostgreSQL | Redis |
+|---|---:|---:|---:|---:|---:|
+| core | 199 | 69.523초 | 13 | 1 | 1 |
+| gateway | 18 | 10.367초 | 1 | 0 | 1 |
+| realtime | 24 | 14.386초 | 6 | 0 | 1 |
+| fake-pg | 29 | 17.908초 | 3 | 0 | 0 |
+| core-batch | 0 | 0초 | 0 | 0 | 0 |
+| 합계 | 270 | 112.184초 | 23 | 1 | 3 |
+
+스위트 시간은 각 모듈 XML의 `testsuite` 시간 합계라 병렬 실행을 포함한 벽시계 시간과 다르다. 컨텍스트는 XML 출력의 `Started … in … seconds` 메시지, 컨테이너는 `Creating container for image:` 메시지를 셌다. Ryuk과 jOOQ 생성용 컨테이너는 제외했다. 별도 프로세스 E2E의 3개 시나리오는 이 `test` 실행에 포함되지 않는다. 문서 생성 테스트가 추적하는 `docs/modulith` 파일 두 개를 변경하므로 실행 전 해당 디렉터리를 임시 보관한 뒤 원상 복구했고 변경이 남지 않았음을 확인했다. 테스트별 이동 대상과 저장소 호출 목록은 [테스트 구조 이동 목록](./plans/test-structure-inventory.md)에 기록했다.

@@ -34,3 +34,4 @@
 | [0019](0019-batch-jobs-in-owning-modules.md) | Batch Job을 데이터 소유 모듈에 둔다 | 수락 |
 | [0020](0020-gateway-verification-contracts.md) | Gateway 검증 계약 구체화 | 수락 |
 | [0021](0021-realtime-queue-and-sse-contracts.md) | realtime 대기열·SSE 계약 | 수락 |
+| [0022](0022-test-structure-and-repositories.md) | 최소 저장소 인터페이스와 테스트 실행 정책 | 수락 |
