@@ -31,7 +31,7 @@ abstract class RealtimeIntegrationTestSupport(protected val client: WebTestClien
 
     companion object {
         val now: Instant = Instant.parse("2026-11-11T00:00:00Z")
-        private val redisContainer = GenericContainer("redis:8.6.2-alpine").withExposedPorts(6379).apply { start() }
+        val redisContainer = GenericContainer("redis:8.6.2-alpine").withExposedPorts(6379).apply { start() }
 
         @JvmStatic
         @DynamicPropertySource
