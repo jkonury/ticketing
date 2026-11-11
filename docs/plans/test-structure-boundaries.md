@@ -15,3 +15,11 @@
 ## 통합 테스트의 리스너 mock
 
 Step 4에서는 기존 3개 통합 테스트에 있던 MockitoBean 5개를 유지했다. 이들은 다른 모듈의 비동기 결제·환불·예매 처리를 차단하므로 단순히 제거하면 테스트가 의도하지 않은 PG 호출과 상태 변경을 일으킨다. 리스너는 구체 타입이어서 포트 fake만 주입하는 방식과 다르다. Step 6에서 수기 유스케이스를 사용하는 리스너 대체 또는 공통 fake PG 구성으로 전환하고 실제 전달 검증과 격리 이유를 기록한다.
+
+## gateway・realtime・fake-pg
+
+| 모듈 | 단위 대체 | 유지한 통합 검증과 이유 |
+| --- | --- | --- |
+| gateway | AdmissionTokens·SseTickets·GatewayRateLimiter의 수기 fake와 직접 호출하는 필터 체인 | GETDEL의 원자 소비, 비소비 입장 토큰, Redis 토큰 버킷/Lua, 실제 라우팅·보안 필터 순서·CORS는 실제 Redis와 HTTP가 필요하다. |
+| realtime | QueueStore·AdmissionStore fake, 순번 SSE의 runTest 가상 시간, 좌석 스냅샷·StreamId 순수 계산 | Lua의 만료 회원 제거·입장 배치 제한·락·TTL·다중 인스턴스, Redis Streams 재생·실제 구독 종료는 기존 통합 테스트로 검증한다. fake로 Lua를 재구현해 검증했다고 간주하지 않는다. |
+| fake-pg | WebhookTransport·WebhookScheduler fake와 수동 가상 스케줄, 실제 PaymentService·WebhookSender | HTTP 요청·실제 HMAC 서명·동시 요청 멱등성·Spring 빈 연결은 기존 통합 테스트로 유지한다. 단위에서는 실제 기다림 없이 시나리오와 동일 본문·이벤트 재시도 정책을 확인한다. |

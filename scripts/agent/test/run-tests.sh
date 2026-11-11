@@ -82,5 +82,7 @@ for xml_file in "${xml_files[@]}"; do
     "$SCRIPT_DIR/print-test-failures.sh" "$xml_file"
   fi
 done
+echo "## Gradle Errors"
+rg -n -m 20 '^e: |^Execution failed|^> Task .*FAILED|^> A failure occurred' "$LOG_FILE" || true
 echo "전체 로그: $LOG_FILE"
 exit 1

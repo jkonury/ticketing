@@ -40,8 +40,8 @@ class WebhookSender(
     private val properties: FakePgProperties,
     private val clock: Clock,
     private val jsonMapper: JsonMapper,
-    private val httpClient: HttpClient,
-    private val scheduler: TaskScheduler,
+    private val transport: WebhookTransport,
+    private val scheduler: WebhookScheduler,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -65,12 +65,12 @@ class WebhookSender(
     }
 
     fun scheduleAfter(delay: Duration, task: () -> Unit) {
-        scheduler.schedule(task, scheduler.clock.instant().plus(delay))
+        scheduler.scheduleAfter(delay, task)
     }
 
     private fun deliver(event: WebhookEvent, rawBody: String, attempt: Int) {
         val delivered = try {
-            post(rawBody) in 200..299
+            transport.post(rawBody) in 200..299
         } catch (e: IOException) {
             log.warn("웹훅 연결 실패 transactionId={} eventId={} attempt={}: {}", event.transactionId, event.eventId, attempt, e.message)
             false
@@ -88,18 +88,6 @@ class WebhookSender(
         }
     }
 
-    private fun post(rawBody: String): Int {
-        val timestamp = clock.instant().epochSecond.toString()
-        val request = HttpRequest.newBuilder(URI.create(properties.webhook.url))
-            .timeout(Duration.ofSeconds(5))
-            .header("Content-Type", "application/json")
-            .header(TIMESTAMP_HEADER, timestamp)
-            .header(SIGNATURE_HEADER, sign(properties.webhook.secret, timestamp, rawBody))
-            .POST(HttpRequest.BodyPublishers.ofString(rawBody))
-            .build()
-        return httpClient.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()
-    }
-
     companion object {
         const val TIMESTAMP_HEADER = "X-FakePg-Timestamp"
         const val SIGNATURE_HEADER = "X-FakePg-Signature"
@@ -110,5 +98,36 @@ class WebhookSender(
             mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
             return HexFormat.of().formatHex(mac.doFinal("$timestamp.$rawBody".toByteArray(StandardCharsets.UTF_8)))
         }
+    }
+}
+
+fun interface WebhookTransport {
+    fun post(rawBody: String): Int
+}
+
+fun interface WebhookScheduler {
+    fun scheduleAfter(delay: Duration, task: () -> Unit)
+}
+
+@Component
+class HttpWebhookTransport(private val properties: FakePgProperties, private val clock: Clock, private val httpClient: HttpClient) :
+    WebhookTransport {
+    override fun post(rawBody: String): Int {
+        val timestamp = clock.instant().epochSecond.toString()
+        val request = HttpRequest.newBuilder(URI.create(properties.webhook.url))
+            .timeout(Duration.ofSeconds(5))
+            .header("Content-Type", "application/json")
+            .header(WebhookSender.TIMESTAMP_HEADER, timestamp)
+            .header(WebhookSender.SIGNATURE_HEADER, WebhookSender.sign(properties.webhook.secret, timestamp, rawBody))
+            .POST(HttpRequest.BodyPublishers.ofString(rawBody))
+            .build()
+        return httpClient.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()
+    }
+}
+
+@Component
+class TaskWebhookScheduler(private val scheduler: TaskScheduler) : WebhookScheduler {
+    override fun scheduleAfter(delay: Duration, task: () -> Unit) {
+        scheduler.schedule(task, scheduler.clock.instant().plus(delay))
     }
 }

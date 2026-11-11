@@ -48,11 +48,7 @@ class RateLimitKeyResolver(properties: RateLimitProperties) : KeyResolver {
 }
 
 @Component
-class RateLimitFilter(
-    private val limiter: RedisRateLimiter,
-    private val keyResolver: RateLimitKeyResolver,
-    properties: RateLimitProperties,
-) : GatewayFilter {
+class RedisGatewayRateLimiter(private val limiter: RedisRateLimiter, properties: RateLimitProperties) : GatewayRateLimiter {
     init {
         mapOf(
             "core-api" to properties.default,
@@ -65,6 +61,16 @@ class RateLimitFilter(
         }
     }
 
+    override fun isAllowed(route: String, key: String): Mono<org.springframework.cloud.gateway.filter.ratelimit.RateLimiter.Response> =
+        limiter.isAllowed(route, key)
+}
+
+interface GatewayRateLimiter {
+    fun isAllowed(route: String, key: String): Mono<org.springframework.cloud.gateway.filter.ratelimit.RateLimiter.Response>
+}
+
+@Component
+class RateLimitFilter(private val limiter: GatewayRateLimiter, private val keyResolver: RateLimitKeyResolver) : GatewayFilter {
     override fun filter(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> =
         keyResolver.resolve(exchange).flatMap { key ->
             val route = exchange.getRequiredAttribute<org.springframework.cloud.gateway.route.Route>(GATEWAY_ROUTE_ATTR)

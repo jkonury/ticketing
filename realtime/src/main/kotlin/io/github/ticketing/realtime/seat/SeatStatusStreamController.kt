@@ -103,7 +103,7 @@ class SeatStatusStreamController(
                 ?: "0-0"
         val seats = mutableListOf<SeatSnapshot>()
         redis.opsForHash<String, String>().entries(snapshotKey(scheduleId)).asFlow().collect { (id, value) ->
-            seats.add(snapshot(id, value))
+            seats.add(snapshot(id, value, clock))
         }
         send(ServerSentEvent.builder<Any>(SnapshotData(seats.sortedBy { it.seatId })).id(last).event("snapshot").build())
         return requireNotNull(StreamId.parse(last))
@@ -114,14 +114,14 @@ class SeatStatusStreamController(
         val added = info.raw["entries-added"] as? Number ?: return false
         return added.toLong() == info.streamLength()
     }
+}
 
-    private fun snapshot(id: String, value: String): SeatSnapshot {
-        val expires = value.removePrefix("HELD:").toLongOrNull()
-        return when {
-            value.startsWith("HELD:") && expires != null && expires < clock.millis() -> SeatSnapshot(id.toLong(), "AVAILABLE")
-            value.startsWith("HELD:") -> SeatSnapshot(id.toLong(), "HELD", expires)
-            else -> SeatSnapshot(id.toLong(), value)
-        }
+internal fun snapshot(id: String, value: String, clock: Clock): SeatSnapshot {
+    val expires = value.removePrefix("HELD:").toLongOrNull()
+    return when {
+        value.startsWith("HELD:") && expires != null && expires < clock.millis() -> SeatSnapshot(id.toLong(), "AVAILABLE")
+        value.startsWith("HELD:") -> SeatSnapshot(id.toLong(), "HELD", expires)
+        else -> SeatSnapshot(id.toLong(), value)
     }
 }
 
@@ -133,7 +133,7 @@ data class SeatSnapshot(val seatId: Long, val status: String, val holdExpiresAt:
 data class SnapshotData(val seats: List<SeatSnapshot>)
 data class SeatData(val seatIds: List<Long>, val status: String, val holdExpiresAt: Long?, val at: Long)
 
-private data class StreamId(val milliseconds: BigInteger, val sequence: BigInteger) : Comparable<StreamId> {
+internal data class StreamId(val milliseconds: BigInteger, val sequence: BigInteger) : Comparable<StreamId> {
     override fun compareTo(other: StreamId): Int = compareValuesBy(this, other, StreamId::milliseconds, StreamId::sequence)
 
     companion object {

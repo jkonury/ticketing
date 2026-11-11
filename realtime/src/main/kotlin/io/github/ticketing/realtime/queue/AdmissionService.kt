@@ -11,47 +11,41 @@ import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Repository
 import org.springframework.stereotype.Service
 import java.security.SecureRandom
 import java.time.Clock
+import java.time.Duration
 import java.util.Base64
 import java.util.UUID
 
+interface AdmissionStore {
+    suspend fun lock(scheduleId: Long, instanceId: String, duration: Duration): Boolean
+    suspend fun admit(scheduleId: Long, cutoff: Long, ttl: Duration, tokens: List<String>): List<Pair<String, String>>
+    suspend fun saveToken(scheduleId: Long, memberId: String, token: String, ttl: Duration)
+    suspend fun removeActiveIfEmpty(scheduleId: Long)
+    suspend fun activeSchedules(): List<String>
+}
+
 @Service
-class AdmissionService(private val redis: ReactiveStringRedisTemplate, private val properties: QueueProperties, private val clock: Clock) {
+class AdmissionService(private val store: AdmissionStore, private val properties: QueueProperties, private val clock: Clock) {
     private val random = SecureRandom()
     private val instanceId = UUID.randomUUID().toString()
 
     suspend fun admit(scheduleId: Long): Int {
-        val lock = "queue:admit-lock:{$scheduleId}"
-        if (!redis.opsForValue().setIfAbsent(lock, instanceId, properties.admissionInterval).awaitSingle()) return 0
+        if (!store.lock(scheduleId, instanceId, properties.admissionInterval)) return 0
 
         val tokens = List(properties.admissionBatchSize) { newToken() }
-        val keys = listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId), "queue:admitted:{$scheduleId}:")
-        val args = listOf(
-            (clock.millis() - properties.presenceGrace.toMillis()).toString(),
-            properties.admissionTokenTtl.toMillis().toString(),
-            properties.admissionBatchSize.toString(),
-        ) + tokens
-        val admitted = redis.execute(admitScript, keys, args).next().awaitSingleOrNull().orEmpty()
-        admitted.chunked(2).forEach { pair ->
-            val memberId = pair[0].toString()
-            val token = pair[1].toString()
-            val tokenKey = "queue:admission:$token"
-            redis.opsForHash<String, String>().putAll(
-                tokenKey,
-                mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString()),
-            ).awaitSingle()
-            redis.expire(tokenKey, properties.admissionTokenTtl).awaitSingle()
+        val admitted = store.admit(scheduleId, clock.millis() - properties.presenceGrace.toMillis(), properties.admissionTokenTtl, tokens)
+        admitted.forEach { (memberId, token) ->
+            store.saveToken(scheduleId, memberId, token, properties.admissionTokenTtl)
         }
-        if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
-            redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
-        }
-        return admitted.size / 2
+        store.removeActiveIfEmpty(scheduleId)
+        return admitted.size
     }
 
     suspend fun admitAll() {
-        val schedules = redis.opsForSet().members(QueueKeys.ACTIVE).collectList().awaitSingle()
+        val schedules = store.activeSchedules()
         for (schedule in schedules) {
             runCatching { admit(schedule.toLong()) }.onFailure { exception ->
                 if (exception is CancellationException) throw exception
@@ -69,6 +63,37 @@ class AdmissionService(private val redis: ReactiveStringRedisTemplate, private v
     companion object {
         private const val TOKEN_BYTES = 32
         private val logger = LoggerFactory.getLogger(AdmissionService::class.java)
+    }
+}
+
+@Repository
+class RedisAdmissionStore(private val redis: ReactiveStringRedisTemplate) : AdmissionStore {
+    override suspend fun lock(scheduleId: Long, instanceId: String, duration: Duration): Boolean =
+        redis.opsForValue().setIfAbsent("queue:admit-lock:{$scheduleId}", instanceId, duration).awaitSingle()
+
+    override suspend fun admit(scheduleId: Long, cutoff: Long, ttl: Duration, tokens: List<String>): List<Pair<String, String>> {
+        val keys = listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId), "queue:admitted:{$scheduleId}:")
+        val args = listOf(cutoff.toString(), ttl.toMillis().toString(), tokens.size.toString()) + tokens
+        return redis.execute(admitScript, keys, args).next().awaitSingleOrNull().orEmpty().chunked(2).map { pair ->
+            pair[0].toString() to pair[1].toString()
+        }
+    }
+
+    override suspend fun saveToken(scheduleId: Long, memberId: String, token: String, ttl: Duration) {
+        val key = QueueKeys.admission(token)
+        redis.opsForHash<String, String>().putAll(key, mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString())).awaitSingle()
+        redis.expire(key, ttl).awaitSingle()
+    }
+
+    override suspend fun removeActiveIfEmpty(scheduleId: Long) {
+        if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
+            redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
+        }
+    }
+
+    override suspend fun activeSchedules(): List<String> = redis.opsForSet().members(QueueKeys.ACTIVE).collectList().awaitSingle()
+
+    companion object {
         private val admitScript = DefaultRedisScript(
             ClassPathResource("redis/queue/admit.lua").inputStream.use { String(it.readBytes(), Charsets.UTF_8) },
             List::class.java,

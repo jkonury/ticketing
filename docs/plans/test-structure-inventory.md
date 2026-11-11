@@ -136,3 +136,9 @@ DB 유니크 제약·낙관적 및 비관적 잠금·실제 이벤트 전달과 
 | NotificationModuleTests | 기존 BookingNotificationListenerTests | Modulith 전달 |
 
 여러 시나리오를 같은 테스트 메서드의 순차 상태 전이로 검사하는 경우가 있으므로 테스트 개수만으로 대응 여부를 판단하지 않는다. 대체 경계와 남긴 검증은 [fake 대체 경계](./test-structure-boundaries.md)를 따른다.
+
+| Step 5 기존 통합 검증 | 추가 단위 테스트 | 남긴 연동 검증 |
+| --- | --- | --- |
+| gateway 입장·SSE·rate limit·JWT | GatewayFilterUnitTests | Redis 원자 소비·토큰 버킷·실제 필터 순서·라우팅·CORS |
+| realtime 대기열·입장·순번 SSE·좌석 SSE | QueueServiceTest·AdmissionServiceTest·QueuePositionStreamTest·SeatLogicTest | Lua·TTL·락·Streams 재생·실제 연결 종료·다중 인스턴스 |
+| fake-pg 시나리오·멱등·환불·이력·재시도 | PaymentServiceTest, 기존 ScenarioResolverTest | HTTP·서명·동시 멱등 요청 |

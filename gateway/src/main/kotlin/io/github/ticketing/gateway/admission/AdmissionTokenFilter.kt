@@ -20,9 +20,19 @@ import tools.jackson.databind.json.JsonMapper
 
 private const val ADMISSION_HEADER = "X-Admission-Token"
 
+interface AdmissionTokens {
+    fun find(token: String): Mono<Map<String, String>>
+}
+
+@Component
+class RedisAdmissionTokens(private val redis: ReactiveStringRedisTemplate) : AdmissionTokens {
+    override fun find(token: String): Mono<Map<String, String>> =
+        redis.opsForHash<String, String>().entries("queue:admission:$token").collectMap({ it.key }, { it.value })
+}
+
 @Component
 class AdmissionTokenFilter(
-    private val redis: ReactiveStringRedisTemplate,
+    private val tokens: AdmissionTokens,
     private val jsonMapper: JsonMapper,
     private val properties: GatewayProperties,
 ) : GatewayFilter {
@@ -30,7 +40,7 @@ class AdmissionTokenFilter(
         val token = exchange.request.headers.getFirst(ADMISSION_HEADER)?.takeIf { it.isNotBlank() }
             ?: return exchange.writeProblem(HttpStatus.FORBIDDEN, "ADMISSION_TOKEN_REQUIRED", "입장 토큰이 필요합니다.")
         val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
-        return redis.opsForHash<String, String>().entries("queue:admission:$token").collectMap({ it.key }, { it.value })
+        return tokens.find(token)
             .flatMap { fields ->
                 if (fields["memberId"]?.toLongOrNull() != memberId || memberId == null || fields["scheduleId"]?.toLongOrNull() == null) {
                     invalidToken(exchange)

@@ -1,7 +1,7 @@
 # 테스트 구조 개선 실행 계획
 
 - 작성일: 2026-11-12
-- 상태: Step 4 완료, Step 5 검증 중
+- 상태: Step 5 완료, Step 6 진행 예정
 - 기준: [아키텍처](../architecture.md), [로드맵](../roadmap.md), [백엔드 규칙](../rules/backend.md)
 - 기존 측정: [통합 테스트 재사용 개선](../test-performance.md)
 
@@ -22,7 +22,7 @@
 - [x] Step 2. 단위·통합 테스트 실행 경로 분리
 - [x] Step 3. 운영 저장소 최소화
 - [x] Step 4. core 단위 테스트 전환
-- [ ] Step 5. gateway·realtime·fake-pg 단위 테스트 전환
+- [x] Step 5. gateway·realtime·fake-pg 단위 테스트 전환
 - [ ] Step 6. 통합 테스트 컨텍스트 통합
 - [ ] Step 7. Stop 훅·git hook 연결
 - [ ] Step 8. 성능 검증과 최종 통합
@@ -191,3 +191,10 @@
 - core 단위 92개(기존 57개에서 35개 증가), 통합·구조 141개를 모두 통과했다. `:core:check`로 ktlint·detekt까지 확인했다. 최초 PasswordEncoder null 허용 시그니처 컴파일 오류를 수정한 후 통과했다. 테스트 코드만 바뀌어 E2E는 생략했다.
 - [단위 시나리오 대응](./test-structure-inventory.md#추가한-서비스-단위-검증-대응), [fake 대체 경계와 통합 유지 사유](./test-structure-boundaries.md)를 기록했다. 통합 리스너 MockitoBean 5개는 다른 모듈 동작을 차단하는 용도라 Step 6에서 전환한다.
 - 검증 명령: 전용 test 스크립트 `:core:test`, check 스크립트 `:core:check`(Step 2 환경 옵션). 로그: `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`.
+
+### Step 5
+
+- gateway의 입장 토큰·SSE 티켓·rate limit, realtime의 대기열·입장, fake-pg의 웹훅 전송·스케줄 경계를 최소 인터페이스와 실제 어댑터로 나눴다. Redis 명령·Lua·HTTP·서명·스케줄 시각은 기존 동작을 유지한다.
+- 전체 단위 117개(core 92·gateway 5·realtime 10·fake-pg 10) 및 전체 `check`(통합·구조 208개와 품질) 통과. 문서 생성 1개는 별도다. 기존 270개를 모두 유지하고 단위 56개를 추가했다. Spring·서버·컨테이너 기동 없는 단위 검증으로 확인했다.
+- realtime의 nullable StreamId 비교 단언 컴파일 오류를 수정했다. 다른 모듈 결과 XML이 있는 상태에서 컴파일 실패 요약이 누락되는 run-tests 스크립트도 Gradle 오류를 출력하도록 보완했다.
+- 명령: 전용 test 스크립트 기본 실행, check 스크립트 `check`(Step 2 환경 옵션). 로그: `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`. 관련 E2E는 Step 8 최종 통합 검증에서 실행한다. [대체 경계](./test-structure-boundaries.md)에 실제 연동 검증을 남긴 이유를 기록했다.
