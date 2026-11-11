@@ -3,11 +3,14 @@ package io.github.ticketing.gateway.route
 import io.github.ticketing.gateway.GatewayIntegrationTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.http.HttpHeaders
 import org.springframework.test.web.reactive.server.WebTestClient
+import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 
-class GatewayRoutingTests(client: WebTestClient) : GatewayIntegrationTestSupport(client) {
+class GatewayRoutingTests(client: WebTestClient, private val redis: ReactiveStringRedisTemplate) : GatewayIntegrationTestSupport(client) {
     @Test
     fun `코어 요청은 위조 회원 헤더 없이 전달된다`() {
         client.get().uri("/api/v1/bookings/me").header("X-Member-Id", "999").exchange().expectStatus().isOk
@@ -64,9 +67,11 @@ class GatewayRoutingTests(client: WebTestClient) : GatewayIntegrationTestSupport
     }
 
     @Test
-    fun `스트림 요청은 위조 회원 헤더 없이 실시간 앱에 전달된다`() {
-        client.get().uri("/api/v1/streams/1").header("X-Member-Id", "999").exchange().expectStatus().isOk
+    fun `스트림 요청은 티켓 회원 헤더로 실시간 앱에 전달된다`() {
+        val ticket = UUID.randomUUID().toString()
+        redis.opsForValue().set("sse:ticket:$ticket", "42", Duration.ofSeconds(30)).block()
+        client.get().uri("/api/v1/streams/1?ticket=$ticket").header("X-Member-Id", "999").exchange().expectStatus().isOk
 
-        assertThat(realtime.requests.single().headers.getFirst("X-Member-Id")).isNull()
+        assertThat(realtime.requests.single().headers.getFirst("X-Member-Id")).isEqualTo("42")
     }
 }

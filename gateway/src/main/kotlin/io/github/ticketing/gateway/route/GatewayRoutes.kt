@@ -3,6 +3,7 @@ package io.github.ticketing.gateway.route
 import io.github.ticketing.gateway.admission.AdmissionTokenFilter
 import io.github.ticketing.gateway.auth.GatewayAttributes
 import io.github.ticketing.gateway.auth.MEMBER_HEADER
+import io.github.ticketing.gateway.sse.SseTicketFilter
 import io.github.ticketing.gateway.support.writeProblem
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -29,7 +30,12 @@ private const val QUEUE_ROUTE_ORDER = -2
 @EnableConfigurationProperties(GatewayProperties::class)
 class GatewayRoutes {
     @Bean
-    fun routes(builder: RouteLocatorBuilder, properties: GatewayProperties, admissionTokenFilter: AdmissionTokenFilter): RouteLocator {
+    fun routes(
+        builder: RouteLocatorBuilder,
+        properties: GatewayProperties,
+        admissionTokenFilter: AdmissionTokenFilter,
+        sseTicketFilter: SseTicketFilter,
+    ): RouteLocator {
         val requireMember = GatewayFilter { exchange, chain ->
             val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
             if (memberId == null) {
@@ -51,7 +57,7 @@ class GatewayRoutes {
                 path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember) }
             }
             route(id = "realtime-streams", order = -1, uri = properties.realtimeUri) {
-                path("/api/v1/streams/**")
+                path("/api/v1/streams/**").filters { filters -> filters.filter(sseTicketFilter) }
             }
             route(id = "core-bookings-create", order = -1, uri = properties.coreUri) {
                 path("/api/v1/bookings").and().method(org.springframework.http.HttpMethod.POST)
