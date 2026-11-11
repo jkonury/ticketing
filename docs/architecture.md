@@ -132,7 +132,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 - [전체 모듈 의존](./modulith/components.puml)
 - 모듈별: [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
 
-의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트) 두 개뿐이다.
+의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트)이다.
 
 ### 이벤트 목록
 
@@ -146,12 +146,12 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `PaymentSucceeded` | payment | booking | `paymentId`, `orderId`, `amount`, `paidAt` |
 | `PaymentFailed` | payment | booking | `paymentId`, `orderId`, `reason`, `failedAt` |
 | `PaymentRefunded` | payment | booking | `paymentId`, `orderId`, `refundedAt` |
-| `BookingConfirmed` | booking | 없음(notification, settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `seatIds`, `amount`, `confirmedAt` |
-| `BookingCancelled` | booking | 없음(notification, settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `reason`, `refundRequired`, `cancelledAt` |
+| `BookingConfirmed` | booking | notification (settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `seatIds`, `amount`, `confirmedAt` |
+| `BookingCancelled` | booking | notification (settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `reason`, `refundRequired`, `cancelledAt` |
 | `BookingExpired` | booking | 없음(notification, settlement 예정) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 모듈이 소유한다. 발행자는 위 표와 같지만 클래스는 `payment` 루트 패키지에 있다.
-- 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다.
+- 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.
 
 ## 5. 데이터
 
