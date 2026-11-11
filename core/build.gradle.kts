@@ -63,3 +63,8 @@ sourceSets.main {
 tasks.compileKotlin {
     dependsOn(generateJooq)
 }
+
+// ktlint 소스 집합에 생성 코드 디렉터리가 포함되므로 생성이 끝난 뒤에 검사한다(제외 필터와 별개로 Gradle이 출력 의존을 검증한다)
+tasks.matching { it.name.startsWith("runKtlint") || it.name.startsWith("ktlint") }.configureEach {
+    mustRunAfter(generateJooq)
+}
