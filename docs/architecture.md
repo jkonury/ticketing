@@ -504,6 +504,7 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 Batch Job은 데이터를 소유한 모듈의 `adapter.provided.batch`에 두고 `@Profile("batch")`로 활성화한다. Batch는 웹 컨트롤러와 같은 입력 어댑터다. `core-batch`는 웹 서버 없이 `batch` 프로필로 core 컨텍스트를 띄우며 `spring.batch.job.name`으로 Job 하나를 실행한다. 웹 앱에서는 Job 빈을 만들지 않고 자동 실행도 끈다. 이 결정의 대안과 근거는 [ADR 0019](./adr/0019-batch-jobs-in-owning-modules.md)를 참고한다.
 
+- 실행: `./gradlew :core-batch:bootRun --args='--spring.batch.job.name=<jobName> targetDate=2026-11-10'`
 - Batch 메타데이터는 Spring Batch 공식 PostgreSQL DDL을 Flyway 마이그레이션으로 `batch` 스키마에 만든다.
 - 정산일은 이벤트 시각의 Asia/Seoul 날짜다. 그날 매출은 `BookingConfirmed` 금액 합, 환불은 `refundRequired=true`인 `BookingCancelled` 중 확정 사본이 있는 예매의 금액 합이다. 지난 날짜의 정산은 다시 계산하지 않는다. 수수료는 `(매출 − 환불) × 수수료율`(설정값, 기본 `0.10`)이며 원 미만은 0 방향으로 절사한다. 지급액은 `매출 − 환불 − 수수료`이고 `(정산일, 공연)` 단위로 upsert한다.
 - 결제를 요청하지 않은 `PENDING` 예매는 `expiresAt` 경과 시, 결제를 요청한 `PENDING` 예매는 `expiresAt + 유예`(설정값, 기본 30분) 경과 시 `EXPIRED`로 전환한다. 이후 도착한 결제 성공은 기존 자동 환불 경로로 처리한다.

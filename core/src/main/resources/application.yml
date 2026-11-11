@@ -21,6 +21,12 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: never
+      table-prefix: batch.BATCH_
   modulith:
     events:
       # 재시작 시 완료되지 않은 이벤트 발행을 다시 처리한다. 리스너는 멱등해야 한다

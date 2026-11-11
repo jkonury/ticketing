@@ -22,7 +22,7 @@
 
 ## M2. Batch
 
-- [ ] `core-batch` 실행 모듈 구성 (코어 코드 공유, 웹 서버 없이 실행)
+- [x] `core-batch` 실행 모듈 구성 (코어 코드 공유, 웹 서버 없이 실행)
 - [ ] `settlement`가 결제·예매 이벤트를 받아 자기 스키마에 사본 적재
 - [ ] 일별 정산 Job: jOOQ reader, chunk 처리, 수수료 계산, 재실행 안전성
 - [ ] 미결제 예매 정리 Job: `PENDING` 만료분을 `EXPIRED`로 전환

@@ -1,6 +1,7 @@
 package io.github.ticketing.member.security
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -30,6 +31,7 @@ import javax.crypto.spec.SecretKeySpec
 class SecurityConfig {
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             // 세션·쿠키를 쓰지 않는 Bearer 토큰 API다. 쿠키 세션의 CSRF 방어는 BFF가 맡는다 (ADR 0013)

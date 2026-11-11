@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: core-batch
+  main:
+    web-application-type: none
+  batch:
+    job:
+      enabled: true
+  modulith:
+    events:
+      republish-outstanding-events-on-restart: false

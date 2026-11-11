@@ -8,6 +8,7 @@ val libs = the<VersionCatalogsExtension>().named("libs")
 val jooqGenerator: SourceSet by sourceSets.creating
 
 dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -24,6 +25,7 @@ dependencies {
     runtimeOnly("org.springframework.modulith:spring-modulith-actuator")
     runtimeOnly("org.springframework.modulith:spring-modulith-runtime")
 
+    testImplementation("org.springframework.batch:spring-batch-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
