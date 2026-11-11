@@ -38,11 +38,11 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
         return waiting(scheduleId, memberId) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
     }
 
-    suspend fun status(scheduleId: Long, memberId: Long): QueueStatus {
+    suspend fun status(scheduleId: Long, memberId: Long, updateSeen: Boolean = true): QueueStatus {
         requireSchedule(scheduleId)
         admitted(scheduleId, memberId)?.let { return it }
         val waiting = waiting(scheduleId, memberId) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
-        markSeen(scheduleId, memberId)
+        if (updateSeen) markSeen(scheduleId, memberId)
         return waiting
     }
 
