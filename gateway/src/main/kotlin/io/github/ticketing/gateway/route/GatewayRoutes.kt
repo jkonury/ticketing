@@ -1,0 +1,47 @@
+package io.github.ticketing.gateway.route
+
+import io.github.ticketing.gateway.auth.GatewayAttributes
+import io.github.ticketing.gateway.auth.MEMBER_HEADER
+import io.github.ticketing.gateway.support.writeProblem
+import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.cloud.gateway.filter.GatewayFilter
+import org.springframework.cloud.gateway.route.RouteLocator
+import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder
+import org.springframework.cloud.gateway.route.builder.routes
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpStatus
+
+@ConfigurationProperties("ticketing.gateway")
+data class GatewayProperties(val coreUri: String = "http://localhost:8080", val realtimeUri: String = "http://localhost:8081")
+
+private const val QUEUE_ROUTE_ORDER = -2
+
+@Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(GatewayProperties::class)
+class GatewayRoutes {
+    @Bean
+    fun routes(builder: RouteLocatorBuilder, properties: GatewayProperties): RouteLocator {
+        val requireMember = GatewayFilter { exchange, chain ->
+            val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
+            if (memberId == null) {
+                exchange.writeProblem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다.")
+            } else {
+                val request = exchange.request.mutate().header(MEMBER_HEADER, memberId.toString()).build()
+                chain.filter(exchange.mutate().request(request).build())
+            }
+        }
+        return builder.routes {
+            route(id = "realtime-queues", order = QUEUE_ROUTE_ORDER, uri = properties.realtimeUri) {
+                path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember) }
+            }
+            route(id = "realtime-streams", order = -1, uri = properties.realtimeUri) {
+                path("/api/v1/streams/**")
+            }
+            route(id = "core-api", order = 0, uri = properties.coreUri) {
+                path("/api/v1/**")
+            }
+        }
+    }
+}

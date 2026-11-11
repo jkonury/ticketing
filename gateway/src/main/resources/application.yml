@@ -1,6 +1,10 @@
 spring:
   application:
     name: gateway
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -8,3 +12,10 @@ spring:
 
 server:
   port: 8000
+
+ticketing:
+  jwt:
+    secret: ${JWT_SECRET}
+  gateway:
+    core-uri: ${CORE_URI:http://localhost:8080}
+    realtime-uri: ${REALTIME_URI:http://localhost:8081}
