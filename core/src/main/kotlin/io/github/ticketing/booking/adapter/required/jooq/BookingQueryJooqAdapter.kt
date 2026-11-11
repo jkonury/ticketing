@@ -12,10 +12,22 @@ import ticketing.jooq.booking.tables.references.BOOKING_SEAT
 import ticketing.jooq.booking.tables.references.SCHEDULE
 import ticketing.jooq.booking.tables.references.SCHEDULE_SEAT
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.ZoneOffset
 import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 
 @Repository
 internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQueryPort {
+
+    override fun findSweepCandidateIds(cutoff: Instant, paymentCutoff: Instant, afterId: Long?, limit: Int): List<Long> =
+        dsl.select(BOOKING.ID).from(BOOKING)
+            .where(BOOKING.STATUS.eq("PENDING"))
+            .and(
+                BOOKING.PAYMENT_REQUESTED_AT.isNull.and(BOOKING.EXPIRES_AT.le(cutoff.atOffset(ZoneOffset.UTC)))
+                    .or(BOOKING.PAYMENT_REQUESTED_AT.isNotNull.and(BOOKING.EXPIRES_AT.le(paymentCutoff.atOffset(ZoneOffset.UTC)))),
+            )
+            .and(if (afterId == null) DSL.noCondition() else BOOKING.ID.gt(afterId))
+            .orderBy(BOOKING.ID.asc()).limit(limit).fetch { requireNotNull(it[BOOKING.ID]) }
 
     /** ID 내림차순 커서 페이지. 다음 페이지 존재 여부를 알기 위해 1건 더 읽는다. */
     override fun findMyBookings(memberId: Long, cursor: Long?, size: Int): BookingPage {

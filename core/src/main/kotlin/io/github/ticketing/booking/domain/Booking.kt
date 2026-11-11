@@ -38,6 +38,14 @@ class Booking private constructor(
 
     fun isExpired(now: Instant): Boolean = !now.isBefore(expiresAt)
 
+    fun isSweepable(now: Instant, paymentGrace: Duration): Boolean =
+        status == BookingStatus.PENDING && !now.isBefore(if (paymentRequestedAt == null) expiresAt else expiresAt.plus(paymentGrace))
+
+    fun expireBySweep(now: Instant, paymentGrace: Duration) {
+        if (!isSweepable(now, paymentGrace)) throw InvalidBookingStateException(status)
+        status = BookingStatus.EXPIRED
+    }
+
     fun requestPayment(now: Instant) {
         if (status != BookingStatus.PENDING) throw InvalidBookingStateException(status)
         if (paymentRequestedAt != null) return

@@ -3,6 +3,7 @@ package io.github.ticketing.booking.domain
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.math.BigDecimal
+import java.time.Duration
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -66,6 +67,39 @@ class BookingTests {
 
         assertFalse(pendingBooking.isExpired(beforeExpiry))
         assertTrue(pendingBooking.isExpired(atExpiry))
+    }
+
+    @Test
+    fun `일괄 만료는 미요청 예매의 만료 시각과 결제 요청 예매의 유예 경계를 지킨다`() {
+        val grace = Duration.ofMinutes(30)
+        val pending = booking()
+        val requested = booking().also { it.requestPayment(t0) }
+
+        assertFalse(pending.isSweepable(beforeExpiry, grace))
+        assertThrows<InvalidBookingStateException> { pending.expireBySweep(beforeExpiry, grace) }
+        assertTrue(pending.isSweepable(atExpiry, grace))
+        assertFalse(requested.isSweepable(atExpiry.plus(grace).minusSeconds(1), grace))
+        assertThrows<InvalidBookingStateException> { requested.expireBySweep(atExpiry, grace) }
+        assertTrue(requested.isSweepable(atExpiry.plus(grace), grace))
+        pending.expireBySweep(atExpiry, grace)
+        requested.expireBySweep(atExpiry.plus(grace), grace)
+        assertEquals(BookingStatus.EXPIRED, pending.status)
+        assertEquals(BookingStatus.EXPIRED, requested.status)
+    }
+
+    @Test
+    fun `일괄 만료는 PENDING이 아닌 예매를 변경하지 않는다`() {
+        val grace = Duration.ofMinutes(30)
+        val bookings = listOf(
+            confirmed(),
+            booking().also { it.cancelByUser(owner, t0) },
+            booking().also { it.expire(atExpiry) },
+        )
+
+        bookings.forEach {
+            assertFalse(it.isSweepable(atExpiry.plus(grace), grace))
+            assertThrows<InvalidBookingStateException> { it.expireBySweep(atExpiry.plus(grace), grace) }
+        }
     }
 
     @Test
