@@ -5,14 +5,15 @@
     {
       "step": 0,
       "name": "payment-domain-persistence",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/resources/db/migration/V6__create_payment_tables.sql",
         "test -f core/src/main/kotlin/io/github/ticketing/payment/adapter/required/jpa/PaymentPersistenceAdapter.kt",
         "./scripts/agent/test/run-tests.sh"
       ],
       "model": "sonnet",
-      "reasoning_effort": "medium"
+      "reasoning_effort": "medium",
+      "summary": "payment 도메인·V6 마이그레이션·JPA/jOOQ 저장과 전이·제약·버전·웹훅 롤백 테스트 구현. 전체 테스트 통과."
     },
     {
       "step": 1,
