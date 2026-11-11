@@ -37,3 +37,6 @@ __pycache__/
 
 ### Harness 실행 로그 ###
 phases/*/logs/
+
+### 에이전트 지시 프롬프트
+docs/prompt.md
