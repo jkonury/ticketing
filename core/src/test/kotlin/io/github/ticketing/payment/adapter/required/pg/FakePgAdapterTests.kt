@@ -3,6 +3,7 @@ package io.github.ticketing.payment.adapter.required.pg
 import com.sun.net.httpserver.HttpServer
 import io.github.ticketing.payment.application.port.required.PgPaymentRequest
 import io.github.ticketing.payment.application.port.required.PgRequestResult
+import io.github.ticketing.payment.application.port.required.PgTransactionStatus
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -19,6 +20,7 @@ import org.springframework.web.client.RestClient
 import java.math.BigDecimal
 import java.net.InetSocketAddress
 import java.time.Duration
+import java.time.LocalDate
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -29,6 +31,38 @@ class FakePgAdapterTests {
     private val server = MockRestServiceServer.bindTo(builder).build()
     private val adapter = FakePgAdapter(builder.build())
     private val payment = PgPaymentRequest("order-1", BigDecimal("1000.00"), "pay-1")
+
+    @Test
+    fun `거래 조회는 날짜와 응답을 매핑한다`() {
+        server.expect(requestTo("http://localhost:8090/v1/transactions?date=2026-11-11"))
+            .andRespond(
+                withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(
+                    """[{"transactionId":"tx","orderId":"123","amount":100,"status":"APPROVED","requestedAt":"2026-11-11T00:00:00Z","approvedAt":"2026-11-11T00:01:00Z","refundedAt":null}]""",
+                ),
+            )
+
+        val transaction = adapter.findTransactions(LocalDate.parse("2026-11-11")).single()
+
+        assertThat(transaction.orderId).isEqualTo(123)
+        assertThat(transaction.status).isEqualTo(PgTransactionStatus.APPROVED)
+        assertThat(transaction.amount).isEqualByComparingTo("100")
+        assertThat(transaction.approvedAt).isNotNull()
+    }
+
+    @Test
+    fun `거래 조회 오류와 잘못된 주문 번호는 예외로 전파한다`() {
+        server.expect(requestTo("http://localhost:8090/v1/transactions?date=2026-11-11"))
+            .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR))
+        server.expect(requestTo("http://localhost:8090/v1/transactions?date=2026-11-11"))
+            .andRespond(
+                withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(
+                    """[{"transactionId":"tx","orderId":"invalid","amount":100,"status":"PENDING","requestedAt":"2026-11-11T00:00:00Z"}]""",
+                ),
+            )
+
+        assertThatThrownBy { adapter.findTransactions(LocalDate.parse("2026-11-11")) }.isInstanceOf(RuntimeException::class.java)
+        assertThatThrownBy { adapter.findTransactions(LocalDate.parse("2026-11-11")) }.isInstanceOf(NumberFormatException::class.java)
+    }
 
     @Test
     fun `결제 요청은 정수 금액과 멱등 키를 보내고 접수를 반환한다`() {

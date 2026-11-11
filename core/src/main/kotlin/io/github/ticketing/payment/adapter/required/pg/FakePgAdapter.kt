@@ -3,15 +3,49 @@ package io.github.ticketing.payment.adapter.required.pg
 import io.github.ticketing.payment.application.port.required.PgPaymentRequest
 import io.github.ticketing.payment.application.port.required.PgPort
 import io.github.ticketing.payment.application.port.required.PgRequestResult
+import io.github.ticketing.payment.application.port.required.PgTransaction
+import io.github.ticketing.payment.application.port.required.PgTransactionQueryPort
+import io.github.ticketing.payment.application.port.required.PgTransactionStatus
 import org.slf4j.LoggerFactory
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
 import org.springframework.web.client.RestClientResponseException
+import java.time.Instant
+import java.time.LocalDate
 
-class FakePgAdapter(private val client: RestClient) : PgPort {
+class FakePgAdapter(private val client: RestClient) :
+    PgPort,
+    PgTransactionQueryPort {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    override fun findTransactions(date: LocalDate): List<PgTransaction> {
+        val response = client.get().uri { it.path("/v1/transactions").queryParam("date", date).build() }
+            .retrieve().body(object : ParameterizedTypeReference<List<TransactionWireResponse>>() {})
+        return requireNotNull(response).map {
+            PgTransaction(
+                it.transactionId,
+                it.orderId.toLong(),
+                it.amount.toBigDecimal(),
+                it.status,
+                it.requestedAt,
+                it.approvedAt,
+                it.refundedAt,
+            )
+        }
+    }
+
+    private data class TransactionWireResponse(
+        val transactionId: String,
+        val orderId: String,
+        val amount: Long,
+        val status: PgTransactionStatus,
+        val requestedAt: Instant,
+        val approvedAt: Instant?,
+        val refundedAt: Instant?,
+    )
 
     override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
         val amount = request.amount.longValueExact()
