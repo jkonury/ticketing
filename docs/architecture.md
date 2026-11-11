@@ -157,7 +157,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 ### PostgreSQL
 
-- 인스턴스 하나, **모듈별 스키마 분리**: `member`, `catalog`, `booking`, `payment`, `settlement`
+- 인스턴스 하나, **모듈별 스키마 분리**: `member`, `catalog`, `booking`, `payment`, `settlement`, `batch`
 - **모듈 간 외래 키·조인 금지**
 - `settlement`의 집계에 필요한 타 모듈 데이터는 이벤트로 받아 자기 스키마에 사본으로 쌓는다.
 - 스키마 관리는 Flyway, jOOQ 코드는 Flyway가 만든 스키마에서 생성한다.
@@ -169,7 +169,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 ### 테이블 구조 (ERD)
 
-스키마별로 그린다. 스키마를 넘는 관계는 FK가 없고 값으로만 참조하므로 선을 긋지 않고 주석으로 표시한다. 원본은 `core/src/main/resources/db/migration/V*.sql`이다. 이 외에 `public.event_publication`(Modulith 이벤트 발행 레지스트리)이 있다.
+스키마별로 그린다. 스키마를 넘는 관계는 FK가 없고 값으로만 참조하므로 선을 긋지 않고 주석으로 표시한다. 원본은 `core/src/main/resources/db/migration/V*.sql`이다. 이 외에 `public.event_publication`(Modulith 이벤트 발행 레지스트리)과 `batch` 스키마(Spring Batch 메타데이터, 공식 DDL)가 있다.
 
 #### member
 
@@ -296,7 +296,7 @@ erDiagram
         bigint id PK
         bigint order_id UK "booking.booking.id 값 참조"
         bigint member_id "member 값 참조"
-        numeric amount
+        numeric(12,0) amount
         varchar status "REQUESTED, SUCCEEDED, FAILED, REFUND_REQUESTED, REFUNDED"
         varchar idempotency_key UK
         varchar pg_transaction_id UK
@@ -313,6 +313,66 @@ erDiagram
         varchar type
         varchar transaction_id "pg_transaction_id 값 참조"
         timestamptz received_at
+    }
+    pg_transaction_snapshot {
+        date target_date PK
+        varchar(100) transaction_id PK
+        bigint order_id "booking 값 참조"
+        numeric amount
+        varchar(32) status
+        timestamptz requested_at
+        timestamptz approved_at
+        timestamptz refunded_at
+        timestamptz fetched_at
+    }
+    reconciliation_mismatch {
+        date target_date PK
+        bigint order_id PK "booking 값 참조"
+        varchar(32) mismatch_type PK
+        varchar(100) pg_transaction_id
+        varchar(32) pg_status
+        numeric pg_amount
+        bigint internal_payment_id
+        varchar internal_status
+        numeric internal_amount
+        timestamptz detected_at
+    }
+```
+
+#### settlement
+
+```mermaid
+erDiagram
+    booking_sale {
+        bigint booking_id PK
+        bigint performance_id
+        bigint organizer_id
+        bigint schedule_id
+        numeric(12,0) amount
+        timestamptz confirmed_at
+        timestamptz received_at
+    }
+    booking_refund {
+        bigint booking_id PK
+        bigint performance_id
+        bigint organizer_id
+        varchar reason
+        timestamptz cancelled_at
+        timestamptz received_at
+    }
+    daily_settlement {
+        date settlement_date PK
+        bigint performance_id PK
+        bigint organizer_id
+        integer sale_count
+        numeric sale_amount
+        integer refund_count
+        numeric refund_amount
+        numeric net_amount
+        numeric(5,4) fee_rate
+        numeric fee_amount
+        numeric payout_amount
+        timestamptz calculated_at
     }
 ```
 
@@ -495,12 +555,14 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 ## 9. Batch
 
-| 작업 | 내용 |
-|---|---|
-| 일별 정산 | 공연·주최자별 매출 집계, 수수료 계산. jOOQ reader, chunk 처리 |
-| 미결제 예매 정리 | `PENDING`으로 남은 건을 `EXPIRED`로 전환 (Redis TTL 누락분 보정) |
-| 좌석 스냅샷 보정 | 커밋 후 Redis 반영 실패로 DB와 어긋난 좌석 스냅샷을 DB 기준으로 보정 |
-| 결제 대사 (`payment`) | 가짜 PG 거래 내역과 내부 결제 기록의 불일치 검출 |
+| Job | 소유 모듈 | 파라미터 |
+|---|---|---|
+| `dailySettlementJob` | `settlement` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
+| `expirePendingBookingsJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
+| `reconcileSeatSnapshotJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
+| `paymentReconciliationJob` | `payment` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
+
+일별 정산은 공연·주최자별 매출 집계와 수수료 계산을 수행하며 jOOQ reader와 chunk 처리를 사용한다. 미결제 예매 정리는 `PENDING` 예매를 `EXPIRED`로 전환하고, 좌석 스냅샷 보정은 DB 기준으로 Redis 상태를 맞춘다. 결제 대사는 가짜 PG 거래 내역과 내부 결제 기록의 불일치를 검출한다.
 
 Batch Job은 데이터를 소유한 모듈의 `adapter.provided.batch`에 두고 `@Profile("batch")`로 활성화한다. Batch는 웹 컨트롤러와 같은 입력 어댑터다. `core-batch`는 웹 서버 없이 `batch` 프로필로 core 컨텍스트를 띄우며 `spring.batch.job.name`으로 Job 하나를 실행한다. 웹 앱에서는 Job 빈을 만들지 않고 자동 실행도 끈다. 이 결정의 대안과 근거는 [ADR 0019](./adr/0019-batch-jobs-in-owning-modules.md)를 참고한다.
 

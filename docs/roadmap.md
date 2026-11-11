@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1 완료 (이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md)), M2 대기
+- 상태: M0·M1·M2 완료 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md)), M3 대기
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -29,7 +29,7 @@
 - [x] 좌석 스냅샷 보정 Job: 커밋 후 Redis 반영 실패로 어긋난 스냅샷을 DB 기준으로 보정
 - [x] 결제 대사 Job: 가짜 PG 거래 내역과 내부 기록 불일치 검출·기록 (payment 모듈)
 - [x] 주최자용 정산 조회 API
-- [ ] Job 단위 테스트, 재시작·중복 실행 테스트
+- [x] Job 단위 테스트, 재시작·중복 실행 테스트
 
 **완료 기준**: 세 Job이 로컬에서 실행되고, 같은 날짜로 다시 실행해도 결과가 중복되지 않는다.
 
