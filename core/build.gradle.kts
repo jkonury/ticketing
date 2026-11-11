@@ -70,3 +70,15 @@ tasks.compileKotlin {
 tasks.matching { it.name.startsWith("runKtlint") || it.name.startsWith("ktlint") }.configureEach {
     mustRunAfter(generateJooq)
 }
+
+val documentationTest by tasks.registering(Test::class) {
+    group = "documentation"
+    description = "모듈 의존 다이어그램을 생성한다."
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    include("**/DocumentationTests.class")
+    val outputDir = providers.gradleProperty("modulithOutput")
+        .orElse(layout.buildDirectory.dir("modulith").map { it.asFile.absolutePath })
+    systemProperty("modulith.output", outputDir.get())
+    outputs.dir(outputDir)
+}

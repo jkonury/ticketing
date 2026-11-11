@@ -139,7 +139,7 @@ io.github.ticketing.booking
 
 ### 모듈 의존 다이어그램
 
-Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulith/`). 모듈 의존을 바꾸면 테스트를 다시 실행해 바뀐 `.puml`을 함께 커밋한다.
+Modulith `Documenter`가 명시적 `:core:documentationTest` 작업으로 생성한다(기본 출력은 `core/build/modulith/`). 모듈 의존을 바꾸면 `./gradlew :core:documentationTest -PmodulithOutput=../docs/modulith`를 실행해 바뀐 `.puml`을 함께 커밋한다. 문서 생성은 기본 테스트와 `check`에 포함하지 않는다.
 
 - [전체 모듈 의존](./modulith/components.puml)
 - 모듈별: [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)

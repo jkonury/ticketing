@@ -38,6 +38,24 @@ TEST_EXIT=$?
 
 if [ "$TEST_EXIT" -eq 0 ]; then
   echo "All tests passed: $*"
+  python3 - "$LOG_FILE" <<'RESULTS'
+import pathlib
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    match = re.match(r"> Task :([^: ]+):([^: ]*[Tt]est)\b(.*)", line)
+    if not match:
+        continue
+    module, task, status = match.groups()
+    if "NO-SOURCE" in status or "SKIPPED" in status:
+        print(f"  :{module}:{task}: {status.strip()}")
+        continue
+    reports = pathlib.Path(module, "build", "test-results", task).glob("TEST-*.xml")
+    total = sum(int(ET.parse(report).getroot().get("tests", "0")) for report in reports)
+    print(f"  :{module}:{task}: {total}개 {status.strip()}")
+RESULTS
   exit 0
 fi
 
@@ -58,5 +76,11 @@ fi
 
 echo "## Failed Tests"
 echo ""
-"$SCRIPT_DIR/print-test-failures.sh" "${xml_files[@]}"
+for xml_file in "${xml_files[@]}"; do
+  if ! rg -q 'failures="0"' "$xml_file" || ! rg -q 'errors="0"' "$xml_file"; then
+    echo "결과: $xml_file"
+    "$SCRIPT_DIR/print-test-failures.sh" "$xml_file"
+  fi
+done
+echo "전체 로그: $LOG_FILE"
 exit 1

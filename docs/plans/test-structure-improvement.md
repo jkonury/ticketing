@@ -1,7 +1,7 @@
 # 테스트 구조 개선 실행 계획
 
 - 작성일: 2026-11-12
-- 상태: Step 1 완료, Step 2 진행 예정
+- 상태: Step 2 완료, Step 3 진행 예정
 - 기준: [아키텍처](../architecture.md), [로드맵](../roadmap.md), [백엔드 규칙](../rules/backend.md)
 - 기존 측정: [통합 테스트 재사용 개선](../test-performance.md)
 
@@ -19,7 +19,7 @@
 ## 진행 상태
 
 - [x] Step 1. 기준선 측정과 설계 결정 기록
-- [ ] Step 2. 단위·통합 테스트 실행 경로 분리
+- [x] Step 2. 단위·통합 테스트 실행 경로 분리
 - [ ] Step 3. 운영 저장소 최소화
 - [ ] Step 4. core 단위 테스트 전환
 - [ ] Step 5. gateway·realtime·fake-pg 단위 테스트 전환
@@ -170,3 +170,10 @@
 - 기준선 로그: `build/run-tests/gradle-test-out.txt`. 기존 실행이 생성한 다이어그램 변경은 복구된 상태다. 이후 문서 생성은 별도 출력 경로와 작업으로 분리한다.
 - ADR 0022와 아키텍처·백엔드 규칙·로드맵을 정합성 확인했다. Spring Data JPA 4.1.2 공식 문서의 선택적 CRUD 서명 지원을 확인했다.
 - 문서 링크·경로 검사 통과. Kotlin 변경이 없어 품질·E2E 재실행 대상은 없다.
+
+### Step 2
+
+- 기본 `test`는 단위 61개(core 57·fake-pg 4), `integrationTest`는 통합·구조 208개, 명시적 `:core:documentationTest`는 문서 1개다. 기존 270개를 모두 유지한다. gateway·realtime 단위 테스트는 Step 5에서 추가한다.
+- 단위 테스트, 전체 `check`(ktlint·detekt 포함), 문서 생성과 문서 링크·경로 검사 통과. 문서 기본 출력은 `core/build/modulith`이며 추적 다이어그램은 바뀌지 않는다. 서비스 흐름 변경이 없어 E2E는 생략했다.
+- 초기 Kotlin daemon 경로 권한·메타스페이스 부족·캐시 잠금은 권한 상승 및 `-Pkotlin.compiler.execution.strategy=in-process --max-workers=2 -Dorg.gradle.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=1g"`로 해결했다. 통합 소스 세트의 internal 접근과 빌드 포맷 오류를 수정한 후 통과했다. 검증은 이 옵션을 붙여 전용 test/check 스크립트로 순차 실행했다.
+- 로그: `build/check-summary/gradle-out.txt`, `build/run-tests/gradle-test-out.txt`(마지막 문서 작업).
