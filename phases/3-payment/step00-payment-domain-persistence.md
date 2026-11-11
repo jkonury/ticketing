@@ -1,88 +1,83 @@
 # Step 0: payment-domain-persistence
 
-## 읽어야 할 파일
+## 목표와 참조
 
-작업에 필요한 정보는 이 파일에 담겨 있다. 아래 파일은 작업 중 필요한 부분만 참조하라:
+payment 모듈의 도메인, 영속성 출력 포트와 어댑터를 만든다. PG 호출·서비스·입력 어댑터는 이후 step의 범위다. 코딩·테스트 규칙은 `docs/rules/backend.md`를 따른다.
 
-- `core/src/main/kotlin/io/github/ticketing/payment/*.kt` (2-booking phase에서 만든 결제 계약 이벤트: `PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)
-- 헥사고날 구조 예시: `core/src/main/kotlin/io/github/ticketing/booking/` (`domain`, `application.port.*`, `adapter.required.jpa`의 매퍼 형식)
-- `docs/rules/backend.md` § 헥사고날, § 영속성
-- `docs/adr/0017-payment-owns-payment-events.md`
+필요한 부분만 읽는다:
 
-## 작업
+- `core/src/main/kotlin/io/github/ticketing/payment/`의 루트 계약 이벤트 5종. 시그니처를 보존한다.
+- `core/src/main/kotlin/io/github/ticketing/booking/adapter/required/jpa/BookingPersistenceAdapter.kt`, `BookingJpaMapper.kt`, `BookingJpaEntity.kt`: 저장·복원·버전 처리 예시.
+- `core/src/test/kotlin/io/github/ticketing/IntegrationTestSupport.kt`, `TestcontainersConfiguration.kt`.
+- `docs/rules/backend.md` § 헥사고날, § 영속성.
 
-payment 헥사고날 모듈의 도메인과 영속성을 만든다. PG 연동과 이벤트 처리는 step 1에서 한다.
+## 도메인 계약
 
-### 1. 도메인 (`io.github.ticketing.payment.domain`, 순수 Kotlin)
+`payment.domain`은 순수 Kotlin이다. 식별자 `PaymentId`, `OrderId`, `MemberId`는 각각 양수 Long의 value class로 만든다.
 
 ```kotlin
-@JvmInline value class PaymentId(val value: Long)
-@JvmInline value class OrderId(val value: Long)
 enum class PaymentStatus { REQUESTED, SUCCEEDED, FAILED, REFUND_REQUESTED, REFUNDED }
-
-class Payment {
-    companion object { fun request(orderId, memberId, amount, idempotencyKey, now): Payment }
-    fun attachPgTransaction(transactionId: String)            // 이미 같은 값이면 no-op, 다른 값이면 예외
-    fun approve(amount: BigDecimal, now): TransitionResult    // REQUESTED → SUCCEEDED. 금액 불일치는 예외
-    fun fail(reason: String, now): TransitionResult           // REQUESTED → FAILED
-    fun requestRefund(now): TransitionResult                  // SUCCEEDED → REFUND_REQUESTED
-    fun completeRefund(now): TransitionResult                 // REFUND_REQUESTED(또는 SUCCEEDED) → REFUNDED
+sealed interface TransitionResult {
+    data object Applied : TransitionResult
+    data object AlreadyApplied : TransitionResult
 }
-sealed interface TransitionResult { data object Applied; data object AlreadyApplied }
 ```
 
-- 같은 전이를 다시 요청하면 `AlreadyApplied`를 반환하고 상태를 바꾸지 않는다(웹훅 중복 대비).
-- 허용되지 않는 전이(예: `FAILED → SUCCEEDED`)는 순수 Kotlin 예외를 던진다. 코드는 `INVALID_PAYMENT_STATE`이고, 로그와 경보 대상이다.
-- 환불 요청이 승인보다 먼저 오는 경우는 없다. booking은 `PaymentSucceeded`를 받은 뒤에만 `RefundRequested`를 보낸다. 그래도 `REQUESTED`에서 `requestRefund`가 오면 예외를 던진다.
+`Payment`의 인터페이스:
 
-### 2. Flyway `V6__create_payment_tables.sql` (`payment` 스키마)
+- `request(orderId: OrderId, memberId: MemberId, amount: BigDecimal, idempotencyKey: String, now: Instant): Payment`
+- `restore(...)`: 저장 필드 전체와 `version` 복원. 신규 객체의 `id`는 null.
+- `attachPgTransaction(transactionId: String)`: 최초 부착, 같은 값은 no-op, 다른 값은 계약 충돌.
+- `approve(amount: BigDecimal, now: Instant): TransitionResult`: REQUESTED → SUCCEEDED.
+- `fail(reason: String, now: Instant): TransitionResult`: REQUESTED → FAILED.
+- `requestRefund(now: Instant): TransitionResult`: SUCCEEDED → REFUND_REQUESTED.
+- `completeRefund(now: Instant): TransitionResult`: REFUND_REQUESTED → REFUNDED.
 
-| 테이블 | 컬럼 | 제약 |
-|---|---|---|
-| `payment.payment` | `id` identity, `order_id`, `member_id`, `amount numeric(12,0)`, `status`, `idempotency_key varchar(100)`, `pg_transaction_id varchar(100)` null, `failure_reason` null, `requested_at`, `approved_at`, `failed_at`, `refund_requested_at`, `refunded_at`, `version` | `UNIQUE (order_id)`, `UNIQUE (idempotency_key)`, `UNIQUE (pg_transaction_id)` |
-| `payment.webhook_event` | `event_id varchar(64) PK`, `type`, `transaction_id`, `received_at` | 웹훅 중복 제거용 |
+재수신은 AlreadyApplied를 반환한다. 승인 재수신은 SUCCEEDED·REFUND_REQUESTED·REFUNDED, 실패는 FAILED, 환불 요청은 REFUND_REQUESTED·REFUNDED, 환불 완료는 REFUNDED에서 멱등이다. 그 밖의 전이는 `INVALID_PAYMENT_STATE` 순수 Kotlin 예외다. 기존 시각과 상태를 덮어쓰지 않는다.
 
-### 3. 출력 포트와 JPA 어댑터
+금액은 양수·정수 원 단위·numeric(12,0) 범위다. 금액 비교는 compareTo로 하고 승인 금액 불일치는 `PAYMENT_CONTRACT_MISMATCH`로 거부한다. 멱등 키는 비어 있지 않은 최대 100자다. 도메인 예외가 Spring HTTP 타입을 참조하지 않게 한다.
+
+## 영속성 계약
+
+`core/src/main/resources/db/migration/V6__create_payment_tables.sql`을 추가한다.
+
+| 테이블 | 필드와 제약 |
+|---|---|
+| `payment.payment` | id bigint identity PK, order_id·member_id bigint, amount numeric(12,0), status, idempotency_key varchar(100), nullable pg_transaction_id varchar(100), nullable failure_reason, requested_at, nullable approved_at·failed_at·refund_requested_at·refunded_at, version. 시각은 timestamptz. 주문·멱등 키·거래 ID에 각각 UNIQUE. 금액 양수·상태 CHECK. |
+| `payment.webhook_event` | event_id varchar(64) PK, type, transaction_id varchar(100), received_at timestamptz. 모두 NOT NULL. |
+
+`payment.application.port.required.PaymentCommandPort`:
 
 ```kotlin
 interface PaymentCommandPort {
     fun save(payment: Payment): Payment
     fun findByOrderId(orderId: OrderId): Payment?
+    fun findByIdempotencyKey(key: String): Payment?
     fun findByPgTransactionId(transactionId: String): Payment?
-    /** INSERT ... ON CONFLICT DO NOTHING. 처음 받은 eventId면 true */
     fun recordWebhookEvent(eventId: String, type: String, transactionId: String, now: Instant): Boolean
 }
 ```
 
-- 엔티티와 도메인을 분리하고 매퍼로 변환한다. `@Version`을 보존한다.
-- `recordWebhookEvent`가 `ON CONFLICT`를 쓰는 이유: PostgreSQL에서 유니크 위반이 나면 트랜잭션이 abort 상태가 되어 이후 쓰기가 막힌다.
+`payment.adapter.required.jpa.PaymentPersistenceAdapter`와 엔티티·Spring Data 리포지토리·매퍼를 만든다. save는 저장 ID와 최신 버전을 반환한다. @Version과 도메인이 읽은 버전을 보존·검사한다. 같은 주문의 동시 최초 생성은 UNIQUE가 방어하고, 충돌 예외는 호출자에 전파한다.
 
-### 4. 테스트
+웹훅 기록은 엔티티 없이 생성된 jOOQ DSL의 ON CONFLICT (event_id) DO NOTHING으로 구현한다. 신규면 true, 중복이면 false다. 어댑터가 자체 트랜잭션을 열지 않고 호출자의 트랜잭션에 참여한다.
 
-- `core/src/test/kotlin/io/github/ticketing/payment/domain/`: 전이 허용·금지·멱등(순수 단위)
-- `core/src/test/kotlin/io/github/ticketing/payment/adapter/required/jpa/`: 저장 왕복, `order_id` 유니크, `recordWebhookEvent` 중복 시 false
+## 테스트와 AC
 
-## Acceptance Criteria
+- `PaymentTests`: 허용·금지·중복 전이, 환불 후 승인 재수신, 금액·키·ID 검증과 거래 ID 충돌.
+- `PaymentPersistenceTests`: 저장 왕복, 각 유니크 제약, 버전 충돌, 웹훅 중복 false, 롤백 후 같은 eventId 재기록.
+- 테스트 빌드가 마이그레이션에 따라 generateJooq를 실행하는지 확인한다.
 
 ```bash
 test -f core/src/main/resources/db/migration/V6__create_payment_tables.sql
-./scripts/agent/test/run-tests.sh :core:test --tests "io.github.ticketing.payment.*" --tests "io.github.ticketing.HexagonalArchitectureTests"
+test -f core/src/main/kotlin/io/github/ticketing/payment/adapter/required/jpa/PaymentPersistenceAdapter.kt
+./scripts/agent/test/run-tests.sh
 ```
 
-## 검증 절차
+## 금지사항과 완료 기록
 
-1. 위 AC를 실행하고, 실패하면 원인을 수정한다.
-2. `phases/3-payment/index.json`의 해당 step을 업데이트한다:
-   - 성공 → `"status": "completed"`, `"summary": "생성/수정한 파일 경로와 핵심 결론을 2줄·200자 이내로"`
-   - 해결할 수 없는 실패 → `"status": "error"`, `"error_message": "구체적 에러 내용"`
-   - 사용자 개입 필요 → `"status": "blocked"`, `"blocked_reason": "구체적 사유"` 후 즉시 중단
+- booking 내부 타입 import·스키마 간 FK·기존 이벤트 시그니처 변경을 하지 않는다. 이유: booking → payment 단방향 계약을 보존한다.
+- PG 클라이언트·서비스·입력 어댑터를 추가하지 않는다. 이유: 이후 step의 범위다.
+- 생성 코드를 수정하거나 커밋하지 않는다.
 
-## 금지사항
-
-- `io.github.ticketing.booking` 패키지의 어떤 타입도 import하지 마라. 이유: 의존 방향은 `booking → payment` 하나다(ADR 0017). 반대 방향이 생기면 순환이 된다.
-- payment 루트의 이벤트 클래스 시그니처를 바꾸지 마라. 이유: booking이 이미 이 계약으로 구현되어 있다.
-- `booking` 스키마로 FK를 만들지 마라. 이유: 설계 규칙 2
-- PG HTTP 클라이언트, 리스너, 웹훅 컨트롤러를 만들지 마라. 이유: step 1의 범위다.
-- 검색은 `rg`/`fd`를 우선 쓴다. 이유: `.gitignore`를 존중해 `build/` 결과가 섞이지 않고 출력이 짧다. 사용 가능한 도구는 Bash, Read, Write, Edit뿐이다.
-- 기존 테스트를 깨뜨리지 마라.
-- git commit 하지 마라. 이유: execute.py가 AC 통과를 확인한 뒤 step 단위로 커밋한다.
+AC 통과 후에만 `phases/3-payment/index.json`의 step 0을 completed로 바꾸고 경로·결론을 200자 이내 summary로 남긴다. 실패는 error·error_message, 사용자 결정 필요는 blocked·blocked_reason으로 기록한다. 로드맵 완료 처리와 직접 커밋은 하지 않는다.

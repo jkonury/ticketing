@@ -230,6 +230,15 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 이 구조는 MSA 전환 시 Saga로 그대로 이어진다.
 
+**M1-5 payment 구현 합의 (2026-11-11, 구현 전)**
+
+- PG를 호출하는 결제·환불 리스너는 `@ApplicationModuleListener(propagation = NOT_SUPPORTED)`로 실행한다. 준비 저장 → 트랜잭션 밖 PG 호출 → 최신 행 재조회·결과 반영으로 나눈다. 위의 booking 결제 결과 리스너 트랜잭션 구조와는 역할이 다르다.
+- 결제 상태는 `REQUESTED`, `SUCCEEDED`, `FAILED`, `REFUND_REQUESTED`, `REFUNDED`다. 결제의 미확정 결과(타임아웃·연결 실패·5xx)는 REQUESTED를 유지하고 예외를 전파해 원 이벤트를 미완료로 남긴다. 확정적 거절만 PaymentFailed로 처리한다.
+- 환불 거절·미확정은 REFUND_REQUESTED를 유지하고 예외를 전파한다. 해당 상태에서도 동일한 `refund-{orderId}` 키로 PG에 다시 요청한다. REFUNDED면 종료한다.
+- 재시작·명시적 이벤트 재제출 시 같은 키와 본문으로 재처리한다. 미완료 기록 자체가 즉시 재시도를 뜻하지 않으며, 주기적 스케줄러는 M1-5에 추가하지 않는다. 웹훅과 M2 대사는 별도 복구 경로다.
+- 웹훅 중복 기록·결제 상태 저장·결과 이벤트 발행은 한 트랜잭션이다. 오류 시 중복 기록도 롤백한다. 웹훅 선도착과 지연 PG 응답이 최신 상태를 되돌리지 않게 한다. 병렬 재처리의 HTTP 호출 횟수 대신 실제 거래·환불과 커밋된 상태 전이·이벤트의 중복 방지를 보장한다.
+- 설계 근거는 [ADR 0018](./adr/0018-payment-retry-boundaries.md), 별도 세션 지시서는 [payment phase](../phases/3-payment/README.md)다. 현재 payment는 루트 이벤트 계약만 있으며 M1-5 구현·검증은 미완료다.
+
 ## 7. 인증·인가
 
 - `member` 모듈이 JWT(access/refresh)를 직접 발급한다.
@@ -265,6 +274,14 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 - 결제: **가짜 PG 서버**를 직접 만든다. 지연, 타임아웃, 실패, 중복 웹훅을 설정으로 재현한다. 출력 포트로 추상화하여 추후 실제 PG 어댑터를 추가할 수 있게 한다.
 - 알림: 로그 출력으로 시작.
+
+### fake-pg 연동 계약 (M1-5 구현 예정)
+
+- 결제: `POST /v1/payments`, `Idempotency-Key`, 본문 `{orderId: string, amount: 정수 원 단위}`. 환불: `POST /v1/payments/{transactionId}/refund`, `Idempotency-Key`. 유효한 접수 응답은 202다.
+- 웹훅: 코어의 `POST /api/v1/payments/webhooks/fake-pg`로 승인·실패·환불 완료를 전송한다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.
+- 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). 코어와 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
+- 어댑터 기본 주소는 `http://localhost:8090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 6.4절 정책을 따른다.
+- SUCCESS·FAIL·TIMEOUT·DELAYED·DUPLICATE_WEBHOOK 시나리오는 PG 설정으로 제어한다. TIMEOUT은 HTTP 응답만 늦어도 승인이 진행될 수 있다. fake-pg 자체의 메모리 거래 저장소는 재시작하면 초기화된다.
 
 ## 11. 개발 환경과 테스트
 

@@ -30,3 +30,4 @@
 | [0015](0015-monorepo.md) | 모노레포 | 수락 |
 | [0016](0016-provided-required-packages.md) | 헥사고날 패키지는 provided / required로 명명 | 수락 |
 | [0017](0017-payment-owns-payment-events.md) | 결제 계약 이벤트는 payment 모듈이 소유 (booking → payment 단방향) | 수락 |
+| [0018](0018-payment-retry-boundaries.md) | PG 호출의 트랜잭션 분리와 미확정 결제·환불 재처리 | 수락 |
