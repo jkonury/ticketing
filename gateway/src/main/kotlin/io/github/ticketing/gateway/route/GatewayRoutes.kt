@@ -3,6 +3,7 @@ package io.github.ticketing.gateway.route
 import io.github.ticketing.gateway.admission.AdmissionTokenFilter
 import io.github.ticketing.gateway.auth.GatewayAttributes
 import io.github.ticketing.gateway.auth.MEMBER_HEADER
+import io.github.ticketing.gateway.ratelimit.RateLimitFilter
 import io.github.ticketing.gateway.sse.SseTicketFilter
 import io.github.ticketing.gateway.support.writeProblem
 import org.springframework.boot.context.properties.ConfigurationProperties
@@ -35,6 +36,7 @@ class GatewayRoutes {
         properties: GatewayProperties,
         admissionTokenFilter: AdmissionTokenFilter,
         sseTicketFilter: SseTicketFilter,
+        rateLimitFilter: RateLimitFilter,
     ): RouteLocator {
         val requireMember = GatewayFilter { exchange, chain ->
             val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
@@ -54,17 +56,17 @@ class GatewayRoutes {
         }
         return builder.routes {
             route(id = "realtime-queues", order = QUEUE_ROUTE_ORDER, uri = properties.realtimeUri) {
-                path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember) }
+                path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember).filter(rateLimitFilter) }
             }
             route(id = "realtime-streams", order = -1, uri = properties.realtimeUri) {
-                path("/api/v1/streams/**").filters { filters -> filters.filter(sseTicketFilter) }
+                path("/api/v1/streams/**").filters { filters -> filters.filter(sseTicketFilter).filter(rateLimitFilter) }
             }
             route(id = "core-bookings-create", order = -1, uri = properties.coreUri) {
                 path("/api/v1/bookings").and().method(org.springframework.http.HttpMethod.POST)
-                    .filters { filters -> filters.filter(requireBookingMember).filter(admissionTokenFilter) }
+                    .filters { filters -> filters.filter(requireBookingMember).filter(admissionTokenFilter).filter(rateLimitFilter) }
             }
             route(id = "core-api", order = 0, uri = properties.coreUri) {
-                path("/api/v1/**")
+                path("/api/v1/**").filters { filters -> filters.filter(rateLimitFilter) }
             }
         }
     }

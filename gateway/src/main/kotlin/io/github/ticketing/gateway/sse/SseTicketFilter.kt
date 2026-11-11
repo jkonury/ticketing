@@ -1,5 +1,6 @@
 package io.github.ticketing.gateway.sse
 
+import io.github.ticketing.gateway.auth.GatewayAttributes
 import io.github.ticketing.gateway.auth.MEMBER_HEADER
 import io.github.ticketing.gateway.support.writeProblem
 import org.springframework.cloud.gateway.filter.GatewayFilter
@@ -20,6 +21,7 @@ class SseTicketFilter(private val redis: ReactiveStringRedisTemplate) : GatewayF
         return redis.opsForValue().getAndDelete("sse:ticket:$ticket")
             .mapNotNull { it.toLongOrNull() }
             .flatMap { memberId ->
+                exchange.attributes[GatewayAttributes.MEMBER_ID] = memberId
                 val uri = UriComponentsBuilder.fromUri(exchange.request.uri).replaceQueryParam("ticket").build(true).toUri()
                 val request = exchange.request.mutate().uri(uri).headers { it.set(MEMBER_HEADER, memberId.toString()) }.build()
                 chain.filter(exchange.mutate().request(request).build()).thenReturn(true)

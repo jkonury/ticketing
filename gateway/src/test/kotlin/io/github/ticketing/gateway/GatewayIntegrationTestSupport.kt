@@ -18,18 +18,23 @@ import reactor.netty.DisposableServer
 import reactor.netty.http.server.HttpServer
 import java.net.URI
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
 private const val TEST_SECRET = "test-secret-test-secret-test-secret-0123"
 
 @AutoConfigureWebTestClient
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-abstract class GatewayIntegrationTestSupport(protected val client: WebTestClient) {
+abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClient) {
+    protected lateinit var client: WebTestClient
     protected val core = TestInfrastructure.core
     protected val realtime = TestInfrastructure.realtime
 
     @BeforeEach
     fun clearRequests() {
+        val id = UUID.randomUUID().hashCode()
+        client =
+            baseClient.mutate().defaultHeader("X-Forwarded-For", "10.${(id ushr 16) and 255}.${(id ushr 8) and 255}.${id and 255}").build()
         core.clear()
         realtime.clear()
     }
@@ -48,6 +53,12 @@ abstract class GatewayIntegrationTestSupport(protected val client: WebTestClient
         @JvmStatic
         @DynamicPropertySource
         fun properties(registry: DynamicPropertyRegistry) {
+            registry.add("ticketing.gateway.rate-limit.default.replenish-rate") { 1 }
+            registry.add("ticketing.gateway.rate-limit.default.burst-capacity") { 2 }
+            registry.add("ticketing.gateway.rate-limit.booking-create.replenish-rate") { 1 }
+            registry.add("ticketing.gateway.rate-limit.booking-create.burst-capacity") { 2 }
+            registry.add("ticketing.gateway.rate-limit.streams.replenish-rate") { 1 }
+            registry.add("ticketing.gateway.rate-limit.streams.burst-capacity") { 3 }
             registry.add("ticketing.jwt.secret") { TEST_SECRET }
             registry.add("ticketing.gateway.core-uri") { TestInfrastructure.core.uri }
             registry.add("ticketing.gateway.realtime-uri") { TestInfrastructure.realtime.uri }
