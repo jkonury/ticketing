@@ -35,8 +35,10 @@ class FakePgAdapterTests {
         server.expect(requestTo("http://localhost:8090/v1/payments"))
             .andExpect(method(HttpMethod.POST)).andExpect(header("Idempotency-Key", "pay-1"))
             .andExpect(content().json("""{"orderId":"order-1","amount":1000}"""))
-            .andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
-                .body("""{"transactionId":"tx-1","status":"PENDING"}"""))
+            .andRespond(
+                withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
+                    .body("""{"transactionId":"tx-1","status":"PENDING"}"""),
+            )
 
         assertThat(adapter.requestPayment(payment)).isEqualTo(PgRequestResult.Accepted("tx-1"))
 
@@ -48,8 +50,10 @@ class FakePgAdapterTests {
         server.expect(requestTo("http://localhost:8090/v1/payments/tx-1/refund"))
             .andExpect(method(HttpMethod.POST)).andExpect(header("Idempotency-Key", "refund-1"))
             .andExpect(content().string(""))
-            .andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
-                .body("""{"transactionId":"tx-1","status":"REFUNDED"}"""))
+            .andRespond(
+                withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
+                    .body("""{"transactionId":"tx-1","status":"REFUNDED"}"""),
+            )
 
         assertThat(adapter.requestRefund("tx-1", "refund-1")).isEqualTo(PgRequestResult.Accepted("tx-1"))
 
@@ -59,7 +63,9 @@ class FakePgAdapterTests {
     @Test
     fun `클라이언트 오류는 거절하고 서버 오류는 미확정으로 분류한다`() {
         server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.CONFLICT).body("secret"))
-        server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body("secret"))
+        server.expect(
+            requestTo("http://localhost:8090/v1/payments"),
+        ).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body("secret"))
 
         assertThat(adapter.requestPayment(payment)).isEqualTo(PgRequestResult.Rejected("HTTP_4XX"))
         assertThat(adapter.requestPayment(payment)).isEqualTo(PgRequestResult.Unknown("HTTP_ERROR"))
@@ -68,8 +74,16 @@ class FakePgAdapterTests {
     @Test
     fun `예상하지 않은 응답과 환불 거래 불일치는 미확정이다`() {
         server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.OK))
-        server.expect(requestTo("http://localhost:8090/v1/payments")).andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).body("invalid"))
-        server.expect(requestTo("http://localhost:8090/v1/payments/tx-1/refund")).andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).body("""{"transactionId":"tx-2","status":"REFUNDED"}"""))
+        server.expect(
+            requestTo("http://localhost:8090/v1/payments"),
+        ).andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON).body("invalid"))
+        server.expect(
+            requestTo("http://localhost:8090/v1/payments/tx-1/refund"),
+        ).andRespond(
+            withStatus(
+                HttpStatus.ACCEPTED,
+            ).contentType(MediaType.APPLICATION_JSON).body("""{"transactionId":"tx-2","status":"REFUNDED"}"""),
+        )
 
         assertThat(adapter.requestPayment(payment)).isInstanceOf(PgRequestResult.Unknown::class.java)
         assertThat(adapter.requestPayment(payment)).isInstanceOf(PgRequestResult.Unknown::class.java)
@@ -78,8 +92,12 @@ class FakePgAdapterTests {
 
     @Test
     fun `소수나 범위를 초과하는 금액은 손실 없이 변환할 수 없다`() {
-        assertThatThrownBy { adapter.requestPayment(payment.copy(amount = BigDecimal("1.5"))) }.isInstanceOf(ArithmeticException::class.java)
-        assertThatThrownBy { adapter.requestPayment(payment.copy(amount = BigDecimal("9223372036854775808"))) }.isInstanceOf(ArithmeticException::class.java)
+        assertThatThrownBy {
+            adapter.requestPayment(payment.copy(amount = BigDecimal("1.5")))
+        }.isInstanceOf(ArithmeticException::class.java)
+        assertThatThrownBy {
+            adapter.requestPayment(payment.copy(amount = BigDecimal("9223372036854775808")))
+        }.isInstanceOf(ArithmeticException::class.java)
     }
 
     @Test
@@ -97,7 +115,12 @@ class FakePgAdapterTests {
         http.start()
 
         try {
-            val properties = PaymentPgProperties(baseUrl = "http://127.0.0.1:${http.address.port}", readTimeout = Duration.ofMillis(100), webhookSecret = "secret")
+            val properties =
+                PaymentPgProperties(
+                    baseUrl = "http://127.0.0.1:${http.address.port}",
+                    readTimeout = Duration.ofMillis(100),
+                    webhookSecret = "secret",
+                )
             val realAdapter = PaymentPgConfiguration().fakePgAdapter(RestClient.builder(), properties)
 
             assertThat(realAdapter.requestPayment(payment)).isInstanceOf(PgRequestResult.Unknown::class.java)

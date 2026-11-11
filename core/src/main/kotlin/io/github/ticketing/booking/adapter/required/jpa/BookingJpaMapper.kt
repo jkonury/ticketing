@@ -58,9 +58,16 @@ internal fun BookingJpaEntity.toDomain(): Booking = Booking.restore(
 )
 
 internal fun ScheduleSeatCopy.toEntity() = ScheduleSeatCopyJpaEntity(
-    ScheduleSeatKey(scheduleId.value, seatId.value), grade, label, price,
+    ScheduleSeatKey(scheduleId.value, seatId.value),
+    grade,
+    label,
+    price,
 )
 
 internal fun ScheduleSeatCopyJpaEntity.toDomain() = ScheduleSeatCopy(
-    ScheduleId(key.scheduleId), SeatId(key.seatId), grade, label, price,
+    ScheduleId(key.scheduleId),
+    SeatId(key.seatId),
+    grade,
+    label,
+    price,
 )

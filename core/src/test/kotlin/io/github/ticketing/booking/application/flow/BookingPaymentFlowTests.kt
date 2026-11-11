@@ -128,7 +128,11 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val scheduleId = System.nanoTime()
         register.register(
             RegisterScheduleSeatsCommand(
-                scheduleId, 1, "결제 흐름 공연", 2, Instant.parse("2027-01-01T10:00:00Z"),
+                scheduleId,
+                1,
+                "결제 흐름 공연",
+                2,
+                Instant.parse("2027-01-01T10:00:00Z"),
                 (1..seatCount).map { RegisterScheduleSeatsCommand.SeatInfo(it.toLong(), "R", "A구역 ${it}번", BigDecimal(100000)) },
             ),
         )
@@ -192,7 +196,10 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         val token = token()
         val id = book(token, schedule, listOf(1, 2))
 
-        pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.bookingId").value(id)).andExpect(jsonPath("$.status").value("PENDING"))
+        pay(
+            token,
+            id,
+        ).andExpect(status().isAccepted).andExpect(jsonPath("$.bookingId").value(id)).andExpect(jsonPath("$.status").value("PENDING"))
         pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.status").value("PENDING"))
 
         val requested = collector.of(PaymentRequested::class.java) { it.orderId == id }
@@ -350,7 +357,9 @@ class BookingPaymentFlowTests : IntegrationTestSupport() {
         assertThat(cancelled.refundRequired).isTrue()
         assertThat(soldSeatCount(id)).isZero()
         assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).isEmpty()
-        assertThat(jdbc.queryForObject("SELECT cancel_reason FROM booking.booking WHERE id = ?", String::class.java, id)).isEqualTo("AMOUNT_MISMATCH")
+        assertThat(
+            jdbc.queryForObject("SELECT cancel_reason FROM booking.booking WHERE id = ?", String::class.java, id),
+        ).isEqualTo("AMOUNT_MISMATCH")
 
         book(token(), schedule, listOf(1, 2))
     }

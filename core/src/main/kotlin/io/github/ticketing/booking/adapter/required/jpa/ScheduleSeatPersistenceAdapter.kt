@@ -11,10 +11,8 @@ import ticketing.jooq.booking.tables.references.SCHEDULE
 import java.time.ZoneOffset
 
 @Repository
-internal class ScheduleSeatPersistenceAdapter(
-    private val seatRepository: ScheduleSeatCopyJpaRepository,
-    private val dsl: DSLContext,
-) : ScheduleSeatCommandPort {
+internal class ScheduleSeatPersistenceAdapter(private val seatRepository: ScheduleSeatCopyJpaRepository, private val dsl: DSLContext) :
+    ScheduleSeatCommandPort {
     override fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>): Boolean {
         // 동시에 같은 이벤트가 와도 한쪽만 삽입되도록 회차 행을 먼저 ON CONFLICT로 선점한다.
         // jOOQ 쓰기는 JPA flush를 일으키지 않으므로 좌석 saveAll보다 앞에 둔다
@@ -33,8 +31,7 @@ internal class ScheduleSeatPersistenceAdapter(
         return true
     }
 
-    override fun existsSchedule(scheduleId: ScheduleId): Boolean =
-        dsl.fetchExists(SCHEDULE, SCHEDULE.SCHEDULE_ID.eq(scheduleId.value))
+    override fun existsSchedule(scheduleId: ScheduleId): Boolean = dsl.fetchExists(SCHEDULE, SCHEDULE.SCHEDULE_ID.eq(scheduleId.value))
 
     override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> {
         if (seatIds.isEmpty()) return emptyList()

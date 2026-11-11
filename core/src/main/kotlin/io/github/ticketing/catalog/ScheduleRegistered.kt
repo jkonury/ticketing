@@ -18,9 +18,4 @@ data class ScheduleRegistered(
 )
 
 /** [grade]는 등급 이름(VIP, R, S, A), [label]은 표시용 문자열이다(예: "A구역 3열 5번"). */
-data class ScheduleSeat(
-    val seatId: Long,
-    val grade: String,
-    val label: String,
-    val price: BigDecimal,
-)
+data class ScheduleSeat(val seatId: Long, val grade: String, val label: String, val price: BigDecimal)

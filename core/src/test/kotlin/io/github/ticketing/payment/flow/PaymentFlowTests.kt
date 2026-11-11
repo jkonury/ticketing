@@ -106,7 +106,9 @@ class PaymentFlowTests : IntegrationTestSupport() {
         val transactions = ConcurrentHashMap<String, String>()
 
         @Volatile var gate: CountDownLatch? = null
+
         @Volatile var paymentResult = "accepted"
+
         @Volatile var refundResult = "accepted"
 
         override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
@@ -176,7 +178,11 @@ class PaymentFlowTests : IntegrationTestSupport() {
         val scheduleId = System.nanoTime()
         register.register(
             RegisterScheduleSeatsCommand(
-                scheduleId, 1, "결제 흐름 공연", 2, Instant.parse("2027-01-01T10:00:00Z"),
+                scheduleId,
+                1,
+                "결제 흐름 공연",
+                2,
+                Instant.parse("2027-01-01T10:00:00Z"),
                 (1..seatCount).map { RegisterScheduleSeatsCommand.SeatInfo(it.toLong(), "R", "A구역 ${it}번", BigDecimal(100000)) },
             ),
         )
@@ -222,15 +228,23 @@ class PaymentFlowTests : IntegrationTestSupport() {
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(statusOf(token, bookingId)).isEqualTo(expected) }
     }
 
-    private fun paymentStatus(id: Long): String? = jdbc.queryForList("select status from payment.payment where order_id = ?", String::class.java, id).firstOrNull()
+    private fun paymentStatus(id: Long): String? =
+        jdbc.queryForList("select status from payment.payment where order_id = ?", String::class.java, id).firstOrNull()
 
     private fun publicationStatus(id: Long, listener: String): String? = jdbc.queryForList(
-        "select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%$listener%", "%\"orderId\":$id%",
+        "select status from event_publication where listener_id like ? and serialized_event like ?",
+        String::class.java,
+        "%$listener%",
+        "%\"orderId\":$id%",
     ).firstOrNull()
 
-    private fun awaitPayment(id: Long, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(paymentStatus(id)).isEqualTo(expected) }
+    private fun awaitPayment(id: Long, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted {
+        assertThat(paymentStatus(id)).isEqualTo(expected)
+    }
 
-    private fun awaitPublication(id: Long, listener: String, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(publicationStatus(id, listener)).isEqualTo(expected) }
+    private fun awaitPublication(id: Long, listener: String, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted {
+        assertThat(publicationStatus(id, listener)).isEqualTo(expected)
+    }
 
     private fun resubmit(id: Long) = incomplete.resubmitIncompletePublications { publication ->
         when (val event = publication.event) {
@@ -318,7 +332,11 @@ class PaymentFlowTests : IntegrationTestSupport() {
         resubmit(id)
         awaitPublication(id, "PaymentRequestListener", "COMPLETED")
 
-        assertThat(pg.requests.filter { it.orderId == id.toString() }.map { it.idempotencyKey }).containsExactly("booking-$id", "booking-$id")
+        assertThat(
+            pg.requests.filter {
+                it.orderId == id.toString()
+            }.map { it.idempotencyKey },
+        ).containsExactly("booking-$id", "booking-$id")
 
         webhook(id, "PAYMENT_APPROVED").andExpect(status().isOk)
         awaitStatus(token, id, "CONFIRMED")
@@ -410,7 +428,12 @@ class PaymentFlowTests : IntegrationTestSupport() {
         val pool = Executors.newFixedThreadPool(ids.size)
         try {
             val ready = CountDownLatch(1)
-            val futures = ids.map { event -> pool.submit<Int> { ready.await(); webhook(id, "PAYMENT_APPROVED", event).andReturn().response.status } }
+            val futures = ids.map { event ->
+                pool.submit<Int> {
+                    ready.await()
+                    webhook(id, "PAYMENT_APPROVED", event).andReturn().response.status
+                }
+            }
 
             ready.countDown()
             futures.forEachIndexed { index, result ->
@@ -441,7 +464,12 @@ class PaymentFlowTests : IntegrationTestSupport() {
             try {
                 val ready = CountDownLatch(1)
                 val futures = (1..2).map { index ->
-                    pool.submit { ready.await(); tx.executeWithoutResult { publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong()))) } }
+                    pool.submit {
+                        ready.await()
+                        tx.executeWithoutResult {
+                            publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong())))
+                        }
+                    }
                 }
                 ready.countDown()
                 futures.forEach { it.get(10, TimeUnit.SECONDS) }
@@ -449,11 +477,18 @@ class PaymentFlowTests : IntegrationTestSupport() {
                 pool.shutdownNow()
             }
 
-            await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pg.requests.count { it.orderId == id.toString() }).isGreaterThanOrEqualTo(2) }
+            await().atMost(Duration.ofSeconds(10)).untilAsserted {
+                assertThat(pg.requests.count { it.orderId == id.toString() }).isGreaterThanOrEqualTo(2)
+            }
 
             gate.countDown()
             await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                val statuses = jdbc.queryForList("select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%PaymentRequestListener%", "%\"orderId\":$id%")
+                val statuses = jdbc.queryForList(
+                    "select status from event_publication where listener_id like ? and serialized_event like ?",
+                    String::class.java,
+                    "%PaymentRequestListener%",
+                    "%\"orderId\":$id%",
+                )
                 assertThat(statuses).hasSize(3).allMatch { it == "FAILED" }
             }
 
@@ -461,12 +496,22 @@ class PaymentFlowTests : IntegrationTestSupport() {
             repeat(3) {
                 resubmit(id)
                 await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                    val statuses = jdbc.queryForList("select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%PaymentRequestListener%", "%\"orderId\":$id%")
+                    val statuses = jdbc.queryForList(
+                        "select status from event_publication where listener_id like ? and serialized_event like ?",
+                        String::class.java,
+                        "%PaymentRequestListener%",
+                        "%\"orderId\":$id%",
+                    )
                     assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" || it == "FAILED" }
                 }
             }
             await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                val statuses = jdbc.queryForList("select status from event_publication where listener_id like ? and serialized_event like ?", String::class.java, "%PaymentRequestListener%", "%\"orderId\":$id%")
+                val statuses = jdbc.queryForList(
+                    "select status from event_publication where listener_id like ? and serialized_event like ?",
+                    String::class.java,
+                    "%PaymentRequestListener%",
+                    "%\"orderId\":$id%",
+                )
                 assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" }
             }
 
@@ -481,5 +526,6 @@ class PaymentFlowTests : IntegrationTestSupport() {
         }
     }
 
-    private fun snapshot(scheduleId: Long, seatId: Long): String? = redis.opsForHash<String, String>().get(snapshotKey(ScheduleId(scheduleId)), seatId.toString())
+    private fun snapshot(scheduleId: Long, seatId: Long): String? =
+        redis.opsForHash<String, String>().get(snapshotKey(ScheduleId(scheduleId)), seatId.toString())
 }

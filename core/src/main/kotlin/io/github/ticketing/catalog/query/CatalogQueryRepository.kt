@@ -49,7 +49,9 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
             .from(PERFORMANCE_PRICE)
             .where(PERFORMANCE_PRICE.PERFORMANCE_ID.eq(id))
             .orderBy(PERFORMANCE_PRICE.PRICE.desc())
-            .fetch { GradePrice(requireNotNull(it[PERFORMANCE_PRICE.GRADE]), BigDecimal.valueOf(requireNotNull(it[PERFORMANCE_PRICE.PRICE]))) }
+            .fetch {
+                GradePrice(requireNotNull(it[PERFORMANCE_PRICE.GRADE]), BigDecimal.valueOf(requireNotNull(it[PERFORMANCE_PRICE.PRICE])))
+            }
 
         val schedules = dsl.select(SCHEDULE.ID, SCHEDULE.STARTS_AT)
             .from(SCHEDULE)
@@ -73,11 +75,20 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
         val exists = dsl.fetchExists(SCHEDULE, SCHEDULE.ID.eq(scheduleId))
         if (!exists) return null
 
-        val seats = dsl.select(VENUE_SEAT.ID, VENUE_SEAT.SECTION, VENUE_SEAT.ROW_LABEL, VENUE_SEAT.SEAT_NUMBER, VENUE_SEAT.GRADE, PERFORMANCE_PRICE.PRICE)
+        val seats = dsl.select(
+            VENUE_SEAT.ID,
+            VENUE_SEAT.SECTION,
+            VENUE_SEAT.ROW_LABEL,
+            VENUE_SEAT.SEAT_NUMBER,
+            VENUE_SEAT.GRADE,
+            PERFORMANCE_PRICE.PRICE,
+        )
             .from(SCHEDULE)
             .join(PERFORMANCE).on(PERFORMANCE.ID.eq(SCHEDULE.PERFORMANCE_ID))
             .join(VENUE_SEAT).on(VENUE_SEAT.VENUE_ID.eq(PERFORMANCE.VENUE_ID))
-            .join(PERFORMANCE_PRICE).on(PERFORMANCE_PRICE.PERFORMANCE_ID.eq(PERFORMANCE.ID).and(PERFORMANCE_PRICE.GRADE.eq(VENUE_SEAT.GRADE)))
+            .join(
+                PERFORMANCE_PRICE,
+            ).on(PERFORMANCE_PRICE.PERFORMANCE_ID.eq(PERFORMANCE.ID).and(PERFORMANCE_PRICE.GRADE.eq(VENUE_SEAT.GRADE)))
             .where(SCHEDULE.ID.eq(scheduleId))
             .orderBy(VENUE_SEAT.SECTION, VENUE_SEAT.ROW_LABEL, VENUE_SEAT.SEAT_NUMBER)
             .fetch {

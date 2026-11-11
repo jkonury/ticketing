@@ -1,20 +1,20 @@
 package io.github.ticketing.booking.adapter.provided.web
 
-import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
-import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
-import org.springframework.test.context.bean.override.mockito.MockitoBean
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.holdKey
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
+import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
+import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -29,6 +29,7 @@ import java.util.UUID
 @AutoConfigureMockMvc
 class BookingApiIntegrationTests : IntegrationTestSupport() {
     @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
+
     @MockitoBean lateinit var refundRequestListener: RefundRequestListener
 
     @Autowired lateinit var mvc: MockMvc
@@ -43,7 +44,11 @@ class BookingApiIntegrationTests : IntegrationTestSupport() {
         val scheduleId = System.nanoTime()
         register.register(
             RegisterScheduleSeatsCommand(
-                scheduleId, 1, title, 2, Instant.parse("2027-01-01T10:00:00Z"),
+                scheduleId,
+                1,
+                title,
+                2,
+                Instant.parse("2027-01-01T10:00:00Z"),
                 (1..seatCount).map { RegisterScheduleSeatsCommand.SeatInfo(it.toLong(), "R", "A구역 ${it}번", BigDecimal(100000)) },
             ),
         )

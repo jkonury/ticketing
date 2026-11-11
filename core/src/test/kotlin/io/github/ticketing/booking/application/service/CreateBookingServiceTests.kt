@@ -57,7 +57,8 @@ class CreateBookingServiceTests {
         override fun deleteSoldSeats(bookingId: BookingId) = Unit
     }
 
-    private class FakeScheduleSeats(private val schedules: Set<ScheduleId>, private val seats: List<ScheduleSeatCopy>) : ScheduleSeatCommandPort {
+    private class FakeScheduleSeats(private val schedules: Set<ScheduleId>, private val seats: List<ScheduleSeatCopy>) :
+        ScheduleSeatCommandPort {
         override fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>) = false
         override fun existsSchedule(scheduleId: ScheduleId) = scheduleId in schedules
         override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>) =

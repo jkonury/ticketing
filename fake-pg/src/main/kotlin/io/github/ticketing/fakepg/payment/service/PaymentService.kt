@@ -56,10 +56,14 @@ class PaymentService(
         val webhook = properties.webhook
         when (tx.scenario) {
             Scenario.SUCCESS -> scheduleApproval(tx, webhook.delay, copies = 1)
+
             Scenario.FAIL -> scheduleFailure(tx, webhook.delay)
+
             // 클라이언트 응답만 늦고 결제 자체는 정상 승인된다
             Scenario.TIMEOUT -> scheduleApproval(tx, webhook.delay, copies = 1)
+
             Scenario.DELAYED -> scheduleApproval(tx, properties.behavior.delayedWebhookDelay, copies = 1)
+
             Scenario.DUPLICATE_WEBHOOK -> scheduleApproval(tx, webhook.delay, copies = 1 + webhook.duplicateCount)
         }
     }

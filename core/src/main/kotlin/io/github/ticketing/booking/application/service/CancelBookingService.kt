@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.application.service
 
+import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.application.port.provided.BookingResult
 import io.github.ticketing.booking.application.port.provided.CancelBookingUseCase
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
@@ -7,14 +8,13 @@ import io.github.ticketing.booking.application.port.required.ScheduleSeatCommand
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.BookingStatus
-import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.domain.CancelOutcome
 import io.github.ticketing.booking.domain.CancelReason
-import io.github.ticketing.payment.RefundRequested
-import org.springframework.context.ApplicationEventPublisher
 import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.NotBookingOwnerException
+import io.github.ticketing.payment.RefundRequested
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
@@ -63,13 +63,19 @@ class CancelBookingService(
         val seatIds = booking.seats.map { it.seatId }
         when (after) {
             After.Nothing -> Unit
+
             After.ReleaseHold -> runCatching { seatHold.release(booking.scheduleId, seatIds, booking.holdToken, clock.instant()) }
                 .onFailure { log.warn("예매 취소 후 선점 해제에 실패했다. bookingId={}", bookingId, it) }
+
             After.MarkAvailable -> runCatching { seatHold.markAvailable(booking.scheduleId, seatIds, clock.instant()) }
                 .onFailure { log.warn("확정 예매 취소 후 좌석 반환에 실패했다. bookingId={}", bookingId, it) }
         }
 
-        if (after != After.Nothing) log.info("예매 취소 bookingId={} memberId={} confirmed={}", bookingId, memberId, after == After.MarkAvailable)
+        if (after !=
+            After.Nothing
+        ) {
+            log.info("예매 취소 bookingId={} memberId={} confirmed={}", bookingId, memberId, after == After.MarkAvailable)
+        }
 
         val labels = scheduleSeats.findSeats(booking.scheduleId, booking.seats.map { it.seatId }).associate { it.seatId to it.label }
         booking.toResult(labels)

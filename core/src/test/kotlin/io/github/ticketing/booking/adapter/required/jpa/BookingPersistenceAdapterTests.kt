@@ -33,15 +33,19 @@ class BookingPersistenceAdapterTests : IntegrationTestSupport() {
     private val now = Instant.parse("2026-11-10T10:00:00Z")
     private val ids = AtomicLong(System.nanoTime() % 1_000_000_000L * 100)
 
-    private fun newBooking(member: Long = ids.incrementAndGet(), schedule: Long = ids.incrementAndGet(), key: String = UUID.randomUUID().toString(), vararg seats: Long) =
-        Booking.create(
-            MemberId(member),
-            ScheduleId(schedule),
-            (seats.takeIf { it.isNotEmpty() } ?: longArrayOf(1, 2)).map { BookedSeat(SeatId(it), BigDecimal(10_000)) },
-            HoldToken(UUID.randomUUID().toString()),
-            now,
-            key,
-        )
+    private fun newBooking(
+        member: Long = ids.incrementAndGet(),
+        schedule: Long = ids.incrementAndGet(),
+        key: String = UUID.randomUUID().toString(),
+        vararg seats: Long,
+    ) = Booking.create(
+        MemberId(member),
+        ScheduleId(schedule),
+        (seats.takeIf { it.isNotEmpty() } ?: longArrayOf(1, 2)).map { BookedSeat(SeatId(it), BigDecimal(10_000)) },
+        HoldToken(UUID.randomUUID().toString()),
+        now,
+        key,
+    )
 
     @Test
     fun `저장하고 조회하면 좌석과 상태가 그대로 복원된다`() {

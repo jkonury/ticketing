@@ -21,12 +21,15 @@ class BookingFlowE2ETests : FlowSupport() {
         webhook(id, "PAYMENT_APPROVED", 200000)
         awaitStatus(user, id, "CONFIRMED")
 
-        val list = parse(mvc.perform(get("/api/v1/bookings/me").header("Authorization", "Bearer $user")).andExpect(status().isOk).andReturn())
+        val list =
+            parse(mvc.perform(get("/api/v1/bookings/me").header("Authorization", "Bearer $user")).andExpect(status().isOk).andReturn())
 
         assertThat((list["items"] as List<*>).map { (it as Map<*, *>)["bookingId"] }).contains(id.toInt())
         eventually {
             assertThat(sold(schedule)).isEqualTo(2)
-            schedule.seats.take(2).forEach { assertThat(redis.opsForHash<String, String>().get(snapshot(schedule), it.toString())).isEqualTo("SOLD") }
+            schedule.seats.take(2).forEach {
+                assertThat(redis.opsForHash<String, String>().get(snapshot(schedule), it.toString())).isEqualTo("SOLD")
+            }
         }
     }
 }

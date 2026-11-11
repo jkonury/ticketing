@@ -76,10 +76,7 @@ class BookingController(
 
 data class PaymentRequestResponse(val bookingId: Long, val status: String)
 
-data class CreateBookingRequest(
-    val scheduleId: Long,
-    @field:NotEmpty @field:Size(min = 1, max = 4) val seatIds: List<Long>,
-)
+data class CreateBookingRequest(val scheduleId: Long, @field:NotEmpty @field:Size(min = 1, max = 4) val seatIds: List<Long>)
 
 data class BookingSeatResponse(val seatId: Long, val label: String, val price: java.math.BigDecimal)
 
@@ -92,7 +89,10 @@ data class BookingResponse(
 ) {
     companion object {
         fun from(result: BookingResult) = BookingResponse(
-            result.bookingId, result.status, result.totalAmount, result.expiresAt,
+            result.bookingId,
+            result.status,
+            result.totalAmount,
+            result.expiresAt,
             result.seats.map { BookingSeatResponse(it.seatId, it.label, it.price) },
         )
     }
@@ -112,7 +112,15 @@ data class BookingPageResponse(val items: List<BookingSummaryResponse>, val next
     companion object {
         fun from(page: BookingPage) = BookingPageResponse(
             page.items.map {
-                BookingSummaryResponse(it.bookingId, it.status, it.performanceTitle, it.startsAt, it.seatCount, it.totalAmount, it.createdAt)
+                BookingSummaryResponse(
+                    it.bookingId,
+                    it.status,
+                    it.performanceTitle,
+                    it.startsAt,
+                    it.seatCount,
+                    it.totalAmount,
+                    it.createdAt,
+                )
             },
             page.nextCursor,
         )
@@ -131,7 +139,13 @@ data class BookingDetailResponse(
 ) {
     companion object {
         fun from(view: BookingDetailView) = BookingDetailResponse(
-            view.bookingId, view.status, view.performanceTitle, view.startsAt, view.totalAmount, view.expiresAt, view.createdAt,
+            view.bookingId,
+            view.status,
+            view.performanceTitle,
+            view.startsAt,
+            view.totalAmount,
+            view.expiresAt,
+            view.createdAt,
             view.seats.map { BookingSeatResponse(it.seatId, it.label, it.price) },
         )
     }

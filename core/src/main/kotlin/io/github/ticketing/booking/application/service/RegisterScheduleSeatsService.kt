@@ -24,8 +24,12 @@ class RegisterScheduleSeatsService(
     override fun register(command: RegisterScheduleSeatsCommand): Boolean {
         val scheduleId = ScheduleId(command.scheduleId)
         val schedule = ScheduleCopy(
-            scheduleId, command.performanceId, command.performanceTitle,
-            command.organizerId, command.startsAt, clock.instant(),
+            scheduleId,
+            command.performanceId,
+            command.performanceTitle,
+            command.organizerId,
+            command.startsAt,
+            clock.instant(),
         )
         val seats = command.seats.map { ScheduleSeatCopy(scheduleId, SeatId(it.seatId), it.grade, it.label, it.price) }
         val saved = scheduleSeats.saveIfAbsent(schedule, seats)

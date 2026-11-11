@@ -61,6 +61,7 @@ class CreateBookingService(
                 existing(memberId, command.idempotencyKey)?.let { return it }
                 throw SeatAlreadyHeldException(held.seatIds.map { it.value })
             }
+
             HoldResult.Held -> Unit
         }
 

@@ -15,7 +15,18 @@ import javax.crypto.spec.SecretKeySpec
 
 class InvalidWebhookSignatureException : DomainException("INVALID_WEBHOOK_SIGNATURE", HttpStatus.UNAUTHORIZED, "웹훅 서명이 올바르지 않습니다.")
 class InvalidPaymentWebhookException : DomainException("INVALID_PAYMENT_WEBHOOK", HttpStatus.BAD_REQUEST, "웹훅 입력이 올바르지 않습니다.")
-class PaymentWebhookRuleException(code: String) : DomainException(code, if (code == "PAYMENT_NOT_FOUND") HttpStatus.NOT_FOUND else HttpStatus.CONFLICT, code)
+class PaymentWebhookRuleException(code: String) :
+    DomainException(
+        code,
+        if (code ==
+            "PAYMENT_NOT_FOUND"
+        ) {
+            HttpStatus.NOT_FOUND
+        } else {
+            HttpStatus.CONFLICT
+        },
+        code,
+    )
 
 @Component
 class PaymentWebhookSignatureVerifier(private val properties: PaymentPgProperties, private val clock: Clock) {

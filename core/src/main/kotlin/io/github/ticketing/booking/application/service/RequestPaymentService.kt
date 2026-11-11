@@ -37,6 +37,7 @@ class RequestPaymentService(
         val outcome = requireNotNull(tx.execute { requestInTransaction(MemberId(memberId), BookingId(bookingId)) })
         when (outcome) {
             is Outcome.Done -> PaymentRequestResult(bookingId, outcome.booking.status.name)
+
             is Outcome.Expired -> {
                 // 커밋 후에 선점을 푼다. 실패해도 TTL이 만료시킨다
                 val booking = outcome.booking

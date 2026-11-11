@@ -21,10 +21,7 @@ import java.time.LocalDate
 
 @RestController
 @RequestMapping("/v1")
-class PaymentController(
-    private val paymentService: PaymentService,
-    private val properties: FakePgProperties,
-) {
+class PaymentController(private val paymentService: PaymentService, private val properties: FakePgProperties) {
 
     @PostMapping("/payments")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -52,8 +49,6 @@ class PaymentController(
     }
 
     @GetMapping("/transactions")
-    fun transactions(
-        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate,
-    ): List<TransactionResponse> =
+    fun transactions(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate): List<TransactionResponse> =
         paymentService.findTransactions(date).map(TransactionResponse::from)
 }

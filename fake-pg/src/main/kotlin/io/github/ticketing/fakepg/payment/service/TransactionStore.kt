@@ -40,15 +40,13 @@ class TransactionStore {
         return Registration(existing, created = false)
     }
 
-    fun approve(transactionId: String, at: Instant): Transaction? =
-        transactions.computeIfPresent(transactionId) { _, tx ->
-            if (tx.status == TransactionStatus.PENDING) tx.approve(at) else tx
-        }
+    fun approve(transactionId: String, at: Instant): Transaction? = transactions.computeIfPresent(transactionId) { _, tx ->
+        if (tx.status == TransactionStatus.PENDING) tx.approve(at) else tx
+    }
 
-    fun fail(transactionId: String): Transaction? =
-        transactions.computeIfPresent(transactionId) { _, tx ->
-            if (tx.status == TransactionStatus.PENDING) tx.fail() else tx
-        }
+    fun fail(transactionId: String): Transaction? = transactions.computeIfPresent(transactionId) { _, tx ->
+        if (tx.status == TransactionStatus.PENDING) tx.fail() else tx
+    }
 
     /** 같은 거래에 같은 키로 다시 오면 상태를 바꾸지 않고 현재 거래를 돌려준다. */
     fun refund(transactionId: String, key: String, at: Instant): RefundResult {
@@ -67,8 +65,7 @@ class TransactionStore {
         return RefundResult(current, created = false)
     }
 
-    fun findByRequestedDate(date: LocalDate): List<Transaction> =
-        transactions.values
-            .filter { LocalDate.ofInstant(it.requestedAt, ZoneOffset.UTC) == date }
-            .sortedWith(compareBy({ it.requestedAt }, { it.transactionId }))
+    fun findByRequestedDate(date: LocalDate): List<Transaction> = transactions.values
+        .filter { LocalDate.ofInstant(it.requestedAt, ZoneOffset.UTC) == date }
+        .sortedWith(compareBy({ it.requestedAt }, { it.transactionId }))
 }

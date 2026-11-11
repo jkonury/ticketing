@@ -51,7 +51,14 @@ class PaymentListenerTests : IntegrationTestSupport() {
 
         override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
             flags[request.orderId] = TransactionSynchronizationManager.isActualTransactionActive()
-            return if (request.idempotencyKey.startsWith("unknown")) PgRequestResult.Unknown("timeout") else PgRequestResult.Accepted("tx-${request.orderId}")
+            return if (request.idempotencyKey.startsWith(
+                    "unknown",
+                )
+            ) {
+                PgRequestResult.Unknown("timeout")
+            } else {
+                PgRequestResult.Accepted("tx-${request.orderId}")
+            }
         }
 
         override fun requestRefund(transactionId: String, idempotencyKey: String): PgRequestResult {
@@ -83,10 +90,20 @@ class PaymentListenerTests : IntegrationTestSupport() {
 
     private fun assertPublication(listener: String, order: Long, status: String) {
         await().atMost(10, TimeUnit.SECONDS).untilAsserted {
-            val rows = jdbc.queryForList("select status, completion_date from event_publication where listener_id like ? and serialized_event like ?", "%$listener%", "%\"orderId\":$order%")
+            val rows = jdbc.queryForList(
+                "select status, completion_date from event_publication where listener_id like ? and serialized_event like ?",
+                "%$listener%",
+                "%\"orderId\":$order%",
+            )
             assertThat(rows).hasSize(1)
             assertThat(rows.single()["status"]).isEqualTo(status)
-            if (status == "COMPLETED") assertThat(rows.single()["completion_date"]).isNotNull() else assertThat(rows.single()["completion_date"]).isNull()
+            if (status ==
+                "COMPLETED"
+            ) {
+                assertThat(rows.single()["completion_date"]).isNotNull()
+            } else {
+                assertThat(rows.single()["completion_date"]).isNull()
+            }
         }
     }
 

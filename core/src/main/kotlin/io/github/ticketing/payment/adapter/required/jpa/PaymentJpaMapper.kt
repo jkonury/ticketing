@@ -2,8 +2,10 @@ package io.github.ticketing.payment.adapter.required.jpa
 
 import io.github.ticketing.payment.domain.*
 
-internal fun Payment.toNewEntity() = PaymentJpaEntity(orderId.value, memberId.value, amount, idempotencyKey, requestedAt,
-    status.name, pgTransactionId, failureReason, approvedAt, failedAt, refundRequestedAt, refundedAt)
+internal fun Payment.toNewEntity() = PaymentJpaEntity(
+    orderId.value, memberId.value, amount, idempotencyKey, requestedAt,
+    status.name, pgTransactionId, failureReason, approvedAt, failedAt, refundRequestedAt, refundedAt,
+)
 internal fun PaymentJpaEntity.applyChanges(payment: Payment) {
     status = payment.status.name
     pgTransactionId = payment.pgTransactionId

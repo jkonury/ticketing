@@ -62,8 +62,11 @@ class Booking private constructor(
             } else {
                 PaymentOutcome.ConfirmationRequired
             }
+
         BookingStatus.CONFIRMED -> PaymentOutcome.AlreadyConfirmed
+
         BookingStatus.EXPIRED -> PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED)
+
         BookingStatus.CANCELLED -> PaymentOutcome.RefundRequired(RefundReason.BOOKING_CANCELLED)
     }
 
@@ -105,12 +108,14 @@ class Booking private constructor(
                 cancelReason = CancelReason.USER_REQUESTED
                 CancelOutcome.ReleasedHold
             }
+
             BookingStatus.CONFIRMED -> {
                 status = BookingStatus.CANCELLED
                 cancelledAt = now
                 cancelReason = CancelReason.USER_REQUESTED
                 CancelOutcome.RefundRequired
             }
+
             BookingStatus.EXPIRED, BookingStatus.CANCELLED -> throw InvalidBookingStateException(status)
         }
     }

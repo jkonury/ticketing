@@ -2,6 +2,7 @@ package io.github.ticketing.catalog.service
 
 import io.github.ticketing.catalog.ScheduleRegistered
 import io.github.ticketing.catalog.ScheduleSeat
+import io.github.ticketing.catalog.config.CatalogCaches
 import io.github.ticketing.catalog.domain.Performance
 import io.github.ticketing.catalog.domain.Schedule
 import io.github.ticketing.catalog.domain.SeatGrade
@@ -10,7 +11,6 @@ import io.github.ticketing.catalog.domain.VenueSeat
 import io.github.ticketing.catalog.repository.PerformanceRepository
 import io.github.ticketing.catalog.repository.ScheduleRepository
 import io.github.ticketing.catalog.repository.VenueRepository
-import io.github.ticketing.catalog.config.CatalogCaches
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException

@@ -8,11 +8,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import java.time.Instant
 
-data class PaymentRequest(
-    @field:NotBlank val orderId: String,
-    @field:Positive val amount: Long,
-    val scenario: Scenario? = null,
-) {
+data class PaymentRequest(@field:NotBlank val orderId: String, @field:Positive val amount: Long, val scenario: Scenario? = null) {
     fun toCommand() = PaymentCommand(orderId, amount, scenario)
 }
 

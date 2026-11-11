@@ -34,9 +34,8 @@ internal fun BookingRuleException.toApplicationException(): DomainException {
     return BookingRuleViolation(code, status, message ?: code)
 }
 
-internal inline fun <T> translatingRuleViolations(block: () -> T): T =
-    try {
-        block()
-    } catch (e: BookingRuleException) {
-        throw e.toApplicationException()
-    }
+internal inline fun <T> translatingRuleViolations(block: () -> T): T = try {
+    block()
+} catch (e: BookingRuleException) {
+    throw e.toApplicationException()
+}

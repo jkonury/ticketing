@@ -18,7 +18,13 @@ class SeatHoldConcurrencyTests : FlowSupport() {
         val start = CountDownLatch(1)
 
         Executors.newVirtualThreadPerTaskExecutor().use { executor ->
-            val futures = requests.map { request -> executor.submit<MvcResult> { ready.countDown(); check(start.await(20, TimeUnit.SECONDS)); request() } }
+            val futures = requests.map { request ->
+                executor.submit<MvcResult> {
+                    ready.countDown()
+                    check(start.await(20, TimeUnit.SECONDS))
+                    request()
+                }
+            }
 
             check(ready.await(20, TimeUnit.SECONDS))
             start.countDown()
@@ -40,7 +46,13 @@ class SeatHoldConcurrencyTests : FlowSupport() {
 
         assertThat(failures).hasSize(19)
         failures.forEach { assertThat(parse(it)["code"]).isEqualTo("SEAT_ALREADY_HELD") }
-        assertThat(jdbc.queryForObject("select count(*) from booking.booking where schedule_id = ? and status = 'PENDING'", Int::class.java, schedule.id)).isEqualTo(1)
+        assertThat(
+            jdbc.queryForObject(
+                "select count(*) from booking.booking where schedule_id = ? and status = 'PENDING'",
+                Int::class.java,
+                schedule.id,
+            ),
+        ).isEqualTo(1)
 
         val index = results.indexOfFirst { it.response.status == 201 }
         val id = created(results[index])

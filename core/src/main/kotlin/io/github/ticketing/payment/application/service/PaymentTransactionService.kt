@@ -24,7 +24,11 @@ class PaymentTransactionService(
         val keyOwner = payments.findByIdempotencyKey(command.idempotencyKey)
         if (keyOwner != null && keyOwner.orderId != orderId) throw PaymentContractMismatchException()
 
-        val payment = existing ?: payments.save(Payment.request(orderId, MemberId(command.memberId), command.amount, command.idempotencyKey, command.requestedAt))
+        val payment =
+            existing
+                ?: payments.save(
+                    Payment.request(orderId, MemberId(command.memberId), command.amount, command.idempotencyKey, command.requestedAt),
+                )
 
         val sameContract = payment.memberId.value == command.memberId &&
             payment.amount.compareTo(command.amount) == 0 &&

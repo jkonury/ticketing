@@ -31,7 +31,11 @@ class ScheduleRegisteredListenerTests : IntegrationTestSupport() {
     fun `ScheduleRegistered를 받으면 사본이 생기고 같은 이벤트를 다시 받아도 행 수가 같다`() {
         val scheduleId = System.nanoTime()
         val event = ScheduleRegistered(
-            scheduleId, 10, "공연", 20, Instant.parse("2026-12-01T10:00:00Z"),
+            scheduleId,
+            10,
+            "공연",
+            20,
+            Instant.parse("2026-12-01T10:00:00Z"),
             listOf(ScheduleSeat(1, "VIP", "A1", BigDecimal(150000)), ScheduleSeat(2, "R", "B1", BigDecimal(100000))),
         )
 

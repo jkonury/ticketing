@@ -6,10 +6,7 @@ import java.util.random.RandomGenerator
 
 /** 요청에 시나리오가 없으면 설정 확률로 정한다. 우선순위는 FAIL > TIMEOUT > DUPLICATE_WEBHOOK. */
 @Component
-class ScenarioResolver(
-    private val properties: FakePgProperties,
-    private val random: RandomGenerator,
-) {
+class ScenarioResolver(private val properties: FakePgProperties, private val random: RandomGenerator) {
 
     fun resolve(requested: Scenario?): Scenario {
         if (requested != null) return requested

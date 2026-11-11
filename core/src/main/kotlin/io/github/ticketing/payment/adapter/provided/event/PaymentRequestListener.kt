@@ -10,5 +10,6 @@ import org.springframework.transaction.annotation.Propagation
 @Component
 class PaymentRequestListener(private val payments: RequestPaymentUseCase) {
     @ApplicationModuleListener(propagation = Propagation.NOT_SUPPORTED)
-    fun on(event: PaymentRequested) = payments.request(RequestPaymentCommand(event.orderId, event.memberId, event.amount, event.idempotencyKey, event.requestedAt))
+    fun on(event: PaymentRequested) =
+        payments.request(RequestPaymentCommand(event.orderId, event.memberId, event.amount, event.idempotencyKey, event.requestedAt))
 }

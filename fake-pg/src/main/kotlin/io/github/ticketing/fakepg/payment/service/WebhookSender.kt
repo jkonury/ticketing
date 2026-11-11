@@ -46,16 +46,15 @@ class WebhookSender(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun newEvent(type: WebhookEventType, tx: Transaction, failureReason: String? = null) =
-        WebhookEvent(
-            eventId = UUID.randomUUID().toString(),
-            type = type,
-            transactionId = tx.transactionId,
-            orderId = tx.orderId,
-            amount = tx.amount,
-            occurredAt = clock.instant(),
-            failureReason = failureReason,
-        )
+    fun newEvent(type: WebhookEventType, tx: Transaction, failureReason: String? = null) = WebhookEvent(
+        eventId = UUID.randomUUID().toString(),
+        type = type,
+        transactionId = tx.transactionId,
+        orderId = tx.orderId,
+        amount = tx.amount,
+        occurredAt = clock.instant(),
+        failureReason = failureReason,
+    )
 
     /** [delay] 뒤에 [event]를 [copies]번 보낸다. 모두 같은 eventId와 같은 본문이다. */
     fun sendAfter(delay: Duration, event: WebhookEvent, copies: Int = 1) {

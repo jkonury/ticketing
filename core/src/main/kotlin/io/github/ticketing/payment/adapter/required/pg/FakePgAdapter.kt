@@ -46,8 +46,11 @@ class FakePgAdapter(private val client: RestClient) : PgPort {
             PgRequestResult.Unknown("INVALID_RESPONSE")
         }
     } catch (exception: RestClientResponseException) {
-        if (exception.statusCode.is4xxClientError) PgRequestResult.Rejected("HTTP_4XX")
-        else PgRequestResult.Unknown("HTTP_ERROR")
+        if (exception.statusCode.is4xxClientError) {
+            PgRequestResult.Rejected("HTTP_4XX")
+        } else {
+            PgRequestResult.Unknown("HTTP_ERROR")
+        }
     } catch (exception: RestClientException) {
         PgRequestResult.Unknown("CLIENT_ERROR")
     }

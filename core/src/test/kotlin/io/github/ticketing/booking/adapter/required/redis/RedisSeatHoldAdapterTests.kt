@@ -145,7 +145,12 @@ class RedisSeatHoldAdapterTests : IntegrationTestSupport() {
     private fun runConcurrently(n: Int, task: (Int) -> Unit) {
         val start = CountDownLatch(1)
         Executors.newVirtualThreadPerTaskExecutor().use { executor ->
-            val futures = (0 until n).map { i -> executor.submit { start.await(); task(i) } }
+            val futures = (0 until n).map { i ->
+                executor.submit {
+                    start.await()
+                    task(i)
+                }
+            }
             start.countDown()
             futures.forEach { it.get(30, TimeUnit.SECONDS) }
         }

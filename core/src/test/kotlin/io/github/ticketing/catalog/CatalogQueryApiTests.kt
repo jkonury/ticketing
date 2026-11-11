@@ -2,13 +2,13 @@ package io.github.ticketing.catalog
 
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.catalog.config.CatalogCaches
+import io.github.ticketing.catalog.domain.SeatGrade
 import io.github.ticketing.catalog.service.CatalogRegistrationService
 import io.github.ticketing.catalog.service.CatalogRegistrationService.PriceSpec
 import io.github.ticketing.catalog.service.CatalogRegistrationService.RegisterPerformanceCommand
 import io.github.ticketing.catalog.service.CatalogRegistrationService.RegisterScheduleCommand
 import io.github.ticketing.catalog.service.CatalogRegistrationService.RegisterVenueCommand
 import io.github.ticketing.catalog.service.CatalogRegistrationService.SeatSpec
-import io.github.ticketing.catalog.domain.SeatGrade
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -46,7 +46,10 @@ class CatalogQueryApiTests : IntegrationTestSupport() {
     private fun performance(venueId: Long, title: String = "조회 공연"): Long = requireNotNull(
         registration.registerPerformance(
             RegisterPerformanceCommand(
-                organizerId, title, "설명", venueId,
+                organizerId,
+                title,
+                "설명",
+                venueId,
                 listOf(PriceSpec(SeatGrade.VIP, BigDecimal(150000)), PriceSpec(SeatGrade.R, BigDecimal(100000))),
             ),
         ).id,

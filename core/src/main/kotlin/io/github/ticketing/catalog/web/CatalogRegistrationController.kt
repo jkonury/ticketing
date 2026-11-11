@@ -24,9 +24,7 @@ import java.time.Instant
 @RestController
 @RequestMapping("/api/v1")
 @PreAuthorize("hasRole('ORGANIZER')")
-class CatalogRegistrationController(
-    private val service: CatalogRegistrationService,
-) {
+class CatalogRegistrationController(private val service: CatalogRegistrationService) {
 
     @PostMapping("/venues")
     fun registerVenue(@Valid @RequestBody request: RegisterVenueRequest): ResponseEntity<VenueRegisteredResponse> {

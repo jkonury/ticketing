@@ -14,10 +14,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 @Repository
-internal class BookingPersistenceAdapter(
-    private val bookings: BookingJpaRepository,
-    private val dsl: DSLContext,
-) : BookingCommandPort {
+internal class BookingPersistenceAdapter(private val bookings: BookingJpaRepository, private val dsl: DSLContext) : BookingCommandPort {
     override fun save(booking: Booking): Booking {
         val id = booking.id
         if (id == null) return bookings.saveAndFlush(booking.toNewEntity()).toDomain()
@@ -40,7 +37,10 @@ internal class BookingPersistenceAdapter(
         if (seatIds.isEmpty()) return 0
         val soldAt = now.atOffset(ZoneOffset.UTC)
         // 좌석 하나라도 이미 팔렸으면 그 행만 건너뛰므로, 삽입된 행 수가 요청 수보다 작아진다
-        return seatIds.fold(dsl.insertInto(SOLD_SEAT, SOLD_SEAT.SCHEDULE_ID, SOLD_SEAT.SEAT_ID, SOLD_SEAT.BOOKING_ID, SOLD_SEAT.SOLD_AT)) { step, seatId ->
+        return seatIds.fold(dsl.insertInto(SOLD_SEAT, SOLD_SEAT.SCHEDULE_ID, SOLD_SEAT.SEAT_ID, SOLD_SEAT.BOOKING_ID, SOLD_SEAT.SOLD_AT)) {
+                step,
+                seatId,
+            ->
             step.values(scheduleId.value, seatId.value, bookingId.value, soldAt)
         }
             .onConflict(SOLD_SEAT.SCHEDULE_ID, SOLD_SEAT.SEAT_ID)

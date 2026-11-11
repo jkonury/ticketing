@@ -13,16 +13,13 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 class PaymentExceptionHandler : ResponseEntityExceptionHandler() {
 
     @ExceptionHandler(IdempotencyKeyReusedException::class)
-    fun keyReused(e: IdempotencyKeyReusedException) =
-        problem(HttpStatus.UNPROCESSABLE_CONTENT, "IDEMPOTENCY_KEY_REUSED", e.message)
+    fun keyReused(e: IdempotencyKeyReusedException) = problem(HttpStatus.UNPROCESSABLE_CONTENT, "IDEMPOTENCY_KEY_REUSED", e.message)
 
     @ExceptionHandler(TransactionNotFoundException::class)
-    fun notFound(e: TransactionNotFoundException) =
-        problem(HttpStatus.NOT_FOUND, "TRANSACTION_NOT_FOUND", e.message)
+    fun notFound(e: TransactionNotFoundException) = problem(HttpStatus.NOT_FOUND, "TRANSACTION_NOT_FOUND", e.message)
 
     @ExceptionHandler(TransactionNotRefundableException::class)
-    fun notRefundable(e: TransactionNotRefundableException) =
-        problem(HttpStatus.CONFLICT, "TRANSACTION_NOT_REFUNDABLE", e.message)
+    fun notRefundable(e: TransactionNotRefundableException) = problem(HttpStatus.CONFLICT, "TRANSACTION_NOT_REFUNDABLE", e.message)
 
     private fun problem(status: HttpStatus, code: String, detail: String?): ProblemDetail =
         ProblemDetail.forStatusAndDetail(status, detail ?: code).apply { setProperty("code", code) }

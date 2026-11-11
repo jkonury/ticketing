@@ -68,7 +68,16 @@ class PaymentResultService(
                     val saved = bookings.save(booking)
 
                     events.publishEvent(
-                        BookingConfirmed(bookingId.value, booking.memberId.value, booking.scheduleId.value, seatIds.map { it.value }, booking.totalPrice, now),
+                        BookingConfirmed(
+                            bookingId.value,
+                            booking.memberId.value,
+                            booking.scheduleId.value,
+                            seatIds.map {
+                                it.value
+                            },
+                            booking.totalPrice,
+                            now,
+                        ),
                     )
                     log.info("예매 확정 bookingId={} paymentId={}", bookingId.value, paymentId)
                     After.MarkSold(saved)
@@ -80,15 +89,24 @@ class PaymentResultService(
                     After.Release(bookings.save(booking))
                 }
             }
+
             PaymentOutcome.AmountMismatch -> {
                 cancelWithRefund(booking, "AMOUNT_MISMATCH", now)
-                log.warn("결제 금액이 예매 금액과 달라 예매를 취소하고 환불을 요청한다. bookingId={} paymentId={} paid={} expected={}", bookingId.value, paymentId, amount, booking.totalPrice)
+                log.warn(
+                    "결제 금액이 예매 금액과 달라 예매를 취소하고 환불을 요청한다. bookingId={} paymentId={} paid={} expected={}",
+                    bookingId.value,
+                    paymentId,
+                    amount,
+                    booking.totalPrice,
+                )
                 After.Release(bookings.save(booking))
             }
+
             PaymentOutcome.AlreadyConfirmed -> {
                 log.info("이미 확정된 예매라 무시한다 bookingId={} paymentId={}", bookingId.value, paymentId)
                 After.Nothing
             }
+
             is PaymentOutcome.RefundRequired -> refund(booking, before, outcome, paymentId, now)
         }
     }
@@ -99,7 +117,13 @@ class PaymentResultService(
         events.publishEvent(BookingCancelled(id, booking.memberId.value, booking.scheduleId.value, reason, true, now))
     }
 
-    private fun refund(booking: Booking, before: BookingStatus, outcome: PaymentOutcome.RefundRequired, paymentId: Long, now: Instant): After {
+    private fun refund(
+        booking: Booking,
+        before: BookingStatus,
+        outcome: PaymentOutcome.RefundRequired,
+        paymentId: Long,
+        now: Instant,
+    ): After {
         val bookingId = requireNotNull(booking.id).value
         val saved = if (booking.status != before) bookings.save(booking) else booking
 
@@ -160,9 +184,11 @@ class PaymentResultService(
     private fun applyRedis(after: After, paymentId: Long) {
         when (after) {
             After.Nothing -> Unit
+
             is After.MarkSold -> redis(after.booking, paymentId, "SOLD 반영") {
                 seatHold.markSold(it.scheduleId, it.seats.map { s -> s.seatId }, it.holdToken, clock.instant())
             }
+
             is After.Release -> redis(after.booking, paymentId, "선점 해제") {
                 seatHold.release(it.scheduleId, it.seats.map { s -> s.seatId }, it.holdToken, clock.instant())
             }

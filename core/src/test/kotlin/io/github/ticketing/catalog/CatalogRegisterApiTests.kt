@@ -61,15 +61,14 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
     private fun registerVenue(token: String, seats: List<Map<String, Any>> = twoGradeSeats): Long =
         (created(postJson("/api/v1/venues", token, mapOf("name" to "올림픽홀", "seats" to seats)))["id"] as Number).toLong()
 
-    private fun registerPerformance(token: String, venueId: Long): Long =
-        (
-            created(
-                postJson(
-                    "/api/v1/performances",
-                    token,
-                    mapOf("title" to "콘서트", "description" to "설명", "venueId" to venueId, "prices" to allPrices),
-                ),
-            )["id"] as Number
+    private fun registerPerformance(token: String, venueId: Long): Long = (
+        created(
+            postJson(
+                "/api/v1/performances",
+                token,
+                mapOf("title" to "콘서트", "description" to "설명", "venueId" to venueId, "prices" to allPrices),
+            ),
+        )["id"] as Number
         ).toLong()
 
     @Test
@@ -136,7 +135,12 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
         postJson(
             "/api/v1/performances",
             token,
-            mapOf("title" to "콘서트", "description" to "설명", "venueId" to venueId, "prices" to listOf(mapOf("grade" to "VIP", "price" to 150000))),
+            mapOf(
+                "title" to "콘서트",
+                "description" to "설명",
+                "venueId" to venueId,
+                "prices" to listOf(mapOf("grade" to "VIP", "price" to 150000)),
+            ),
         ).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PRICE_MISSING_FOR_GRADE"))
     }
 
@@ -157,8 +161,10 @@ class CatalogRegisterApiTests : IntegrationTestSupport() {
         val performanceId = registerPerformance(token, registerVenue(token))
 
         val scheduleId = (
-            created(postJson("/api/v1/performances/$performanceId/schedules", token, mapOf("startsAt" to "2027-01-01T10:00:00Z")))["id"] as Number
-        ).toLong()
+            created(
+                postJson("/api/v1/performances/$performanceId/schedules", token, mapOf("startsAt" to "2027-01-01T10:00:00Z")),
+            )["id"] as Number
+            ).toLong()
 
         val event = events.stream(ScheduleRegistered::class.java).filter { it.scheduleId == scheduleId }.toList().single()
         assertThat(event.performanceId).isEqualTo(performanceId)

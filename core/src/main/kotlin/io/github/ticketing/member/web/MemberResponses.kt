@@ -10,12 +10,7 @@ data class MemberResponse(val id: Long, val email: String, val name: String, val
     }
 }
 
-data class TokenResponse(
-    val accessToken: String,
-    val accessExpiresIn: Long,
-    val refreshToken: String,
-    val refreshExpiresIn: Long,
-) {
+data class TokenResponse(val accessToken: String, val accessExpiresIn: Long, val refreshToken: String, val refreshExpiresIn: Long) {
     companion object {
         fun from(tokens: AuthService.IssuedTokens) = TokenResponse(
             tokens.accessToken,

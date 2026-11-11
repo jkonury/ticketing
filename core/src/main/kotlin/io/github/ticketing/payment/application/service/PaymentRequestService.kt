@@ -17,7 +17,9 @@ class PaymentRequestService(private val transactions: PaymentTransactionService,
         val payment = transactions.preparePayment(command) ?: return
         when (val result = pg.requestPayment(PgPaymentRequest(payment.orderId.value.toString(), payment.amount, payment.idempotencyKey))) {
             is PgRequestResult.Accepted -> transactions.acceptPayment(payment.orderId.value, result.transactionId)
+
             is PgRequestResult.Rejected -> transactions.rejectPayment(payment.orderId.value, result.reason)
+
             is PgRequestResult.Unknown -> {
                 log.warn("결제 결과 미확정: orderId={}, paymentId={}, classification={}", payment.orderId.value, payment.id?.value, result.cause)
                 throw PaymentPgException(result.cause)

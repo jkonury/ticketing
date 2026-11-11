@@ -89,7 +89,9 @@ class Payment private constructor(
                 approvedAt = now
                 TransitionResult.Applied
             }
+
             PaymentStatus.SUCCEEDED, PaymentStatus.REFUND_REQUESTED, PaymentStatus.REFUNDED -> TransitionResult.AlreadyApplied
+
             PaymentStatus.FAILED -> throw InvalidPaymentStateException(status)
         }
     }
@@ -101,7 +103,9 @@ class Payment private constructor(
             failedAt = now
             TransitionResult.Applied
         }
+
         PaymentStatus.FAILED -> TransitionResult.AlreadyApplied
+
         PaymentStatus.SUCCEEDED, PaymentStatus.REFUND_REQUESTED, PaymentStatus.REFUNDED -> throw InvalidPaymentStateException(status)
     }
 
@@ -111,7 +115,9 @@ class Payment private constructor(
             refundRequestedAt = now
             TransitionResult.Applied
         }
+
         PaymentStatus.REFUND_REQUESTED, PaymentStatus.REFUNDED -> TransitionResult.AlreadyApplied
+
         PaymentStatus.REQUESTED, PaymentStatus.FAILED -> throw InvalidPaymentStateException(status)
     }
 
@@ -121,7 +127,9 @@ class Payment private constructor(
             refundedAt = now
             TransitionResult.Applied
         }
+
         PaymentStatus.REFUNDED -> TransitionResult.AlreadyApplied
+
         PaymentStatus.REQUESTED, PaymentStatus.SUCCEEDED, PaymentStatus.FAILED -> throw InvalidPaymentStateException(status)
     }
 

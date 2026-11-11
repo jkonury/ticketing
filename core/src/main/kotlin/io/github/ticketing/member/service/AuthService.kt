@@ -29,7 +29,9 @@ class AuthService(
     private val random = SecureRandom()
 
     // 어떤 비밀번호와도 일치하지 않는, 실제 인코더가 만든 해시
-    private val dummyHash: String by lazy { checkNotNull(passwordEncoder.encode(Base64.getEncoder().encodeToString(ByteArray(16).also(random::nextBytes)))) }
+    private val dummyHash: String by lazy {
+        checkNotNull(passwordEncoder.encode(Base64.getEncoder().encodeToString(ByteArray(16).also(random::nextBytes))))
+    }
 
     @Transactional
     fun login(email: String, password: String): IssuedTokens {
@@ -66,8 +68,7 @@ class AuthService(
         return IssuedTokens(access.value, access.expiresInSeconds, raw, properties.refreshTtl.seconds)
     }
 
-    private fun hash(raw: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()))
+    private fun hash(raw: String): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()))
 
     data class IssuedTokens(
         val accessToken: String,

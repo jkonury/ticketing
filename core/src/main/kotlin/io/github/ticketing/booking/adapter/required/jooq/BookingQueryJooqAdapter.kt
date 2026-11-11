@@ -8,11 +8,11 @@ import io.github.ticketing.booking.application.port.required.BookingQueryPort
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
-import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 import ticketing.jooq.booking.tables.references.BOOKING_SEAT
 import ticketing.jooq.booking.tables.references.SCHEDULE
 import ticketing.jooq.booking.tables.references.SCHEDULE_SEAT
 import java.math.BigDecimal
+import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 
 @Repository
 internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQueryPort {
@@ -24,8 +24,13 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
         )
 
         val rows = dsl.select(
-            BOOKING.ID, BOOKING.STATUS, SCHEDULE.PERFORMANCE_TITLE, SCHEDULE.STARTS_AT,
-            seatCount, BOOKING.TOTAL_AMOUNT, BOOKING.CREATED_AT,
+            BOOKING.ID,
+            BOOKING.STATUS,
+            SCHEDULE.PERFORMANCE_TITLE,
+            SCHEDULE.STARTS_AT,
+            seatCount,
+            BOOKING.TOTAL_AMOUNT,
+            BOOKING.CREATED_AT,
         )
             .from(BOOKING)
             .join(SCHEDULE).on(SCHEDULE.SCHEDULE_ID.eq(BOOKING.SCHEDULE_ID))

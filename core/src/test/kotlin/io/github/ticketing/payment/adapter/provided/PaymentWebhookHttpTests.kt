@@ -71,8 +71,13 @@ class PaymentWebhookHttpTests : IntegrationTestSupport() {
         return HexFormat.of().formatHex(mac.doFinal("$timestamp.$raw".toByteArray()))
     }
 
-    private fun send(raw: String, time: String = now.epochSecond.toString(), signature: String = sign(time, raw)) =
-        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).header("X-FakePg-Timestamp", time).header("X-FakePg-Signature", signature).content(raw))
+    private fun send(raw: String, time: String = now.epochSecond.toString(), signature: String = sign(time, raw)) = mvc.perform(
+        post(
+            path,
+        ).contentType(
+            MediaType.APPLICATION_JSON,
+        ).header("X-FakePg-Timestamp", time).header("X-FakePg-Signature", signature).content(raw),
+    )
 
     private fun payment(order: Long, transaction: String) {
         tx.execute {
@@ -93,7 +98,12 @@ class PaymentWebhookHttpTests : IntegrationTestSupport() {
         send(raw).andExpect(status().isOk)
         send(raw).andExpect(status().isOk)
 
-        send(raw.replace(event, UUID.randomUUID().toString()).replace("PAYMENT_APPROVED", "PAYMENT_FAILED").replace("\"failureReason\":null", "\"failureReason\":\"declined\""))
+        send(
+            raw.replace(
+                event,
+                UUID.randomUUID().toString(),
+            ).replace("PAYMENT_APPROVED", "PAYMENT_FAILED").replace("\"failureReason\":null", "\"failureReason\":\"declined\""),
+        )
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("INVALID_PAYMENT_STATE"))
 
@@ -107,7 +117,9 @@ class PaymentWebhookHttpTests : IntegrationTestSupport() {
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.code").value("PAYMENT_NOT_FOUND"))
 
-        assertThat(jdbc.queryForObject("select count(*) from payment.webhook_event where event_id in (?, ?)", Int::class.java, mismatch, missing)).isZero()
+        assertThat(
+            jdbc.queryForObject("select count(*) from payment.webhook_event where event_id in (?, ?)", Int::class.java, mismatch, missing),
+        ).isZero()
     }
 
     @Test

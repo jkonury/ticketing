@@ -12,10 +12,7 @@ import java.time.Duration
 
 @Validated
 @ConfigurationProperties("fake-pg")
-class FakePgProperties(
-    @field:Valid val webhook: Webhook,
-    @field:Valid val behavior: Behavior = Behavior(),
-) {
+class FakePgProperties(@field:Valid val webhook: Webhook, @field:Valid val behavior: Behavior = Behavior()) {
 
     // secret이 노출되지 않도록 data class로 만들지 않는다(toString 방지)
     class Webhook(

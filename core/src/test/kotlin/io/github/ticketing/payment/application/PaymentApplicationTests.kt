@@ -77,7 +77,11 @@ class PaymentApplicationTests : IntegrationTestSupport() {
         val pg = FakePg()
         val service = PaymentRequestService(transactions, pg)
         val requests = mutableListOf<PgPaymentRequest>()
-        pg.payment = { requests.add(it); if (requests.size == 1) PgRequestResult.Unknown("TIMEOUT") else PgRequestResult.Accepted("tx-$key") }
+        pg.payment =
+            {
+                requests.add(it)
+                if (requests.size == 1) PgRequestResult.Unknown("TIMEOUT") else PgRequestResult.Accepted("tx-$key")
+            }
 
         assertThatThrownBy { service.request(command) }.isInstanceOf(PaymentPgException::class.java)
         assertThat(find().status).isEqualTo(PaymentStatus.REQUESTED)
@@ -87,14 +91,21 @@ class PaymentApplicationTests : IntegrationTestSupport() {
 
         assertThat(requests).hasSize(2)
         assertThat(requests[0]).isEqualTo(requests[1])
-        assertThatThrownBy { service.request(command.copy(amount = BigDecimal("101"))) }.isInstanceOf(PaymentContractMismatchException::class.java)
-        assertThatThrownBy { service.request(command.copy(orderId = ids.incrementAndGet())) }.isInstanceOf(PaymentContractMismatchException::class.java)
+        assertThatThrownBy {
+            service.request(command.copy(amount = BigDecimal("101")))
+        }.isInstanceOf(PaymentContractMismatchException::class.java)
+        assertThatThrownBy {
+            service.request(command.copy(orderId = ids.incrementAndGet()))
+        }.isInstanceOf(PaymentContractMismatchException::class.java)
     }
 
     @Test
     fun `지연된 거절은 먼저 승인된 웹훅을 덮어쓰지 않는다`() {
         val pg = FakePg()
-        pg.payment = { webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED)); PgRequestResult.Rejected("DECLINED") }
+        pg.payment = {
+            webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED))
+            PgRequestResult.Rejected("DECLINED")
+        }
 
         PaymentRequestService(transactions, pg).request(command)
 
@@ -108,7 +119,9 @@ class PaymentApplicationTests : IntegrationTestSupport() {
         transactions.preparePayment(command)
         val id = UUID.randomUUID().toString()
 
-        assertThatThrownBy { webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id, amount = BigDecimal("101"))) }.isInstanceOf(PaymentContractMismatchException::class.java)
+        assertThatThrownBy {
+            webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id, amount = BigDecimal("101")))
+        }.isInstanceOf(PaymentContractMismatchException::class.java)
 
         webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id))
         webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id))
@@ -154,7 +167,9 @@ class PaymentApplicationTests : IntegrationTestSupport() {
         transactions.preparePayment(command)
         val id = UUID.randomUUID().toString()
 
-        assertThatThrownBy { webhook.handle(event(PaymentWebhookType.PAYMENT_FAILED, id)) }.isInstanceOf(IllegalArgumentException::class.java)
+        assertThatThrownBy {
+            webhook.handle(event(PaymentWebhookType.PAYMENT_FAILED, id))
+        }.isInstanceOf(IllegalArgumentException::class.java)
 
         webhook.handle(event(PaymentWebhookType.PAYMENT_FAILED, id, reason = "DECLINED"))
         webhook.handle(event(PaymentWebhookType.PAYMENT_FAILED, reason = "DECLINED"))
@@ -166,7 +181,10 @@ class PaymentApplicationTests : IntegrationTestSupport() {
     @Test
     fun `지연된 접수 응답과 웹훅 중복은 승인 상태를 유지한다`() {
         val pg = FakePg()
-        pg.payment = { webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED)); PgRequestResult.Accepted("tx-$key") }
+        pg.payment = {
+            webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED))
+            PgRequestResult.Accepted("tx-$key")
+        }
 
         PaymentRequestService(transactions, pg).request(command)
 
@@ -181,7 +199,9 @@ class PaymentApplicationTests : IntegrationTestSupport() {
         val id = UUID.randomUUID().toString()
         val failing = PaymentWebhookService(payments, { throw IllegalStateException("event failure") }, Clock.fixed(now, ZoneOffset.UTC))
 
-        assertThatThrownBy { tx.executeWithoutResult { failing.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id)) } }.isInstanceOf(IllegalStateException::class.java)
+        assertThatThrownBy {
+            tx.executeWithoutResult { failing.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id)) }
+        }.isInstanceOf(IllegalStateException::class.java)
         assertThat(find().status).isEqualTo(PaymentStatus.REQUESTED)
 
         webhook.handle(event(PaymentWebhookType.PAYMENT_APPROVED, id))

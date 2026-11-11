@@ -18,10 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/v1")
-class AuthController(
-    private val memberService: MemberService,
-    private val authService: AuthService,
-) {
+class AuthController(private val memberService: MemberService, private val authService: AuthService) {
 
     @PostMapping("/members")
     fun signUp(@Valid @RequestBody request: SignUpRequest): ResponseEntity<MemberResponse> {
@@ -37,8 +34,7 @@ class AuthController(
         TokenResponse.from(authService.login(request.email, request.password))
 
     @PostMapping("/auth/tokens/refresh")
-    fun refresh(@Valid @RequestBody request: RefreshRequest): TokenResponse =
-        TokenResponse.from(authService.refresh(request.refreshToken))
+    fun refresh(@Valid @RequestBody request: RefreshRequest): TokenResponse = TokenResponse.from(authService.refresh(request.refreshToken))
 }
 
 data class SignUpRequest(

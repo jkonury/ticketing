@@ -35,8 +35,4 @@ class VenueSeat(
     override fun hashCode(): Int = id?.hashCode() ?: 0
 }
 
-data class SeatKey(
-    val section: String,
-    val rowLabel: String,
-    val seatNumber: Int,
-)
+data class SeatKey(val section: String, val rowLabel: String, val seatNumber: Int)

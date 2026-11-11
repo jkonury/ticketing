@@ -45,13 +45,7 @@ class RedisSeatHoldAdapter(
     @Qualifier("seatMarkSoldScript") private val markSoldScript: RedisScript<Long>,
     @Qualifier("seatMarkAvailableScript") private val markAvailableScript: RedisScript<Long>,
 ) : SeatHoldPort {
-    override fun hold(
-        scheduleId: ScheduleId,
-        seatIds: List<SeatId>,
-        owner: HoldToken,
-        ttl: Duration,
-        now: Instant,
-    ): HoldResult {
+    override fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult {
         require(seatIds.isNotEmpty()) { "seatIds must not be empty" }
         val args = listOf(owner.value, ttl.toMillis().toString(), now.toEpochMilli().toString()) + ids(seatIds)
         val result = redis.execute(holdScript, keys(scheduleId, seatIds), *args.toTypedArray())

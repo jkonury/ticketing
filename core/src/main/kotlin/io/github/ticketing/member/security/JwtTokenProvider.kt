@@ -10,11 +10,7 @@ import org.springframework.stereotype.Component
 import java.time.Clock
 
 @Component
-class JwtTokenProvider(
-    private val encoder: JwtEncoder,
-    private val properties: JwtProperties,
-    private val clock: Clock,
-) {
+class JwtTokenProvider(private val encoder: JwtEncoder, private val properties: JwtProperties, private val clock: Clock) {
 
     fun issueAccessToken(member: Member): AccessToken {
         val now = clock.instant()

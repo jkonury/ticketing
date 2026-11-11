@@ -13,10 +13,4 @@ data class ScheduleCopy(
     val receivedAt: Instant,
 )
 
-data class ScheduleSeatCopy(
-    val scheduleId: ScheduleId,
-    val seatId: SeatId,
-    val grade: String,
-    val label: String,
-    val price: BigDecimal,
-)
+data class ScheduleSeatCopy(val scheduleId: ScheduleId, val seatId: SeatId, val grade: String, val label: String, val price: BigDecimal)

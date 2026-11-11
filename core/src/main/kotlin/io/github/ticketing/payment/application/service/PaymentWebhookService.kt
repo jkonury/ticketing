@@ -25,12 +25,23 @@ class PaymentWebhookService(
 
         val payment = payments.findByPgTransactionId(command.transactionId) ?: payments.findByOrderId(OrderId(command.orderId))
             ?: throw PaymentRuleException("PAYMENT_NOT_FOUND")
-        if (payment.orderId.value != command.orderId || payment.amount.compareTo(command.amount) != 0) throw PaymentContractMismatchException()
+        if (payment.orderId.value != command.orderId ||
+            payment.amount.compareTo(command.amount) != 0
+        ) {
+            throw PaymentContractMismatchException()
+        }
 
         payment.attachPgTransaction(command.transactionId)
         val result = when (command.type) {
             PaymentWebhookType.PAYMENT_APPROVED -> payment.approve(command.amount, command.occurredAt)
-            PaymentWebhookType.PAYMENT_FAILED -> payment.fail(requireNotNull(command.failureReason).also { require(it.isNotBlank()) }, command.occurredAt)
+
+            PaymentWebhookType.PAYMENT_FAILED -> payment.fail(
+                requireNotNull(command.failureReason).also {
+                    require(it.isNotBlank())
+                },
+                command.occurredAt,
+            )
+
             PaymentWebhookType.REFUND_COMPLETED -> payment.completeRefund(command.occurredAt)
         }
         val saved = payments.save(payment)
@@ -39,7 +50,14 @@ class PaymentWebhookService(
             val id = requireNotNull(saved.id).value
             val event = when (command.type) {
                 PaymentWebhookType.PAYMENT_APPROVED -> PaymentSucceeded(id, command.orderId, saved.amount, command.occurredAt)
-                PaymentWebhookType.PAYMENT_FAILED -> PaymentFailed(id, command.orderId, requireNotNull(command.failureReason), command.occurredAt)
+
+                PaymentWebhookType.PAYMENT_FAILED -> PaymentFailed(
+                    id,
+                    command.orderId,
+                    requireNotNull(command.failureReason),
+                    command.occurredAt,
+                )
+
                 PaymentWebhookType.REFUND_COMPLETED -> PaymentRefunded(id, command.orderId, command.occurredAt)
             }
             events.publishEvent(event)

@@ -25,17 +25,15 @@ class FakePgConfig {
 
     // 지연 발송과 재시도를 요청 스레드 밖에서 실행한다. 작업은 Virtual Thread에서 돈다
     @Bean
-    fun webhookScheduler(): TaskScheduler =
-        SimpleAsyncTaskScheduler().apply {
-            setVirtualThreads(true)
-            setThreadNamePrefix("webhook-")
-        }
+    fun webhookScheduler(): TaskScheduler = SimpleAsyncTaskScheduler().apply {
+        setVirtualThreads(true)
+        setThreadNamePrefix("webhook-")
+    }
 
     @Bean(destroyMethod = "close")
-    fun webhookHttpClient(): HttpClient =
-        HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(3))
-            .executor(Executors.newVirtualThreadPerTaskExecutor())
-            .build()
+    fun webhookHttpClient(): HttpClient = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .connectTimeout(Duration.ofSeconds(3))
+        .executor(Executors.newVirtualThreadPerTaskExecutor())
+        .build()
 }

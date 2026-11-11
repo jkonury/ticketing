@@ -10,11 +10,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 
 @Service
-class MemberService(
-    private val members: MemberRepository,
-    private val passwordEncoder: PasswordEncoder,
-    private val clock: Clock,
-) {
+class MemberService(private val members: MemberRepository, private val passwordEncoder: PasswordEncoder, private val clock: Clock) {
 
     @Transactional
     fun signUp(command: SignUpCommand): Member {
