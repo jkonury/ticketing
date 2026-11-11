@@ -10,4 +10,4 @@ dependencyResolutionManagement {
     }
 }
 
-include("core", "core-batch", "realtime", "gateway", "fake-pg")
+include("core", "core-batch", "realtime", "gateway", "fake-pg", "e2e")
