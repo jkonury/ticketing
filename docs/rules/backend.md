@@ -15,6 +15,7 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - 식별자는 `@JvmInline value class`로 감싼다 (`BookingId`, `SeatId`, `MemberId`). 서로 다른 ID를 `Long`으로 섞어 쓰지 않는다.
 - 상태와 결과의 분기는 `sealed interface` / `enum` + `when`으로 표현하고 `else`를 두지 않는다.
 - JPA 엔티티는 `data class`로 만들지 않는다. `equals`/`hashCode`는 식별자 기준으로 직접 정의한다.
+- JPA 엔티티(`@Embeddable` 포함)의 영속 속성에는 `val`을 쓰지 않는다. `@Id`, `@EmbeddedId`, 컬렉션, `updatable = false` 컬럼을 포함해 생성자와 본문 모두 `var`로 선언한다. `val`은 영속성 provider가 reflection으로 바꿀 수 있어 실제로 불변이 아니고, final 필드와 setter가 없어 JPA Auditing 같은 기능이 어긋나며, Kotlin 데이터 흐름 분석이 틀려 런타임 오류가 날 수 있다 (IDE의 JPA 검사도 같은 이유로 경고한다). 변경하면 안 되는 컬럼은 `updatable = false`로 표현한다. 엔티티 외 도메인 모델의 `val` 원칙은 그대로다.
 - 확장 함수는 그것을 쓰는 모듈 안에 둔다. 전역 유틸 모듈을 만들지 않는다.
 
 ### 가독성 (코드 스타일)
