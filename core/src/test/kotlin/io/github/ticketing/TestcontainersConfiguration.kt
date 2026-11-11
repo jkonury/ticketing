@@ -28,6 +28,7 @@ class TestcontainersConfiguration {
         registry.add("spring.datasource.url") { "jdbc:postgresql://${postgres.host}:${postgres.firstMappedPort}/$database" }
         registry.add("spring.datasource.username", postgres::getUsername)
         registry.add("spring.datasource.password", postgres::getPassword)
+        registry.add("spring.datasource.hikari.minimum-idle") { 0 }
         registry.add("spring.data.redis.host", redis::getHost)
         registry.add("spring.data.redis.port", redis::getFirstMappedPort)
         registry.add("spring.data.redis.database") { namespace }

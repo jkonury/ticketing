@@ -2,6 +2,7 @@ package io.github.ticketing.booking.adapter.required.redis
 
 import io.github.ticketing.booking.application.port.required.HoldResult
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
+import io.github.ticketing.booking.application.port.required.SeatSnapshotReconcileException
 import io.github.ticketing.booking.domain.HoldToken
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.io.ClassPathResource
+import org.springframework.dao.DataAccessException
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.data.redis.core.script.RedisScript
@@ -30,6 +32,9 @@ class SeatHoldScriptConfig {
     @Bean
     fun seatMarkAvailableScript(): RedisScript<Long> = DefaultRedisScript(load("mark-available"), Long::class.java)
 
+    @Bean
+    fun seatReconcileScript(): RedisScript<Long> = DefaultRedisScript(load("reconcile-snapshot"), Long::class.java)
+
     private fun script(name: String) = DefaultRedisScript(load(name), List::class.java) as RedisScript<List<*>>
 
     private fun load(name: String): String =
@@ -44,6 +49,7 @@ class RedisSeatHoldAdapter(
     @Qualifier("seatReleaseScript") private val releaseScript: RedisScript<List<*>>,
     @Qualifier("seatMarkSoldScript") private val markSoldScript: RedisScript<Long>,
     @Qualifier("seatMarkAvailableScript") private val markAvailableScript: RedisScript<Long>,
+    @Qualifier("seatReconcileScript") private val reconcileScript: RedisScript<Long>,
 ) : SeatHoldPort {
     override fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult {
         require(seatIds.isNotEmpty()) { "seatIds must not be empty" }
@@ -72,6 +78,16 @@ class RedisSeatHoldAdapter(
         if (seatIds.isEmpty()) return
         val args = listOf(now.toEpochMilli().toString()) + ids(seatIds)
         redis.execute(markAvailableScript, listOf(snapshotKey(scheduleId), streamKey(scheduleId)), *args.toTypedArray())
+    }
+
+    override fun reconcileSnapshot(scheduleId: ScheduleId, seatIds: List<SeatId>, soldSeatIds: Set<SeatId>, now: Instant): Int {
+        if (seatIds.isEmpty()) return 0
+        val args = listOf(now.toEpochMilli().toString(), seatIds.size.toString()) + ids(seatIds) + ids(soldSeatIds.toList())
+        return try {
+            requireNotNull(redis.execute(reconcileScript, keys(scheduleId, seatIds), *args.toTypedArray())).toInt()
+        } catch (exception: DataAccessException) {
+            throw SeatSnapshotReconcileException(exception)
+        }
     }
 
     override fun initSnapshot(scheduleId: ScheduleId, seatIds: List<SeatId>) {

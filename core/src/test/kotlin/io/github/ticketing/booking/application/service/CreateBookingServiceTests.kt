@@ -67,6 +67,8 @@ class CreateBookingServiceTests {
     }
 
     private class FakeSeatHold(var result: HoldResult = HoldResult.Held) : SeatHoldPort {
+        override fun reconcileSnapshot(scheduleId: ScheduleId, seatIds: List<SeatId>, soldSeatIds: Set<SeatId>, now: Instant) = 0
+
         val held = mutableListOf<HoldToken>()
         val released = mutableListOf<HoldToken>()
         override fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult {

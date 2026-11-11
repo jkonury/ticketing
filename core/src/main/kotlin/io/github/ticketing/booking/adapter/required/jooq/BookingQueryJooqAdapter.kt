@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository
 import ticketing.jooq.booking.tables.references.BOOKING_SEAT
 import ticketing.jooq.booking.tables.references.SCHEDULE
 import ticketing.jooq.booking.tables.references.SCHEDULE_SEAT
+import ticketing.jooq.booking.tables.references.SOLD_SEAT
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.ZoneOffset
@@ -18,6 +19,20 @@ import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 
 @Repository
 internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQueryPort {
+
+    override fun findUpcomingScheduleIds(now: Instant, afterId: Long?, limit: Int): List<Long> =
+        dsl.select(SCHEDULE.SCHEDULE_ID).from(SCHEDULE)
+            .where(SCHEDULE.STARTS_AT.gt(now.atOffset(ZoneOffset.UTC)))
+            .and(if (afterId == null) DSL.noCondition() else SCHEDULE.SCHEDULE_ID.gt(afterId))
+            .orderBy(SCHEDULE.SCHEDULE_ID.asc()).limit(limit).fetch { requireNotNull(it[SCHEDULE.SCHEDULE_ID]) }
+
+    override fun findSeatIds(scheduleId: Long): List<Long> =
+        dsl.select(SCHEDULE_SEAT.SEAT_ID).from(SCHEDULE_SEAT).where(SCHEDULE_SEAT.SCHEDULE_ID.eq(scheduleId))
+            .orderBy(SCHEDULE_SEAT.SEAT_ID.asc()).fetch { requireNotNull(it[SCHEDULE_SEAT.SEAT_ID]) }
+
+    override fun findSoldSeatIds(scheduleId: Long): Set<Long> =
+        dsl.select(SOLD_SEAT.SEAT_ID).from(SOLD_SEAT).where(SOLD_SEAT.SCHEDULE_ID.eq(scheduleId))
+            .fetch { requireNotNull(it[SOLD_SEAT.SEAT_ID]) }.toSet()
 
     override fun findSweepCandidateIds(cutoff: Instant, paymentCutoff: Instant, afterId: Long?, limit: Int): List<Long> =
         dsl.select(BOOKING.ID).from(BOOKING)

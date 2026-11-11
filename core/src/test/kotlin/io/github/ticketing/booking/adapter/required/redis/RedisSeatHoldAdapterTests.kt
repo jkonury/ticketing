@@ -138,6 +138,42 @@ class RedisSeatHoldAdapterTests(private val port: SeatHoldPort, private val redi
         assertThat(owners).hasSize(2).containsOnly(winner)
     }
 
+    @Test
+    fun `스냅샷을 판매와 선점 기준으로 보정하고 변경만 발행한다`() {
+        val hash = redis.opsForHash<String, String>()
+        hash.putAll(snapshotKey(schedule), mapOf("1" to "AVAILABLE", "2" to "SOLD", "3" to "AVAILABLE", "4" to "HELD:1"))
+        redis.opsForValue().set(holdKey(schedule, SeatId(3)), "owner", ttl)
+
+        val changed = port.reconcileSnapshot(schedule, seats(1, 2, 3, 4), setOf(SeatId(1)), now)
+
+        assertThat(changed).isEqualTo(4)
+        assertThat(hash.get(snapshotKey(schedule), "1")).isEqualTo("SOLD")
+        assertThat(hash.get(snapshotKey(schedule), "2")).isEqualTo("AVAILABLE")
+        assertThat(hash.get(snapshotKey(schedule), "3")).startsWith("HELD:")
+        assertThat(hash.get(snapshotKey(schedule), "4")).isEqualTo("AVAILABLE")
+        val records =
+            requireNotNull(
+                redis.opsForStream<String, String>().range(streamKey(schedule), org.springframework.data.domain.Range.unbounded()),
+            )
+        assertThat(records).hasSize(3)
+        assertThat(records.map { it.value }).anySatisfy {
+            assertThat(it).containsEntry("seatIds", "1").containsEntry("status", "SOLD").containsEntry("at", now.toEpochMilli().toString())
+        }.anySatisfy {
+            assertThat(it).containsEntry("seatIds", "3").containsEntry("status", "HELD").containsKey("holdExpiresAt")
+        }
+        assertThat(redis.opsForValue().get(holdKey(schedule, SeatId(3)))).isEqualTo("owner")
+    }
+
+    @Test
+    fun `없는 스냅샷을 만들고 변경이 없으면 다시 발행하지 않는다`() {
+        assertThat(port.reconcileSnapshot(schedule, seats(1, 2), setOf(SeatId(1)), now)).isEqualTo(2)
+        val before = redis.opsForStream<String, String>().size(streamKey(schedule))
+
+        assertThat(port.reconcileSnapshot(schedule, seats(1, 2), setOf(SeatId(1)), now)).isZero()
+
+        assertThat(redis.opsForStream<String, String>().size(streamKey(schedule))).isEqualTo(before)
+    }
+
     private fun runConcurrently(n: Int, task: (Int) -> Unit) {
         val start = CountDownLatch(1)
         Executors.newVirtualThreadPerTaskExecutor().use { executor ->

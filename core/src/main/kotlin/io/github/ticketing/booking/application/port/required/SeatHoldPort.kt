@@ -19,9 +19,13 @@ interface SeatHoldPort {
     /** 확정 취소 후 호출한다. */
     fun markAvailable(scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant)
 
+    fun reconcileSnapshot(scheduleId: ScheduleId, seatIds: List<SeatId>, soldSeatIds: Set<SeatId>, now: Instant): Int
+
     /** 이미 있는 필드는 덮어쓰지 않는다(HSETNX). */
     fun initSnapshot(scheduleId: ScheduleId, seatIds: List<SeatId>)
 }
+
+class SeatSnapshotReconcileException(cause: RuntimeException) : RuntimeException(cause)
 
 sealed interface HoldResult {
     data object Held : HoldResult
