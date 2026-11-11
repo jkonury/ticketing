@@ -13,8 +13,11 @@ import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.testcontainers.containers.GenericContainer
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicReference
 
 @AutoConfigureWebTestClient
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -44,5 +47,23 @@ abstract class RealtimeIntegrationTestSupport(protected val client: WebTestClien
 class FixedClockConfiguration {
     @Bean
     @Primary
-    fun fixedClock(): Clock = Clock.fixed(RealtimeIntegrationTestSupport.now, ZoneOffset.UTC)
+    fun fixedClock(): MutableClock = MutableClock()
+}
+
+class MutableClock : Clock() {
+    private val current = AtomicReference(RealtimeIntegrationTestSupport.now)
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant(), zone)
+
+    override fun instant(): Instant = current.get()
+
+    fun advance(duration: Duration) {
+        current.updateAndGet { it.plus(duration) }
+    }
+
+    fun reset() {
+        current.set(RealtimeIntegrationTestSupport.now)
+    }
 }
