@@ -1,5 +1,6 @@
 package io.github.ticketing.settlement.adapter.required.jooq
 
+import io.github.ticketing.settlement.application.port.provided.DailySettlementView
 import io.github.ticketing.settlement.application.port.required.DailySettlementCommandPort
 import io.github.ticketing.settlement.application.port.required.PerformanceTotals
 import io.github.ticketing.settlement.application.port.required.SettlementQueryPort
@@ -19,6 +20,21 @@ import java.time.ZoneOffset
 class DailySettlementJooqAdapter(private val dsl: DSLContext) :
     SettlementQueryPort,
     DailySettlementCommandPort {
+    override fun findDailySettlements(organizerId: Long, from: LocalDate, to: LocalDate): List<DailySettlementView> =
+        dsl.selectFrom(DAILY_SETTLEMENT)
+            .where(DAILY_SETTLEMENT.ORGANIZER_ID.eq(organizerId))
+            .and(DAILY_SETTLEMENT.SETTLEMENT_DATE.between(from, to))
+            .orderBy(DAILY_SETTLEMENT.SETTLEMENT_DATE, DAILY_SETTLEMENT.PERFORMANCE_ID)
+            .fetch { row ->
+                DailySettlementView(
+                    requireNotNull(row.settlementDate), requireNotNull(row.performanceId),
+                    requireNotNull(row.saleCount), requireNotNull(row.saleAmount),
+                    requireNotNull(row.refundCount), requireNotNull(row.refundAmount),
+                    requireNotNull(row.netAmount), requireNotNull(row.feeRate),
+                    requireNotNull(row.feeAmount), requireNotNull(row.payoutAmount),
+                )
+            }
+
     override fun findPerformanceTotals(date: LocalDate, afterPerformanceId: Long?, limit: Int): List<PerformanceTotals> {
         val start = date.atStartOfDay(ZoneId.of("Asia/Seoul")).toOffsetDateTime()
         val end = date.plusDays(1).atStartOfDay(ZoneId.of("Asia/Seoul")).toOffsetDateTime()
