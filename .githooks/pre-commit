@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# 커밋 직전 Kotlin 품질 검사(ktlint, detekt). Claude Code, Codex, 사람 모두에게 적용된다.
+# 활성화: ./scripts/setup-hooks.sh   우회(--no-verify)는 쓰지 않는다.
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 1
+
+if ! git diff --cached --name-only --diff-filter=ACMR | rg -q '\.(kt|kts)$'; then
+  exit 0
+fi
+
+echo "[pre-commit] ktlintCheck detekt 실행"
+if ! ./scripts/agent/test/check-summary.sh ktlintCheck detekt; then
+  echo "[pre-commit] 품질 검사 실패. ./gradlew ktlintFormat 후 detekt 지적을 고치고 다시 커밋한다. @Suppress로 우회하지 않는다."
+  exit 1
+fi

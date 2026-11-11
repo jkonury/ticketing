@@ -7,6 +7,7 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - Gradle Kotlin DSL. 의존성 버전은 `gradle/libs.versions.toml`(version catalog)에만 적는다.
 - 공통 빌드 설정은 convention plugin으로 모으고, 각 모듈의 `build.gradle.kts`에는 그 모듈 고유의 것만 둔다.
 - `realtime`과 `gateway`에는 JPA, JDBC, jOOQ 의존성을 추가하지 않는다.
+- 포맷은 ktlint, 정적 분석은 detekt(`build-logic`의 `ticketing.kotlin-quality`). 규칙 위반은 코드를 고쳐 해결하고, `@Suppress`나 `detekt-baseline.xml` 항목 추가는 사용자와 합의한 경우에만 한다.
 
 ## Kotlin
 
