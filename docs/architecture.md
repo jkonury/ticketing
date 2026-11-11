@@ -389,13 +389,29 @@ erDiagram
 | 좌석 임시 선점 | `SET NX` + TTL, 다중 좌석은 Lua | 코어 `booking` |
 | 좌석 현황 스냅샷 | Hash 등 (회차별) | 코어가 유지, 실시간 앱이 읽음 |
 | 좌석 상태 변경 전달 | Streams | 코어 발행, 실시간 앱 구독 |
-| 대기열 | Sorted Set | 실시간 앱 |
-| 입장 토큰 | `queue:admission:<token>` Hash (`memberId`, `scheduleId`), TTL | 실시간 앱 발급, Gateway 검증 |
+| 대기열 | Sorted Set (`queue:waiting:{<scheduleId>}` 등) | 실시간 앱 |
+| 입장 토큰 | `queue:admission:<token>` Hash (`memberId`, `scheduleId`), TTL; 조회 키 `queue:admitted:{<scheduleId>}:<memberId>` | 실시간 앱 발급, Gateway 검증 |
 | SSE 티켓 | `sse:ticket:<ticket>` String (회원 ID), TTL 30초 | 코어 `member` 발급, Gateway 1회 소비 |
 | rate limit | SCG `RedisRateLimiter` 내부 키 | Gateway |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
 
 `catalog` 캐시는 트랜잭션 안의 변경을 커밋 뒤 적용하고, Redis 쓰기·삭제 완료를 기다린다(`RedisCacheWriter.immediateWrites`).
+
+#### 대기열 키 형식 (realtime)
+
+realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`queue:admission:<token>`, `queue:active` 제외).
+
+| 키 | 자료구조 | 내용 |
+|---|---|---|
+| `queue:seq:{<scheduleId>}` | String (`INCR`) | 대기 순번 일련번호 |
+| `queue:waiting:{<scheduleId>}` | Sorted Set | 회원 ID를 member로, 일련번호를 score로 저장 |
+| `queue:seen:{<scheduleId>}` | Sorted Set | 회원 ID를 member로, 마지막 신호 epoch ms를 score로 저장 |
+| `queue:admitted:{<scheduleId>}:<memberId>` | String, 토큰 TTL | 해당 회원의 입장 토큰 조회 |
+| `queue:admit-lock:{<scheduleId>}` | String, PX | 입장 주기 동안 회차별 처리 락 |
+| `queue:active` | Set | 대기자가 있는 회차 ID |
+| `queue:admission:<token>` | Hash, TTL | `memberId`, `scheduleId`; Gateway 검증 계약은 [ADR 0020](./adr/0020-gateway-verification-contracts.md) 참조 |
+
+회차별 Lua 처리는 같은 `{scheduleId}` 해시 태그를 가진 키만 대상으로 한다. `queue:admission:<token>`은 해시 태그가 없으므로 Lua 밖에서 기록한다.
 
 #### 좌석 선점 키 형식 (코어 `booking`, realtime이 읽음)
 
@@ -429,6 +445,15 @@ Gateway 규칙 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)):
 - SSE 티켓은 `/api/v1/streams/**`에서 `?ticket=`으로 받아 한 번 소비한다. 검증 실패 시 401 `SSE_TICKET_INVALID`로 응답한다.
 - 스트림 CORS는 `/api/v1/streams/**`에만 설정된 web origin(기본 `http://localhost:3000`)과 GET을 허용하며 자격 증명은 허용하지 않는다.
 - rate limit은 `core-api`와 `realtime-queues`에 `default`(초당 보충 20, 버스트 40), 예매 생성에 `booking-create`(2, 5), 스트림에 `streams`(5, 10) 설정을 적용한다. 키는 검증된 회원의 `member:<id>` 또는 비회원의 `ip:<주소>`이며, `X-Forwarded-For`는 설정된 신뢰 프록시 홉 수(기본 1)만 사용한다. 초과 시 429 `RATE_LIMITED`와 `X-RateLimit-*` 헤더를 반환한다. Redis 오류 시 Spring Cloud Gateway `RedisRateLimiter`의 기본 동작에 따라 요청을 허용한다.
+
+realtime 규칙 ([ADR 0021](./adr/0021-realtime-queue-and-sse-contracts.md)):
+
+- 대기열 API는 `POST /api/v1/queues/{scheduleId}/entries`(등록), `GET /api/v1/queues/{scheduleId}/entries/me`(상태 조회), `DELETE /api/v1/queues/{scheduleId}/entries/me`(이탈)다. 상태는 `WAITING` 또는 `ADMITTED`다.
+- 입장 스케줄러는 기본 1초 주기로 회차별 최대 50명을 입장시키며, 입장 토큰 TTL 기본값은 10분이다.
+- SSE heartbeat와 대기 상태 조회는 마지막 신호를 기록한다. 기본 30초 유예를 넘긴 대기자는 입장 직전에 제거한다.
+- 순번 SSE 경로는 `GET /api/v1/streams/queues/{scheduleId}`이며 `position`, `admitted`, `removed` 이벤트를 보낸다. 좌석 SSE 경로는 `GET /api/v1/streams/schedules/{scheduleId}/seats`이며 `snapshot`, `seat` 이벤트를 보낸다. 두 스트림 모두 15초마다 heartbeat 주석을 보낸다.
+- 좌석 SSE의 `Last-Event-ID`가 Stream에 남아 있으면 이후 변경을 재생하고, 형식이 잘못됐거나 Stream에서 잘려 나간 ID면 스냅샷부터 보낸다.
+- 인증된 회원 ID가 없거나 숫자가 아니면 401 `UNAUTHORIZED`, 코어가 만든 회차 좌석 스냅샷 키가 없으면 404 `SCHEDULE_NOT_FOUND`, 회원의 대기열 항목이 없으면 404 `QUEUE_ENTRY_NOT_FOUND`로 응답한다.
 
 코어가 Gateway를 우회해 직접 노출되지 않도록 하는 네트워크 구성은 M6(k8s)에서 적용한다 ([ADR 0008](./adr/0008-queue-in-realtime-app.md)).
 
