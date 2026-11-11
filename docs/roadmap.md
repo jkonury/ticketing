@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2 완료 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md)), M3 대기
+- 상태: M0·M1·M2·M3-1 완료 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md)), M3-2 대기
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -38,10 +38,10 @@
 ## M3. Gateway + 실시간 앱
 
 ### M3-1. gateway
-- [ ] 코어·실시간 앱 라우팅
-- [ ] 입장 토큰 검증 필터 (예매 API 대상)
-- [ ] SSE 티켓 검증 필터
-- [ ] rate limit (Redis)
+- [x] 코어·실시간 앱 라우팅
+- [x] 입장 토큰 검증 필터 (예매 API 대상)
+- [x] SSE 티켓 검증 필터
+- [x] rate limit (Redis)
 
 ### M3-2. realtime (WebFlux + Coroutines)
 - [ ] 대기열: Redis Sorted Set 등록·순번 조회
