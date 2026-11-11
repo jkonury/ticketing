@@ -130,13 +130,16 @@ class E2eClient(private val gatewayUrl: String) {
         return result.body["ticket"].asString()
     }
 
-    fun sse(url: String, lastEventId: String? = null): Flow<SseEvent> = WebClient.create().get().uri(url)
-        .headers { if (lastEventId != null) it.set("Last-Event-ID", lastEventId) }
+    fun sse(url: String, lastEventId: String? = null, memberId: Long? = null): Flow<SseEvent> = WebClient.create().get().uri(url)
+        .headers {
+            if (lastEventId != null) it.set("Last-Event-ID", lastEventId)
+            if (memberId != null) it.set("X-Member-Id", memberId.toString())
+        }
         .accept(MediaType.TEXT_EVENT_STREAM).retrieve()
         .bodyToFlux(object : ParameterizedTypeReference<ServerSentEvent<String>>() {}).asFlow()
         .map { SseEvent(it.id(), it.event(), it.data()?.let(mapper::readTree)) }
 
-    private suspend fun poll(done: suspend () -> Boolean) = withContext(Dispatchers.IO) {
+    suspend fun poll(done: suspend () -> Boolean) = withContext(Dispatchers.IO) {
         withTimeout(30000) {
             while (!done()) delay(200)
         }
