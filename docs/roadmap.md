@@ -23,7 +23,7 @@
 ## M2. Batch
 
 - [x] `core-batch` 실행 모듈 구성 (코어 코드 공유, 웹 서버 없이 실행)
-- [ ] `settlement`가 결제·예매 이벤트를 받아 자기 스키마에 사본 적재
+- [x] `settlement`가 예매 확정·환불 취소 이벤트를 받아 자기 스키마에 사본 적재
 - [ ] 일별 정산 Job: jOOQ reader, chunk 처리, 수수료 계산, 재실행 안전성
 - [ ] 미결제 예매 정리 Job: `PENDING` 만료분을 `EXPIRED`로 전환
 - [ ] 좌석 스냅샷 보정 Job: 커밋 후 Redis 반영 실패로 어긋난 스냅샷을 DB 기준으로 보정

@@ -132,7 +132,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 - [전체 모듈 의존](./modulith/components.puml)
 - 모듈별: [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
 
-의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트)이다.
+의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트), `settlement → booking`(정산 사본 이벤트)이다.
 
 ### 이벤트 목록
 
