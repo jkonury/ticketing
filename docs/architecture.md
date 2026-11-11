@@ -390,7 +390,9 @@ erDiagram
 | 좌석 현황 스냅샷 | Hash 등 (회차별) | 코어가 유지, 실시간 앱이 읽음 |
 | 좌석 상태 변경 전달 | Streams | 코어 발행, 실시간 앱 구독 |
 | 대기열 | Sorted Set | 실시간 앱 |
-| 입장 토큰 | 단기 키 | 실시간 앱 발급, Gateway 검증 |
+| 입장 토큰 | `queue:admission:<token>` Hash (`memberId`, `scheduleId`), TTL | 실시간 앱 발급, Gateway 검증 |
+| SSE 티켓 | `sse:ticket:<ticket>` String (회원 ID), TTL 30초 | 코어 `member` 발급, Gateway 1회 소비 |
+| rate limit | SCG `RedisRateLimiter` 내부 키 | Gateway |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
 
 `catalog` 캐시는 트랜잭션 안의 변경을 커밋 뒤 적용하고, Redis 쓰기·삭제 완료를 기다린다(`RedisCacheWriter.immediateWrites`).
@@ -418,6 +420,13 @@ erDiagram
 2. 실시간 앱이 순번을 SSE로 push한다.
 3. 차례가 되면 **짧은 수명의 입장 토큰**을 발급한다.
 4. Gateway가 예매 API 요청에서 입장 토큰을 검증한다. 코어는 관여하지 않는다.
+
+Gateway 규칙 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)):
+
+- `/api/v1/queues/**`, `/api/v1/streams/**`는 realtime으로, 그 밖의 `/api/v1/**`는 core로 라우팅한다.
+- 입장 토큰은 `POST /api/v1/bookings`에만 적용하고, 검증된 회원과 요청 본문의 회차를 대조한다. 토큰이 없으면 403 `ADMISSION_TOKEN_REQUIRED`, 무효·만료·불일치면 403 `ADMISSION_TOKEN_INVALID`로 응답하며 클라이언트는 두 코드에 대기열로 돌려보낸다.
+- SSE 티켓은 `/api/v1/streams/**`에서 `?ticket=`으로 받아 한 번 소비한다. 검증 실패 시 401 `SSE_TICKET_INVALID`로 응답한다.
+- rate limit 초과 시 429 `RATE_LIMITED`로 응답한다.
 
 ### 6.2 좌석 선점
 
@@ -541,6 +550,8 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
   - access JWT는 HS256(대칭키, `JWT_SECRET` 환경 변수), 수명 15분, `sub`=회원 ID, `role` 클레임. 비대칭키(JWKS)는 MSA 전환 시 재검토한다.
   - refresh 토큰은 불투명 난수(수명 14일)이고 SHA-256 해시만 `member.refresh_token`에 저장한다. 갱신할 때마다 이전 토큰을 폐기(로테이션)하며, 폐기된 토큰이 재사용되면 그 회원의 모든 refresh 토큰을 폐기한다.
   - 비밀번호는 BCrypt. 가입 시 역할을 직접 고를 수 있다(플랫폼 관리자가 없어 주최자 승인 절차를 두지 않는다).
+- Gateway는 `Authorization: Bearer`가 있으면 모든 경로에서 같은 HS256 비밀로 JWT 서명을 검증하고, 실패 시 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지우며 realtime 경로에만 검증된 회원 ID를 전달한다. 코어도 JWT를 자체 검증한다 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)).
+- `POST /api/v1/sse-tickets`는 JWT 인증된 요청에서 코어 `member`가 티켓을 발급한다. 티켓은 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초이며, Gateway가 한 번 소비한다 ([ADR 0020](./adr/0020-gateway-verification-contracts.md)).
 - 역할: **일반 사용자**(예매), **주최자**(공연·회차 등록, 정산 조회). 역할 기반 인가 적용.
 - SSE는 BFF를 거치지 않는다. BFF가 발급한 **단기 SSE 티켓**으로 브라우저가 Gateway에 직접 연결한다. (Node 프로세스가 장기 연결을 붙드는 것을 피하기 위함)
 

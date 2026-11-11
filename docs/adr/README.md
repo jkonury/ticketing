@@ -32,3 +32,4 @@
 | [0017](0017-payment-owns-payment-events.md) | 결제 계약 이벤트는 payment 모듈이 소유 (booking → payment 단방향) | 수락 |
 | [0018](0018-payment-retry-boundaries.md) | PG 호출의 트랜잭션 분리와 미확정 결제·환불 재처리 | 수락 |
 | [0019](0019-batch-jobs-in-owning-modules.md) | Batch Job을 데이터 소유 모듈에 둔다 | 수락 |
+| [0020](0020-gateway-verification-contracts.md) | Gateway 검증 계약 구체화 | 수락 |
