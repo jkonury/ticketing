@@ -1,5 +1,8 @@
 package io.github.ticketing.booking.application.flow
 
+import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
+import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
@@ -49,6 +52,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 @AutoConfigureMockMvc
 @Import(BookingPaymentFlowTests.TestClockConfig::class)
 class BookingPaymentFlowTests : IntegrationTestSupport() {
+    @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
+    @MockitoBean lateinit var refundRequestListener: RefundRequestListener
+
     class MutableClock : Clock() {
         @Volatile var now: Instant = Instant.now()
         override fun getZone(): ZoneId = ZoneId.of("UTC")

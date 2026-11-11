@@ -1,5 +1,8 @@
 package io.github.ticketing.booking.adapter.provided.web
 
+import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
+import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.holdKey
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
@@ -25,6 +28,9 @@ import java.util.UUID
 
 @AutoConfigureMockMvc
 class BookingApiIntegrationTests : IntegrationTestSupport() {
+    @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
+    @MockitoBean lateinit var refundRequestListener: RefundRequestListener
+
     @Autowired lateinit var mvc: MockMvc
 
     @Autowired lateinit var register: RegisterScheduleSeatsUseCase

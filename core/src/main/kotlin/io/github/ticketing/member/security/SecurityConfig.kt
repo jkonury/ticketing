@@ -37,6 +37,7 @@ class SecurityConfig {
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
                 it.requestMatchers(HttpMethod.POST, "/api/v1/members", "/api/v1/auth/tokens", "/api/v1/auth/tokens/refresh").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/fake-pg").permitAll()
                     .requestMatchers("/actuator/health/**").permitAll()
                     // 공연·회차 조회는 공개 API다 (catalog 모듈의 경로)
                     .requestMatchers(HttpMethod.GET, "/api/v1/performances/**", "/api/v1/schedules/**").permitAll()

@@ -45,7 +45,7 @@
     {
       "step": 3,
       "name": "payment-inbound-adapters",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/kotlin/io/github/ticketing/payment/adapter/provided/event/PaymentRequestListener.kt",
         "test -f core/src/main/kotlin/io/github/ticketing/payment/adapter/provided/event/RefundRequestListener.kt",
@@ -54,7 +54,8 @@
         "./scripts/agent/test/run-tests.sh"
       ],
       "model": "sonnet",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "결제·환불 리스너와 원문 서명 검증 웹훅, 인증·오류 매핑을 구현하고 레지스트리·HTTP 및 전체 테스트 통과."
     },
     {
       "step": 4,
