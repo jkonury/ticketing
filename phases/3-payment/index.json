@@ -31,7 +31,7 @@
     {
       "step": 2,
       "name": "payment-application",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentRequestService.kt",
         "test -f core/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentRefundService.kt",
@@ -39,7 +39,8 @@
         "./scripts/agent/test/run-tests.sh"
       ],
       "model": "opus",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "summary": "결제·웹훅·환불 유스케이스와 트랜잭션 분리, 중복·롤백·동일 키 재처리를 구현하고 전체 테스트 통과."
     },
     {
       "step": 3,
