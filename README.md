@@ -53,7 +53,7 @@ flowchart LR
 
 | 문서 | 내용 |
 |---|---|
-| [docs/design.md](docs/design.md) | 설계 합의서 |
+| [docs/architecture.md](docs/architecture.md) | 아키텍처 문서 |
 | [docs/roadmap.md](docs/roadmap.md) | 단계별 구현 로드맵 (M0 ~ M6) |
 | [docs/adr/](docs/adr/README.md) | 아키텍처 결정 기록: 검토한 대안과 선택 이유 |
 | [CLAUDE.md](CLAUDE.md) | 작업 지침 |

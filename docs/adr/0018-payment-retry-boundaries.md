@@ -6,7 +6,7 @@
 - 결정 주체: 사용자 합의
 - 대체: 없음 (ADR 0011의 결제 처리 방식을 구체화)
 - 대체됨·일부 변경: 없음
-- 관련: [설계](../design.md), [ADR 0011](0011-event-driven-payment.md), [ADR 0017](0017-payment-owns-payment-events.md)
+- 관련: [설계](../architecture.md), [ADR 0011](0011-event-driven-payment.md), [ADR 0017](0017-payment-owns-payment-events.md)
 
 ## 배경
 

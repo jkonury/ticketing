@@ -47,7 +47,7 @@
 - 첫 명령은 후보를 찾는 용도라 오탐이 많다(예약 대역 IP도 걸린다). 두 번째 명령은 본인 값을 직접 채워서 쓴다. 이 값은 이 템플릿에 적지 않는다.
 
 ■ 참고 문서(저장소 루트 기준)
-- docs/design.md, docs/roadmap.md, docs/glossary.md, docs/adr/
+- docs/architecture.md, docs/roadmap.md, docs/glossary.md, docs/adr/
 - AGENTS.md, docs/rules/backend.md, docs/rules/frontend.md
 
 ■ 이 주석과 작성용 `<...>` 표시는 작성하면서 바꾸거나 지운다. 비밀 값 치환 표시는 유지한다.

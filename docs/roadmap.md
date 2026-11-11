@@ -1,10 +1,10 @@
 # 구현 로드맵
 
-- 기준 문서: [design.md](./design.md)
+- 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
 - 상태: M0 완료, M1 진행 중 (M1-1 member 완료)
 
-각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `design.md`를 함께 고친다.
+각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
 ## 단계 요약
 
@@ -22,7 +22,7 @@
 
 ## M0. 프로젝트 뼈대
 
-- [x] 버전 확정: Spring Boot 4.x, Spring Modulith, Spring Cloud Gateway, Kotlin, jOOQ, Java 25의 호환 조합을 공식 문서로 확인하고 `design.md` 2장에 기록
+- [x] 버전 확정: Spring Boot 4.x, Spring Modulith, Spring Cloud Gateway, Kotlin, jOOQ, Java 25의 호환 조합을 공식 문서로 확인하고 `architecture.md` 2장에 기록
 - [x] `git init`, `.gitignore`, `.editorconfig`
 - [x] Gradle 멀티 모듈 구성 (Kotlin DSL, version catalog): `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
 - [x] Kotlin 플러그인 설정: `spring`(allopen), `jpa`(noarg)
@@ -84,11 +84,11 @@
 - [ ] 모듈 단위 테스트(`@ApplicationModuleTest`)
 
 ### M1-8. 문서 정리
-- [ ] `docs/design.md`를 `docs/architecture.md`로 승격: 새로 쓰지 않고 옮기면서 실제 구조에 맞게 고친다. 합의일·상태 등 기록성 항목은 제거하고, "의도적으로 미룬 것" 절은 이 로드맵으로 옮긴다
-- [ ] 예매 흐름 시퀀스 다이어그램 추가 (대기열 제외: 선점 → 결제 → 확정, 실패 경로 포함)
-- [ ] Modulith `Documenter`로 모듈 의존 다이어그램 생성
-- [ ] 이벤트 목록(발행자, 구독자, 페이로드)과 테이블 구조(ERD) 추가
-- [ ] `design.md`를 가리키는 모든 참조를 `architecture.md`로 수정: `README.md`, `CLAUDE.md`, `docs/rules/backend.md`, `docs/rules/frontend.md`, `docs/adr/README.md`, 이 로드맵 (`grep -rn "design.md"`로 확인)
+- [x] design.md를 `docs/architecture.md`로 승격: 새로 쓰지 않고 옮기면서 실제 구조에 맞게 고친다. 합의일·상태 등 기록성 항목은 제거하고, "의도적으로 미룬 것" 절은 이 로드맵으로 옮긴다
+- [x] 예매 흐름 시퀀스 다이어그램 추가 (대기열 제외: 선점 → 결제 → 확정, 실패 경로 포함)
+- [x] Modulith `Documenter`로 모듈 의존 다이어그램 생성
+- [x] 이벤트 목록(발행자, 구독자, 페이로드)과 테이블 구조(ERD) 추가
+- [x] `design.md`를 가리키는 모든 참조를 `architecture.md`로 수정: `README.md`, `CLAUDE.md`, `docs/rules/backend.md`, `docs/rules/frontend.md`, `docs/adr/README.md`, 이 로드맵 (`grep -rn "design.md"`로 확인)
 
 **완료 기준**: 가입 → 로그인 → 좌석 선점 → 가짜 결제 → 예매 확정이 API 테스트로 통과하고, 동시성·실패 경로 테스트가 모두 통과. `docs/architecture.md`가 실제 코드 구조와 일치.
 
@@ -179,4 +179,17 @@
 
 ## 단계와 무관한 후속 항목
 
-`design.md` 12장의 미룬 항목: 소셜 로그인, 실제 PG 연동, 실제 알림 발송, 판매 통계 Batch, 플랫폼 관리자 역할, 등급별 수량제 좌석.
+의도적으로 미룬 항목이다. 요청 없이 앞당겨 구현하지 않는다.
+
+| 항목 | 도입 시점 |
+|---|---|
+| 소셜 로그인 (카카오/구글) | BFF 화면 완성 이후 |
+| Spring Authorization Server (OAuth2/OIDC) | MSA 전환 시 |
+| Kafka (Modulith 이벤트 외부화) | MSA 전환 시. 그 전까지 앱 간 통신은 Redis Streams |
+| 실제 PG 연동 (테스트 모드) | 가짜 PG로 보상 흐름 검증 이후 |
+| 실제 이메일/SMS 알림 | 미정 |
+| 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |
+| 플랫폼 관리자 역할 | 미정 |
+| 등급별 수량제 좌석 | 미정 |
+| 전체 관측 스택 | 부하 테스트 단계 |
+| k8s 배포 | MSA 전환과 함께 |

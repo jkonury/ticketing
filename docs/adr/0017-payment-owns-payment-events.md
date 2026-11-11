@@ -6,7 +6,7 @@
 - 결정 주체: 사용자 합의
 - 대체: 없음
 - 대체됨·일부 변경: 없음
-- 관련: [설계](../design.md), [ADR 0010](0010-events-modulith-and-redis-streams.md), [ADR 0011](0011-event-driven-payment.md)
+- 관련: [설계](../architecture.md), [ADR 0010](0010-events-modulith-and-redis-streams.md), [ADR 0011](0011-event-driven-payment.md)
 
 ## 배경
 
@@ -28,7 +28,7 @@
 
 - 얻는 것: 순환 없는 단방향 의존, 결제 계약이 한 모듈에 모여 Saga 전환 시 계약 경계가 분명하다.
 - 감수하는 것: `booking`이 `payment`에 컴파일 의존한다. `payment`가 이벤트 필드를 바꾸면 `booking`이 영향을 받는다.
-- 바뀌는 문서·지침: `docs/design.md` 4절 모듈 규칙, `docs/adr/README.md` 목록.
+- 바뀌는 문서·지침: `docs/architecture.md` 4절 모듈 규칙, `docs/adr/README.md` 목록.
 
 ## 검증
 

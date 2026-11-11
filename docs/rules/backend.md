@@ -1,6 +1,6 @@
 # Backend 지침
 
-Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/design.md`.
+Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 
 ## 빌드
 
