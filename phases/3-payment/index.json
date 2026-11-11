@@ -18,14 +18,15 @@
     {
       "step": 1,
       "name": "payment-pg-adapter",
-      "status": "pending",
+      "status": "completed",
       "ac": [
         "test -f core/src/main/kotlin/io/github/ticketing/payment/adapter/required/pg/FakePgAdapter.kt",
         "test -f core/src/main/kotlin/io/github/ticketing/payment/application/port/required/PgPort.kt",
         "./scripts/agent/test/run-tests.sh"
       ],
       "model": "sonnet",
-      "reasoning_effort": "medium"
+      "reasoning_effort": "medium",
+      "summary": "PG 포트·RestClient 어댑터와 비밀·타임아웃 설정 구현. HTTP 계약 및 지연·연결 종료 검증과 전체 테스트 통과."
     },
     {
       "step": 2,
