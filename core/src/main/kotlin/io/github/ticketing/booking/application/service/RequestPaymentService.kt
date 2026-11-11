@@ -17,6 +17,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
+import java.time.Instant
 
 @Service
 class RequestPaymentService(
@@ -50,25 +51,37 @@ class RequestPaymentService(
     }
 
     private fun requestInTransaction(memberId: MemberId, bookingId: BookingId): Outcome {
-        val booking = bookings.findById(bookingId) ?: throw BookingNotFoundException()
-        if (booking.memberId != memberId) throw NotBookingOwnerException()
+        val booking = findOwned(memberId, bookingId)
         val now = clock.instant()
         if (booking.status == BookingStatus.EXPIRED) throw BookingExpiredException()
         val alreadyRequested = booking.paymentRequestedAt != null
-        if (booking.status == BookingStatus.PENDING && !alreadyRequested && booking.isExpired(now)) {
-            booking.expire(now)
-            val saved = bookings.save(booking)
-            events.publishEvent(BookingExpired(bookingId.value, memberId.value, saved.scheduleId.value, now))
-            return Outcome.Expired(saved)
-        }
+        val expirable = booking.status == BookingStatus.PENDING && !alreadyRequested && booking.isExpired(now)
+        return if (expirable) expire(booking, now) else requestPayment(booking, alreadyRequested, now)
+    }
+
+    private fun findOwned(memberId: MemberId, bookingId: BookingId): Booking {
+        val booking = bookings.findById(bookingId) ?: throw BookingNotFoundException()
+        if (booking.memberId != memberId) throw NotBookingOwnerException()
+        return booking
+    }
+
+    private fun expire(booking: Booking, now: Instant): Outcome {
+        booking.expire(now)
+        val saved = bookings.save(booking)
+        events.publishEvent(BookingExpired(requireNotNull(booking.id).value, booking.memberId.value, saved.scheduleId.value, now))
+        return Outcome.Expired(saved)
+    }
+
+    private fun requestPayment(booking: Booking, alreadyRequested: Boolean, now: Instant): Outcome {
         // 이미 요청했으면 도메인이 아무것도 바꾸지 않는다. 그 경우 이벤트도 다시 발행하지 않는다
         booking.requestPayment(now)
         if (alreadyRequested) return Outcome.Done(booking)
         val saved = bookings.save(booking)
+        val bookingId = requireNotNull(saved.id).value
         events.publishEvent(
-            PaymentRequested(bookingId.value, memberId.value, saved.totalPrice, paymentIdempotencyKey(bookingId.value), now),
+            PaymentRequested(bookingId, saved.memberId.value, saved.totalPrice, paymentIdempotencyKey(bookingId), now),
         )
-        log.info("결제 요청 bookingId={} memberId={}", bookingId.value, memberId.value)
+        log.info("결제 요청 bookingId={} memberId={}", bookingId, saved.memberId.value)
         return Outcome.Done(saved)
     }
 }

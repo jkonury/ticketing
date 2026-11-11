@@ -31,7 +31,7 @@ class PaymentWebhookController(
 
         val command = try {
             parse(rawBody)
-        } catch (e: Exception) {
+        } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
             throw InvalidPaymentWebhookException().also { it.initCause(e) }
         }
 

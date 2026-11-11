@@ -195,6 +195,8 @@ class PaymentResultService(
         }
     }
 
+    // 커밋 후 Redis 실패는 종류와 관계없이 삼키고 로그만 남긴다
+    @Suppress("TooGenericExceptionCaught")
     private inline fun redis(booking: Booking, paymentId: Long, what: String, block: (Booking) -> Unit) {
         try {
             block(booking)

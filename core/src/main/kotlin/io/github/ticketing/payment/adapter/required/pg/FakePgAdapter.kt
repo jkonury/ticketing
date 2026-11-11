@@ -3,6 +3,7 @@ package io.github.ticketing.payment.adapter.required.pg
 import io.github.ticketing.payment.application.port.required.PgPaymentRequest
 import io.github.ticketing.payment.application.port.required.PgPort
 import io.github.ticketing.payment.application.port.required.PgRequestResult
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.client.RestClient
@@ -10,6 +11,8 @@ import org.springframework.web.client.RestClientException
 import org.springframework.web.client.RestClientResponseException
 
 class FakePgAdapter(private val client: RestClient) : PgPort {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
         val amount = request.amount.longValueExact()
         return call(expectedStatus = "PENDING") {
@@ -35,13 +38,8 @@ class FakePgAdapter(private val client: RestClient) : PgPort {
     ): PgRequestResult = try {
         val response = request()
         val body = response.body
-        if (response.statusCode == HttpStatus.ACCEPTED && body != null &&
-            !body.transactionId.isNullOrBlank() &&
-            body.status in setOf("PENDING", "APPROVED", "FAILED", "REFUNDED") &&
-            (expectedStatus == null || body.status == expectedStatus) &&
-            (expectedTransactionId == null || body.transactionId == expectedTransactionId)
-        ) {
-            PgRequestResult.Accepted(body.transactionId)
+        if (body != null && response.statusCode == HttpStatus.ACCEPTED && isValid(body, expectedStatus, expectedTransactionId)) {
+            PgRequestResult.Accepted(requireNotNull(body.transactionId))
         } else {
             PgRequestResult.Unknown("INVALID_RESPONSE")
         }
@@ -52,9 +50,21 @@ class FakePgAdapter(private val client: RestClient) : PgPort {
             PgRequestResult.Unknown("HTTP_ERROR")
         }
     } catch (exception: RestClientException) {
+        log.warn("PG 호출에 실패했다", exception)
         PgRequestResult.Unknown("CLIENT_ERROR")
+    }
+
+    private fun isValid(body: PgWireResponse, expectedStatus: String?, expectedTransactionId: String?): Boolean {
+        val wellFormed = !body.transactionId.isNullOrBlank() && body.status in KNOWN_STATUSES
+        val matchesExpected = (expectedStatus == null || body.status == expectedStatus) &&
+            (expectedTransactionId == null || body.transactionId == expectedTransactionId)
+        return wellFormed && matchesExpected
     }
 
     private data class PaymentWireRequest(val orderId: String, val amount: Long)
     private data class PgWireResponse(val transactionId: String? = null, val status: String? = null)
+
+    private companion object {
+        val KNOWN_STATUSES = setOf("PENDING", "APPROVED", "FAILED", "REFUNDED")
+    }
 }

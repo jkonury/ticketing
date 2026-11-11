@@ -12,12 +12,14 @@ import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.HoldToken
 import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
+import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -36,17 +38,14 @@ class CreateBookingService(
 
     override fun create(command: CreateBookingCommand): CreateBookingResult {
         val memberId = MemberId(command.memberId)
-        existing(memberId, command.idempotencyKey)?.let { return it }
+        return existing(memberId, command.idempotencyKey) ?: createNew(memberId, command)
+    }
 
+    private fun createNew(memberId: MemberId, command: CreateBookingCommand): CreateBookingResult {
         val scheduleId = ScheduleId(command.scheduleId)
         val requested = command.seatIds.map { SeatId(it) }
-        val copies = scheduleSeats.findSeats(scheduleId, requested).associateBy { it.seatId }
-        if (copies.isEmpty() && !scheduleSeats.existsSchedule(scheduleId)) throw ScheduleNotFoundException()
-
-        val seats = requested.map { id ->
-            val copy = copies[id] ?: throw SeatNotFoundException()
-            BookedSeat(id, copy.price)
-        }
+        val copies = findCopies(scheduleId, requested)
+        val seats = requested.map { id -> BookedSeat(id, copies.getValue(id).price) }
 
         val now = clock.instant()
         val holdToken = HoldToken(UUID.randomUUID().toString())
@@ -55,26 +54,48 @@ class CreateBookingService(
             Booking.create(memberId, scheduleId, seats, holdToken, now, command.idempotencyKey)
         }
 
-        when (val held = seatHold.hold(scheduleId, requested, holdToken, Booking.HOLD_DURATION, now)) {
-            is HoldResult.Unavailable -> {
-                // 같은 요청이 동시에 두 번 들어오면 한쪽은 선점에 실패한다. 먼저 끝난 쪽의 예매를 돌려준다
-                existing(memberId, command.idempotencyKey)?.let { return it }
-                throw SeatAlreadyHeldException(held.seatIds.map { it.value })
-            }
+        holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now)?.let { return it }
+        return persist(booking, copies.mapValues { it.value.label }, requested)
+    }
 
-            HoldResult.Held -> Unit
-        }
+    private fun findCopies(scheduleId: ScheduleId, requested: List<SeatId>): Map<SeatId, ScheduleSeatCopy> {
+        val copies = scheduleSeats.findSeats(scheduleId, requested).associateBy { it.seatId }
+        if (copies.isEmpty() && !scheduleSeats.existsSchedule(scheduleId)) throw ScheduleNotFoundException()
+        if (!copies.keys.containsAll(requested)) throw SeatNotFoundException()
+        return copies
+    }
 
+    // 같은 요청이 동시에 두 번 들어오면 한쪽은 선점에 실패한다. 먼저 끝난 쪽의 예매를 돌려준다
+    private fun holdOrExisting(
+        memberId: MemberId,
+        key: String,
+        scheduleId: ScheduleId,
+        requested: List<SeatId>,
+        holdToken: HoldToken,
+        now: Instant,
+    ): CreateBookingResult? = when (val held = seatHold.hold(scheduleId, requested, holdToken, Booking.HOLD_DURATION, now)) {
+        is HoldResult.Unavailable -> existing(memberId, key) ?: throw SeatAlreadyHeldException(held.seatIds.map { it.value })
+        HoldResult.Held -> null
+    }
+
+    private fun persist(booking: Booking, labels: Map<SeatId, String>, requested: List<SeatId>): CreateBookingResult {
         val saved = try {
-            requireNotNull(tx.execute { bookings.save(booking) })
-        } catch (e: Exception) {
-            runCatching { seatHold.release(scheduleId, requested, holdToken, clock.instant()) }
-                .onFailure { log.warn("예매 저장 실패 후 선점 해제에 실패했다. TTL로 만료된다. scheduleId={}", scheduleId.value, it) }
-            if (e is DataIntegrityViolationException) existing(memberId, command.idempotencyKey)?.let { return it }
-            throw e
+            save(booking, requested)
+        } catch (e: DataIntegrityViolationException) {
+            return existing(booking.memberId, booking.idempotencyKey) ?: throw e
         }
-        log.info("예매 생성 bookingId={} memberId={}", saved.id?.value, memberId.value)
-        return CreateBookingResult(saved.toResult(copies.mapValues { it.value.label }), created = true)
+        log.info("예매 생성 bookingId={} memberId={}", saved.id?.value, booking.memberId.value)
+        return CreateBookingResult(saved.toResult(labels), created = true)
+    }
+
+    // 저장이 실패하면 선점을 되돌리고 원래 예외를 그대로 던진다
+    @Suppress("TooGenericExceptionCaught")
+    private fun save(booking: Booking, requested: List<SeatId>): Booking = try {
+        requireNotNull(tx.execute { bookings.save(booking) })
+    } catch (e: Exception) {
+        runCatching { seatHold.release(booking.scheduleId, requested, booking.holdToken, clock.instant()) }
+            .onFailure { log.warn("예매 저장 실패 후 선점 해제에 실패했다. TTL로 만료된다. scheduleId={}", booking.scheduleId.value, it) }
+        throw e
     }
 
     private fun existing(memberId: MemberId, key: String): CreateBookingResult? {

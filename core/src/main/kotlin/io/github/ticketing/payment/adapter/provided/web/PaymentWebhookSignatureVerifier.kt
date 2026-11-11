@@ -31,23 +31,24 @@ class PaymentWebhookRuleException(code: String) :
 @Component
 class PaymentWebhookSignatureVerifier(private val properties: PaymentPgProperties, private val clock: Clock) {
     fun verify(timestamp: String?, signature: String?, body: ByteArray) {
-        try {
-            require(timestamp != null && timestamp.matches(Regex("[0-9]+")))
-            require(signature != null && signature.matches(Regex("[0-9a-fA-F]{64}")))
-            val time = Instant.ofEpochSecond(timestamp.toLong())
-            val distance = Duration.between(time, clock.instant()).abs()
-            require(distance <= properties.webhookTimestampTolerance)
-            val mac = Mac.getInstance("HmacSHA256")
-            mac.init(SecretKeySpec(properties.webhookSecret.toByteArray(UTF_8), "HmacSHA256"))
-            mac.update(timestamp.toByteArray(UTF_8))
-            mac.update('.'.code.toByte())
-            require(MessageDigest.isEqual(mac.doFinal(body), HexFormat.of().parseHex(signature)))
-        } catch (e: IllegalArgumentException) {
-            throw InvalidWebhookSignatureException().also { it.initCause(e) }
-        } catch (e: ArithmeticException) {
-            throw InvalidWebhookSignatureException().also { it.initCause(e) }
-        } catch (e: java.time.DateTimeException) {
-            throw InvalidWebhookSignatureException().also { it.initCause(e) }
+        val failure = runCatching { validate(timestamp, signature, body) }.exceptionOrNull() ?: return
+        // 형식·시각·길이 오류만 서명 오류로 보고, 그 밖의 예외는 그대로 올린다
+        if (failure is IllegalArgumentException || failure is ArithmeticException || failure is java.time.DateTimeException) {
+            throw InvalidWebhookSignatureException().also { it.initCause(failure) }
         }
+        throw failure
+    }
+
+    private fun validate(timestamp: String?, signature: String?, body: ByteArray) {
+        require(timestamp != null && timestamp.matches(Regex("[0-9]+")))
+        require(signature != null && signature.matches(Regex("[0-9a-fA-F]{64}")))
+        val time = Instant.ofEpochSecond(timestamp.toLong())
+        val distance = Duration.between(time, clock.instant()).abs()
+        require(distance <= properties.webhookTimestampTolerance)
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(properties.webhookSecret.toByteArray(UTF_8), "HmacSHA256"))
+        mac.update(timestamp.toByteArray(UTF_8))
+        mac.update('.'.code.toByte())
+        require(MessageDigest.isEqual(mac.doFinal(body), HexFormat.of().parseHex(signature)))
     }
 }

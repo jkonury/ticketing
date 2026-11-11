@@ -58,18 +58,9 @@ class CatalogRegistrationService(
     @Transactional
     @CacheEvict(CatalogCaches.PERFORMANCE, key = "#command.performanceId")
     fun registerSchedule(command: RegisterScheduleCommand): Schedule {
-        val performance = performances.findById(command.performanceId).orElseThrow { PerformanceNotFoundException() }
-        // 리소스 소유자 확인은 서비스에서 한다 (docs/rules/backend.md § 보안)
-        if (performance.organizerId != command.requesterId) throw NotPerformanceOwnerException()
+        val performance = findOwnedPerformance(command)
         val performanceId = requireNotNull(performance.id)
-        if (schedules.existsByPerformanceIdAndStartsAt(performanceId, command.startsAt)) throw DuplicateScheduleException()
-
-        // exists 확인과 저장 사이에 같은 회차가 들어오면 유니크 제약이 막는다. 500 대신 409로 변환한다
-        val schedule = try {
-            schedules.saveAndFlush(Schedule(performanceId, command.startsAt, clock.instant()))
-        } catch (e: DataIntegrityViolationException) {
-            throw DuplicateScheduleException().also { it.initCause(e) }
-        }
+        val schedule = saveSchedule(performanceId, command)
 
         val venue = venues.findById(performance.venueId).orElseThrow { VenueNotFoundException() }
         val seats = venue.seats.map { seat ->
@@ -92,6 +83,23 @@ class CatalogRegistrationService(
             ),
         )
         return schedule
+    }
+
+    private fun findOwnedPerformance(command: RegisterScheduleCommand): Performance {
+        val performance = performances.findById(command.performanceId).orElseThrow { PerformanceNotFoundException() }
+        // 리소스 소유자 확인은 서비스에서 한다 (docs/rules/backend.md § 보안)
+        if (performance.organizerId != command.requesterId) throw NotPerformanceOwnerException()
+        return performance
+    }
+
+    private fun saveSchedule(performanceId: Long, command: RegisterScheduleCommand): Schedule {
+        if (schedules.existsByPerformanceIdAndStartsAt(performanceId, command.startsAt)) throw DuplicateScheduleException()
+        // exists 확인과 저장 사이에 같은 회차가 들어오면 유니크 제약이 막는다. 500 대신 409로 변환한다
+        return try {
+            schedules.saveAndFlush(Schedule(performanceId, command.startsAt, clock.instant()))
+        } catch (e: DataIntegrityViolationException) {
+            throw DuplicateScheduleException().also { it.initCause(e) }
+        }
     }
 
     data class SeatSpec(val section: String, val rowLabel: String, val seatNumber: Int, val grade: SeatGrade)

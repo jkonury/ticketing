@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Clock
+import java.time.Instant
 import java.util.Base64
 import java.util.HexFormat
 
@@ -49,15 +50,17 @@ class AuthService(
     fun refresh(rawRefreshToken: String): IssuedTokens {
         val now = clock.instant()
         val stored = refreshTokens.findByTokenHash(hash(rawRefreshToken)) ?: throw InvalidRefreshTokenException()
-        if (stored.isRevoked()) {
-            log.warn("폐기된 리프레시 토큰이 재사용되었습니다. memberId={}", stored.memberId)
-            refreshTokens.revokeAllByMemberId(stored.memberId, now)
-            throw InvalidRefreshTokenException()
-        }
-        if (stored.isExpired(now)) throw InvalidRefreshTokenException()
-        val member = members.findById(stored.memberId).orElseThrow { InvalidRefreshTokenException() }
+        if (stored.isRevoked()) rejectReuse(stored, now)
+        val member = members.findById(stored.memberId).orElse(null)
+        if (stored.isExpired(now) || member == null) throw InvalidRefreshTokenException()
         stored.revoke(now)
         return issue(member)
+    }
+
+    private fun rejectReuse(stored: RefreshToken, now: Instant): Nothing {
+        log.warn("폐기된 리프레시 토큰이 재사용되었습니다. memberId={}", stored.memberId)
+        refreshTokens.revokeAllByMemberId(stored.memberId, now)
+        throw InvalidRefreshTokenException()
     }
 
     private fun issue(member: Member): IssuedTokens {

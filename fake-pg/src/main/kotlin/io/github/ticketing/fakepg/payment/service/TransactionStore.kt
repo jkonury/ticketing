@@ -50,20 +50,22 @@ class TransactionStore {
 
     /** 같은 거래에 같은 키로 다시 오면 상태를 바꾸지 않고 현재 거래를 돌려준다. */
     fun refund(transactionId: String, key: String, at: Instant): RefundResult {
-        if (!transactions.containsKey(transactionId)) throw TransactionNotFoundException(transactionId)
+        find(transactionId)
         var refundedNow: Transaction? = null
         refundKeys.computeIfAbsent("$transactionId:$key") {
-            val updated = transactions.computeIfPresent(transactionId) { _, tx ->
-                if (tx.status != TransactionStatus.APPROVED) throw TransactionNotRefundableException(transactionId)
-                tx.refund(at)
-            } ?: throw TransactionNotFoundException(transactionId)
-            refundedNow = updated
+            refundedNow = applyRefund(transactionId, at)
             transactionId
         }
         refundedNow?.let { return RefundResult(it, created = true) }
-        val current = transactions[transactionId] ?: throw TransactionNotFoundException(transactionId)
-        return RefundResult(current, created = false)
+        return RefundResult(find(transactionId), created = false)
     }
+
+    private fun find(transactionId: String): Transaction = transactions[transactionId] ?: throw TransactionNotFoundException(transactionId)
+
+    private fun applyRefund(transactionId: String, at: Instant): Transaction = transactions.computeIfPresent(transactionId) { _, tx ->
+        if (tx.status != TransactionStatus.APPROVED) throw TransactionNotRefundableException(transactionId)
+        tx.refund(at)
+    } ?: throw TransactionNotFoundException(transactionId)
 
     fun findByRequestedDate(date: LocalDate): List<Transaction> = transactions.values
         .filter { LocalDate.ofInstant(it.requestedAt, ZoneOffset.UTC) == date }

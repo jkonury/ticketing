@@ -132,9 +132,7 @@ class Booking private constructor(
             now: Instant,
             idempotencyKey: String,
         ): Booking {
-            if (seats.isEmpty()) throw NoSeatsException()
-            if (seats.size > MAX_SEATS) throw TooManySeatsException()
-            if (seats.map { it.seatId }.toSet().size != seats.size) throw DuplicateSeatException()
+            seatViolation(seats)?.let { throw it }
             return Booking(
                 id = null,
                 memberId = memberId,
@@ -151,6 +149,13 @@ class Booking private constructor(
                 confirmedAt = null,
                 cancelledAt = null,
             )
+        }
+
+        private fun seatViolation(seats: List<BookedSeat>): BookingRuleException? = when {
+            seats.isEmpty() -> NoSeatsException()
+            seats.size > MAX_SEATS -> TooManySeatsException()
+            seats.map { it.seatId }.toSet().size != seats.size -> DuplicateSeatException()
+            else -> null
         }
 
         /** 영속 상태에서 복원한다. 규칙 검증은 하지 않는다. */

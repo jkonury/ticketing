@@ -65,10 +65,10 @@ class CatalogSeedRunner(
         }
     }
 
-    private fun gradeOf(row: Int): SeatGrade = when (row) {
-        in 1..2 -> SeatGrade.VIP
-        in 3..5 -> SeatGrade.R
-        in 6..8 -> SeatGrade.S
+    private fun gradeOf(row: Int): SeatGrade = when {
+        row <= VIP_LAST_ROW -> SeatGrade.VIP
+        row <= R_LAST_ROW -> SeatGrade.R
+        row <= S_LAST_ROW -> SeatGrade.S
         else -> SeatGrade.A
     }
 
@@ -78,6 +78,9 @@ class CatalogSeedRunner(
         val SECTIONS = listOf("A", "B", "C", "D")
         const val ROWS = 10
         const val SEATS_PER_ROW = 20
+        const val VIP_LAST_ROW = 2
+        const val R_LAST_ROW = 5
+        const val S_LAST_ROW = 8
         const val SCHEDULES_PER_PERFORMANCE = 3
         val PRICES = mapOf(
             SeatGrade.VIP to BigDecimal(150000),

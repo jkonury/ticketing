@@ -462,22 +462,7 @@ class PaymentFlowTests : IntegrationTestSupport() {
             await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pg.requests.any { it.orderId == id.toString() }).isTrue() }
             val request = collector.of(PaymentRequested::class.java) { it.orderId == id }.single()
 
-            val pool = Executors.newFixedThreadPool(2)
-            try {
-                val ready = CountDownLatch(1)
-                val futures = (1..2).map { index ->
-                    pool.submit {
-                        ready.await()
-                        tx.executeWithoutResult {
-                            publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong())))
-                        }
-                    }
-                }
-                ready.countDown()
-                futures.forEach { it.get(10, TimeUnit.SECONDS) }
-            } finally {
-                pool.shutdownNow()
-            }
+            publishConcurrently(request)
 
             await().atMost(Duration.ofSeconds(10)).untilAsserted {
                 assertThat(pg.requests.count { it.orderId == id.toString() }).isGreaterThanOrEqualTo(2)
@@ -485,12 +470,7 @@ class PaymentFlowTests : IntegrationTestSupport() {
 
             gate.countDown()
             await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                val statuses = jdbc.queryForList(
-                    "select status from event_publication where listener_id like ? and serialized_event like ?",
-                    String::class.java,
-                    "%PaymentRequestListener%",
-                    "%\"orderId\":$id%",
-                )
+                val statuses = requestListenerStatuses(id)
                 assertThat(statuses).hasSize(3).allMatch { it == "FAILED" }
             }
 
@@ -498,22 +478,12 @@ class PaymentFlowTests : IntegrationTestSupport() {
             repeat(3) {
                 resubmit(id)
                 await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                    val statuses = jdbc.queryForList(
-                        "select status from event_publication where listener_id like ? and serialized_event like ?",
-                        String::class.java,
-                        "%PaymentRequestListener%",
-                        "%\"orderId\":$id%",
-                    )
+                    val statuses = requestListenerStatuses(id)
                     assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" || it == "FAILED" }
                 }
             }
             await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                val statuses = jdbc.queryForList(
-                    "select status from event_publication where listener_id like ? and serialized_event like ?",
-                    String::class.java,
-                    "%PaymentRequestListener%",
-                    "%\"orderId\":$id%",
-                )
+                val statuses = requestListenerStatuses(id)
                 assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" }
             }
 
@@ -525,6 +495,33 @@ class PaymentFlowTests : IntegrationTestSupport() {
         } finally {
             gate.countDown()
             pg.gate = null
+        }
+    }
+
+    private fun requestListenerStatuses(orderId: Long): List<String> = jdbc.queryForList(
+        "select status from event_publication where listener_id like ? and serialized_event like ?",
+        String::class.java,
+        "%PaymentRequestListener%",
+        "%\"orderId\":$orderId%",
+    )
+
+    // 같은 결제 요청 이벤트를 두 스레드가 동시에 다시 발행한다
+    private fun publishConcurrently(request: PaymentRequested) {
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val ready = CountDownLatch(1)
+            val futures = (1..2).map { index ->
+                pool.submit {
+                    ready.await()
+                    tx.executeWithoutResult {
+                        publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong())))
+                    }
+                }
+            }
+            ready.countDown()
+            futures.forEach { it.get(10, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
         }
     }
 
