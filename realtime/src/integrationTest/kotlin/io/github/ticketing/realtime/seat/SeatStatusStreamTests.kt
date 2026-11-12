@@ -19,10 +19,8 @@ import org.springframework.core.ParameterizedTypeReference
 import org.springframework.data.redis.connection.stream.StreamRecords
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.http.codec.ServerSentEvent
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 
-@TestPropertySource(properties = ["ticketing.realtime.queue.heartbeat-interval=100ms"])
 class SeatStatusStreamTests(client: WebTestClient, redis: ReactiveStringRedisTemplate, private val hub: SeatEventHub) :
     RealtimeIntegrationTestSupport(client, redis) {
     @Test

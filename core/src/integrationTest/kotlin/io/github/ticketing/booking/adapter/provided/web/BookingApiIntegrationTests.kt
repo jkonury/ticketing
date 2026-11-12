@@ -12,7 +12,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
-import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.context.bean.override.convention.TestBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -29,9 +29,11 @@ class BookingApiIntegrationTests(
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
 ) : IntegrationTestSupport() {
-    @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
+    @TestBean(methodName = "io.github.ticketing.TestListenerFactories#paymentRequestListener", enforceOverride = true)
+    lateinit var paymentRequestListener: PaymentRequestListener
 
-    @MockitoBean lateinit var refundRequestListener: RefundRequestListener
+    @TestBean(methodName = "io.github.ticketing.TestListenerFactories#refundRequestListener", enforceOverride = true)
+    lateinit var refundRequestListener: RefundRequestListener
 
     private val json = JsonMapper.builder().build()
 

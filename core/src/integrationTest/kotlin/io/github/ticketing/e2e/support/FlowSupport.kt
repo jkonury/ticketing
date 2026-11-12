@@ -1,7 +1,7 @@
 package io.github.ticketing.e2e.support
 
+import io.github.ticketing.FlowTestSupport
 import io.github.ticketing.IntegrationTestSupport
-import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
@@ -22,14 +22,14 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@Import(PaymentFlowTests.TestClockConfig::class)
+@Import(FlowTestSupport.TestClockConfig::class)
 abstract class FlowSupport(
     val mvc: MockMvc,
     val jdbc: JdbcTemplate,
     val redis: StringRedisTemplate,
-    val pg: PaymentFlowTests.TestPg,
-    val clock: PaymentFlowTests.MutableClock,
-    val collector: PaymentFlowTests.EventCollector,
+    val pg: FlowTestSupport.TestPg,
+    val clock: FlowTestSupport.MutableClock,
+    val collector: FlowTestSupport.EventCollector,
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
@@ -37,6 +37,7 @@ abstract class FlowSupport(
 
     @BeforeEach fun resetFlowClock() {
         clock.now = Instant.now()
+        pg.reset()
     }
     fun parse(result: MvcResult): Map<*, *> = json.readValue(result.response.contentAsString, Map::class.java)
     fun token(role: String = "USER"): String {

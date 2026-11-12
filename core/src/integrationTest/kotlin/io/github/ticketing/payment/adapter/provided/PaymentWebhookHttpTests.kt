@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.context.bean.override.convention.TestBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -40,13 +40,12 @@ class PaymentWebhookHttpTests(
 
     @TestConfiguration(proxyBeanMethods = false)
     class FixedClock {
-
         @Bean
         @Primary
         fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-11-11T00:00:00Z"), ZoneOffset.UTC)
     }
 
-    @MockitoBean
+    @TestBean(methodName = "io.github.ticketing.TestListenerFactories#bookingListener", enforceOverride = true)
     lateinit var bookingListener: PaymentResultListener
 
     private val now = Instant.parse("2026-11-11T00:00:00Z")

@@ -22,6 +22,13 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
+configurations.configureEach {
+    if (name.contains("test", ignoreCase = true)) {
+        exclude(group = "org.mockito")
+        exclude(group = "io.mockk")
+    }
+}
+
 val integrationTest = sourceSets.create("integrationTest") {
     compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
     runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
@@ -45,4 +52,18 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
 
 tasks.check {
     dependsOn(integrationTestTask)
+}
+
+val checkUnitBoundaries by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "단위 테스트의 Spring 기동, 컨테이너, mock 사용을 검사한다."
+    commandLine("bash", rootProject.file("scripts/agent/test/check-unit-boundaries.sh"), project.file("src/test"))
+}
+
+tasks.check {
+    dependsOn(checkUnitBoundaries)
+}
+
+tasks.test {
+    dependsOn(checkUnitBoundaries)
 }

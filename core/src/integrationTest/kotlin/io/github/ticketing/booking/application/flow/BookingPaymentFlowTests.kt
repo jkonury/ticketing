@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.application.flow
 
+import io.github.ticketing.FlowTestSupport
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
@@ -20,17 +21,12 @@ import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
-import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.stereotype.Component
-import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.context.bean.override.convention.TestBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -40,14 +36,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
 
-@Import(BookingPaymentFlowTests.TestClockConfig::class)
+@Import(FlowTestSupport.TestClockConfig::class)
 class BookingPaymentFlowTests(
     private val mvc: MockMvc,
     private val register: RegisterScheduleSeatsUseCase,
@@ -55,49 +48,15 @@ class BookingPaymentFlowTests(
     private val jdbc: JdbcTemplate,
     private val publisher: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
-    private val clock: MutableClock,
-    private val collector: EventCollector,
+    private val clock: FlowTestSupport.MutableClock,
+    private val collector: FlowTestSupport.EventCollector,
 ) : IntegrationTestSupport() {
 
-    @MockitoBean
+    @TestBean(methodName = "io.github.ticketing.TestListenerFactories#paymentRequestListener", enforceOverride = true)
     lateinit var paymentRequestListener: PaymentRequestListener
 
-    @MockitoBean
+    @TestBean(methodName = "io.github.ticketing.TestListenerFactories#refundRequestListener", enforceOverride = true)
     lateinit var refundRequestListener: RefundRequestListener
-
-    class MutableClock : Clock() {
-        @Volatile var now: Instant = Instant.now()
-        override fun getZone(): ZoneId = ZoneId.of("UTC")
-        override fun withZone(zone: ZoneId): Clock = this
-        override fun instant(): Instant = now
-    }
-
-    @Component
-    class EventCollector {
-        val events = CopyOnWriteArrayList<Any>()
-
-        @EventListener
-        fun on(event: Any) {
-            if (event.javaClass.name.startsWith("io.github.ticketing.booking.Booking") ||
-                event.javaClass.name.startsWith("io.github.ticketing.payment.")
-            ) {
-                events += event
-            }
-        }
-
-        fun <T : Any> of(type: Class<T>, predicate: (T) -> Boolean): List<T> = events.filterIsInstance(type).filter(predicate)
-    }
-
-    @TestConfiguration(proxyBeanMethods = false)
-    class TestClockConfig {
-
-        @Bean
-        @Primary
-        fun mutableClock() = MutableClock()
-
-        @Bean
-        fun eventCollector() = EventCollector()
-    }
 
     private val json = JsonMapper.builder().build()
 

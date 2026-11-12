@@ -1,5 +1,9 @@
 package io.github.ticketing.payment.flow
 
+import io.github.ticketing.FlowTestSupport
+import io.github.ticketing.FlowTestSupport.EventCollector
+import io.github.ticketing.FlowTestSupport.MutableClock
+import io.github.ticketing.FlowTestSupport.TestPg
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
@@ -15,48 +19,35 @@ import io.github.ticketing.payment.PaymentRefunded
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
-import io.github.ticketing.payment.application.port.required.PgPaymentRequest
-import io.github.ticketing.payment.application.port.required.PgPort
-import io.github.ticketing.payment.application.port.required.PgRequestResult
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
-import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.events.IncompleteEventPublications
-import org.springframework.stereotype.Component
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
 import java.util.HexFormat
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@Import(PaymentFlowTests.TestClockConfig::class)
+@Import(FlowTestSupport.TestClockConfig::class)
 class PaymentFlowTests(
     private val pg: TestPg,
     private val incomplete: IncompleteEventPublications,
@@ -70,86 +61,12 @@ class PaymentFlowTests(
     private val collector: EventCollector,
 ) : IntegrationTestSupport() {
 
-    class MutableClock : Clock() {
-        @Volatile var now: Instant = Instant.now()
-        override fun getZone(): ZoneId = ZoneId.of("UTC")
-        override fun withZone(zone: ZoneId): Clock = this
-        override fun instant(): Instant = now
-    }
-
-    @Component
-    class EventCollector {
-        val events = CopyOnWriteArrayList<Any>()
-
-        @EventListener
-        fun on(event: Any) {
-            if (event.javaClass.name.startsWith("io.github.ticketing.booking.Booking") ||
-                event.javaClass.name.startsWith("io.github.ticketing.payment.")
-            ) {
-                events += event
-            }
-        }
-
-        fun <T : Any> of(type: Class<T>, predicate: (T) -> Boolean): List<T> = events.filterIsInstance(type).filter(predicate)
-    }
-
-    @TestConfiguration(proxyBeanMethods = false)
-    class TestClockConfig {
-
-        @Bean
-        @Primary
-        fun mutableClock() = MutableClock()
-
-        @Bean
-        @Primary
-        fun pg() = TestPg()
-
-        @Bean
-        fun eventCollector() = EventCollector()
-    }
-
-    class TestPg : PgPort {
-        val requests = CopyOnWriteArrayList<PgPaymentRequest>()
-        val refunds = CopyOnWriteArrayList<Pair<String, String>>()
-        val transactions = ConcurrentHashMap<String, String>()
-
-        @Volatile var gate: CountDownLatch? = null
-
-        @Volatile var paymentResult = "accepted"
-
-        @Volatile var refundResult = "accepted"
-
-        override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
-            check(!TransactionSynchronizationManager.isActualTransactionActive())
-            requests += request
-            gate?.let { check(it.await(10, TimeUnit.SECONDS)) }
-            val transaction = transactions.computeIfAbsent(request.idempotencyKey) { "tx-${request.orderId}" }
-            return when (paymentResult) {
-                "unknown" -> PgRequestResult.Unknown("timeout")
-                "rejected" -> PgRequestResult.Rejected("declined")
-                else -> PgRequestResult.Accepted(transaction)
-            }
-        }
-
-        override fun requestRefund(transactionId: String, idempotencyKey: String): PgRequestResult {
-            check(!TransactionSynchronizationManager.isActualTransactionActive())
-            refunds += transactionId to idempotencyKey
-            return when (refundResult) {
-                "unknown" -> PgRequestResult.Unknown("timeout")
-                "rejected" -> PgRequestResult.Rejected("declined")
-                else -> PgRequestResult.Accepted(transactionId)
-            }
-        }
-    }
-
     private val json = JsonMapper.builder().build()
 
     @BeforeEach
     fun resetClock() {
         clock.now = Instant.now()
-        pg.gate = null
-        pg.paymentResult = "accepted"
-        pg.refundResult = "accepted"
+        pg.reset()
     }
 
     private fun newSchedule(seatCount: Int = 4): Long {

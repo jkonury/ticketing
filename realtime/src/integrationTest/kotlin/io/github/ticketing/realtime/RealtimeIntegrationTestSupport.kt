@@ -20,7 +20,10 @@ import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicReference
 
 @AutoConfigureWebTestClient
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = ["ticketing.realtime.queue.position-poll-interval=50ms", "ticketing.realtime.queue.heartbeat-interval=50ms"],
+)
 @Import(FixedClockConfiguration::class)
 abstract class RealtimeIntegrationTestSupport(protected val client: WebTestClient, protected val redis: ReactiveStringRedisTemplate) {
     protected suspend fun prepareSchedule(scheduleId: Long) {

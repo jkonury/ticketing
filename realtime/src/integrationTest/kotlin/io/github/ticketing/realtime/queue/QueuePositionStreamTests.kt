@@ -16,12 +16,8 @@ import org.junit.jupiter.api.Test
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.http.codec.ServerSentEvent
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 
-@TestPropertySource(
-    properties = ["ticketing.realtime.queue.position-poll-interval=50ms", "ticketing.realtime.queue.heartbeat-interval=50ms"],
-)
 class QueuePositionStreamTests(client: WebTestClient, redis: ReactiveStringRedisTemplate, private val admission: AdmissionService) :
     RealtimeIntegrationTestSupport(client, redis) {
     @Test

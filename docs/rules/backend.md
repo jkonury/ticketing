@@ -135,7 +135,7 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 
 - 단위 테스트는 Spring과 외부 인프라 없이 직접 작성한 fake로 실행한다. Mockito·MockK를 사용하지 않는다. 통합·구조 검증은 별도 실행 경로에 두고 전체 `check`에 포함한다. 전환 절차는 [테스트 구조 개선 계획](../plans/test-structure-improvement.md)을 따른다.
 - 도메인: 프레임워크 없는 순수 단위 테스트. 상태 전이의 허용·금지 경로를 모두 다룬다.
-- 유스케이스: 출력 포트를 가짜 구현(fake)으로 대체한다. mock 남용을 피한다.
+- 유스케이스: 출력 포트를 직접 작성한 fake로 대체한다. 상태·실패 주입을 명시하고 테스트마다 독립 인스턴스를 사용한다.
 - 어댑터와 통합: Testcontainers(PostgreSQL, Redis). H2나 embedded Redis를 쓰지 않는다.
 - 모듈: `@ApplicationModuleTest`, 이벤트 발행은 `Scenario` / `PublishedEvents`로 검증한다.
 - 동시성: 같은 좌석에 대한 동시 요청을 실제로 병렬 실행하고 "성공 1건, DB 확정 1건"을 단언한다.
@@ -148,10 +148,12 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - Spring 빈은 생성자의 `private val`로 주입한다. 하위 테스트가 사용하는 공통 베이스의 의존성은 필요한 가시성으로 선언하고, 구체 테스트의 생성자에서 전달한다. `@Autowired lateinit var` 필드 주입은 쓰지 않는다.
 - Spring 생성자 주입을 사용하는 모듈의 테스트 리소스에 `junit-platform.properties`를 두고 `spring.test.constructor.autowire.mode=all`을 설정한다. 생성자마다 `@Autowired`를 반복하지 않는다.
 - `ApplicationEvents`는 테스트 메서드 범위의 의존성이므로 필요한 테스트 메서드의 매개변수로 주입한다.
+- 통합 테스트에서 `@TestBean` 필드는 수기 구현으로 빈을 대체하는 선언이므로 `lateinit var`를 사용할 수 있다. 일반 빈은 생성자로 주입한다. 대체 객체는 AOP를 거치지 않으므로 해당 테스트로 실제 트랜잭션·비동기 리스너의 보장을 주장하지 않는다.
 
 ### Spring 컨텍스트 재사용
 
 - 코어 통합 테스트는 `IntegrationTestSupport`를 상속하고 공통 애플리케이션 클래스·MockMvc·컨테이너 설정을 사용한다. 하위 테스트에 같은 `@SpringBootTest`·`@AutoConfigureMockMvc` 설정을 반복하지 않는다.
+- 흐름 테스트의 Clock·fake PG·이벤트 수집은 독립된 `FlowTestSupport`에서 공유한다. 공유 모드는 테스트 시작 시 초기화하고 요청·이벤트는 고유 식별자로 구분한다.
 - 공통 테스트 설정은 명시적으로 재사용한다. 클래스별 `@Import`, 프로필, 테스트 프로퍼티, 빈 대체는 다른 컨텍스트를 만들 수 있으므로 테스트 동작에 필요한 경우에만 추가한다. 동작이 다른 Clock·가짜 PG·seed 프로필은 필요한 격리를 유지한다.
 - `@DirtiesContext`는 컨텍스트 자체를 복구할 수 없게 변경한 경우에만 쓴다. 테스트 데이터 정리를 대신하는 용도로 사용하지 않는다.
 - 같은 컨텍스트의 테스트는 고유 식별자로 데이터를 구분하고, 비동기 이벤트 처리가 끝난 뒤 검증한다. 공유 Clock·가짜 구현의 가변 상태는 각 테스트가 필요한 초기 상태로 설정한다.
