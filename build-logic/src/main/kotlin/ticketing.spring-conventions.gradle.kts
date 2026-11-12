@@ -19,5 +19,12 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Prometheus 지표 + OpenTelemetry 브리지·OTLP(HTTP) trace 내보내기를 묶은 starter (Boot 4.1)
+    implementation("org.springframework.boot:spring-boot-starter-micrometer-metrics")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
+    // JvmMetricsAutoConfiguration이 클래스패스에 있으면 VirtualThreadMetrics를 자동 등록한다
+    implementation("io.micrometer:micrometer-java21")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-micrometer-metrics-test")
 }
