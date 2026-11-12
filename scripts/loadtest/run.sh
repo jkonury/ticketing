@@ -128,11 +128,13 @@ write_env() {
     printf 'commit: %s\n' "$(git rev-parse HEAD)"
     printf 'dirty: %s\n' "$([[ -n $(git status --porcelain) ]] && echo yes || echo no)"
     printf 'jdk: %s\n' "$(java -version 2>&1 | head -n 1)"
-    printf 'cpu: %s (논리 코어 %s)\n' "$(lscpu | awk -F: '/Model name/ {gsub(/^ +/, "", $2); print $2}')" "$(nproc)"
-    printf 'memory: %s\n' "$(free -h | awk '/^Mem:/ {print $2}')"
+    printf 'cpu: %s (논리 코어 %s)\n' "$(LC_ALL=C lscpu | awk -F: '/Model name/ {gsub(/^ +/, "", $2); print $2}')" "$(nproc)"
+    printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
     printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
     printf 'scenario: %s\nruns: %s\nfailure-inject: %s\njfr: %s\nobservability: %s\n' "$SCENARIO" "$RUNS" "$FAILURE_INJECT" "$JFR" "$OBSERVABILITY"
     printf 'k6-cpus: %s\napp-cpus: %s\n' "$K6_CPUS" "$APP_CPUS"
+    printf 'os: %s\n' "$(uname -srm)"
+    printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
     printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
   } > "$1/env.txt"
 }
@@ -169,9 +171,17 @@ run_once() {
   if $OBSERVABILITY; then k6_args+=(-o experimental-prometheus-rw); fi
   local k6_status=0 vus_env=()
   [[ -z $VUS ]] || vus_env=(VUS="$VUS")
+  local k6_from k6_to
+  k6_from=$(date +%s)
   env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
     BASE_URL=http://localhost:8000 JWT_SECRET="$JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
     "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 || k6_status=$?
+  k6_to=$(date +%s)
+  if $OBSERVABILITY; then
+    sleep 6 # 마지막 scrape(5초 간격)가 Prometheus에 들어오게 한다
+    "$ROOT/scripts/loadtest/prom-snapshot.sh" "$k6_from" "$k6_to" "$dir" > "$dir/prom-snapshot.log" 2>&1 \
+      || echo "Prometheus 지표 추출 실패: $dir/prom-snapshot.log" >&2
+  fi
 
   local integrity='해당 없음' integrity_ok=true
   if [[ $SCENARIO != smoke ]]; then
