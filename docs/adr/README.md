@@ -36,3 +36,4 @@
 | [0021](0021-realtime-queue-and-sse-contracts.md) | realtime 대기열·SSE 계약 | 수락 |
 | [0022](0022-bff-session-and-aggregation-apis.md) | BFF 세션과 조합 API | 수락 |
 | [0023](0023-schedule-detail-api.md) | 예매 화면용 회차 조회 API | 수락 |
+| [0024](0024-observability-and-load-test.md) | 관측 스택과 부하 테스트 방식 | 수락 |
