@@ -135,3 +135,42 @@ docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 | 문서의 경로·제목·링크 | `./scripts/agent/docs/check-docs.sh` |
 
 설계와 다르게 가야 하면 먼저 사용자에게 알리고, 합의되면 `architecture.md`와 새 ADR을 같이 고친다.
+
+## 8. 관측 스택 띄우기와 부하 테스트 실행
+
+관측 스택은 기본 Compose 위에 `compose.observability.yaml`을 겹쳐 띄운다.
+
+```bash
+docker compose -f compose.yaml -f compose.observability.yaml up -d --wait   # 관측 스택 기동
+docker compose -f compose.yaml -f compose.observability.yaml down          # 종료 (데이터 유지)
+```
+
+| 도구 | 주소 | 용도 |
+|---|---|---|
+| Grafana | http://localhost:3001 | 대시보드(`ticketing-overview`). 익명 Admin으로 열린다 |
+| Prometheus | http://localhost:9090 | 지표 조회. k6 지표도 remote-write로 들어온다 |
+| Tempo | http://localhost:3200 | trace 조회. 보통은 Grafana Explore에서 본다 |
+
+- Grafana는 3000이 아니라 3001을 쓴다(3000은 web).
+- 앱은 span을 기본으로 내보내지 않는다. 켜려면 앱을 띄울 때 `TRACING_EXPORT_ENABLED=true`를 주고, 비율은 `TRACING_SAMPLING_PROBABILITY`(기본 1.0)로 정한다. 내보내는 주소는 `OTLP_TRACES_ENDPOINT`(기본 `http://localhost:4318/v1/traces`)다. `run.sh --observability`는 이 값을 `true`와 `0.1`로 넣는다.
+- 지표는 모든 Spring 앱의 `/actuator/prometheus`에서 Prometheus가 수집한다. 앱별 포트는 `application.yml`을 본다.
+
+부하 테스트는 `scripts/loadtest/run.sh`로 실행한다. 필요한 것은 `.env`, 실행 중인 Docker, 비어 있는 8000·8080·8081·8090 포트다. k6 바이너리(`build/loadtest/k6`)는 실행 전에 `build-k6.sh`로 빌드된다. smoke는 없을 때만 빌드한다.
+
+```bash
+./scripts/loadtest/run.sh --scenario smoke                                   # 연결과 시나리오 점검
+./scripts/loadtest/run.sh --scenario queue-surge --runs 3 --observability    # 기준 측정 A (3회)
+./scripts/loadtest/run.sh --scenario hot-seats --runs 3 --observability      # 기준 측정 B (3회)
+./scripts/loadtest/run.sh --scenario hot-seats --failure-inject --observability  # 실패 주입 (fake-pg 실패 10%, 웹훅 중복 30%)
+./scripts/loadtest/run.sh --scenario queue-surge --jfr                       # JFR로 pinning 확인
+```
+
+- 주요 옵션: `--runs N`(반복 횟수), `--vus N`, `--k6-cpus 0-3`·`--app-cpus 4-15`(CPU 분리), `--keep`(앱만 정리하고 Compose 인프라는 남긴다), `-h`(전체 옵션).
+- 결과는 `build/loadtest/runs/<타임스탬프>-<시나리오>/<N>/`에 저장된다. `k6-summary.json`, `k6.log`, `prometheus.json`, 앱별 `core.log`·`realtime.log`·`gateway.log`·`fake-pg.log`가 있다. git에는 넣지 않는다.
+- 부하 테스트는 `build`·`check`에 포함되지 않는다. Gradle 작업과 동시에 실행하지 않는다. 측정은 다른 검사가 끝난 뒤 단독으로 돌린다.
+
+정합성 검증이 실패하면(`정합성 위반`, 종료 코드 1) 다음을 본다.
+
+1. 실행 디렉터리의 `integrity.log`(검증 스크립트 출력)와 `integrity.json`(위반 목록과 상태별 예매 수). 원본은 `build/loadtest/integrity-<scheduleId>.json`이다.
+2. 같은 실행의 `core.log`. 좌석 확정·결제 웹훅 처리 중 예외와 보상 실패를 찾는다. 로그는 `rg -n -m 20 'ERROR|Exception' 로그경로`로 좁힌다.
+3. 중복 판매(같은 좌석이 두 번 확정)는 DB 유니크 제약이 막아야 하는 사건이다. 위반이 있으면 측정 결과로 넘기지 말고 원인을 먼저 찾는다.

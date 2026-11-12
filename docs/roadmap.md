@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2·M3·M4 완료, M5 대기 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
+- 상태: M0·M1·M2·M3·M4 완료, M5-1(관측·기준 측정) 완료, M5-2(개선) 대기 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -78,11 +78,14 @@
 
 ## M5. 부하 테스트와 관측
 
-- [ ] Micrometer + Prometheus + Grafana, 분산 추적
-- [ ] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
+- [x] Micrometer + Prometheus + Grafana, 분산 추적
+- [x] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
 - [ ] 기준 수치 측정 후 병목 개선, 전후 수치 기록
+  - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
 - [ ] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)
+  - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
 - [ ] 결과를 `docs/`에 문서화
+  - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
 
 **완료 기준**: 부하 상황에서 좌석 중복 판매 0건, 개선 전후 수치가 문서로 남아 있다.
 
@@ -117,5 +120,4 @@
 | 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |
 | 플랫폼 관리자 역할 | 미정 |
 | 등급별 수량제 좌석 | 미정 |
-| 전체 관측 스택 | 부하 테스트 단계 |
 | k8s 배포 | MSA 전환과 함께 |
