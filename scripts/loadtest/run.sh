@@ -8,7 +8,7 @@ cd "$ROOT"
 usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
-            [--k6-cpus 0-3] [--app-cpus 4-15]
+            [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15]
 USAGE
   exit 1
 }
@@ -19,6 +19,7 @@ FAILURE_INJECT=false
 JFR=false
 OBSERVABILITY=false
 KEEP=false
+VUS=
 K6_CPUS=0-3
 APP_CPUS=4-15
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
@@ -26,6 +27,7 @@ while (($#)); do
   case "$1" in
     --scenario) need_value "$@"; SCENARIO=$2; shift 2 ;;
     --runs) need_value "$@"; RUNS=$2; shift 2 ;;
+    --vus) need_value "$@"; VUS=$2; shift 2 ;;
     --k6-cpus) need_value "$@"; K6_CPUS=$2; shift 2 ;;
     --app-cpus) need_value "$@"; APP_CPUS=$2; shift 2 ;;
     --failure-inject) FAILURE_INJECT=true; shift ;;
@@ -38,6 +40,7 @@ while (($#)); do
 done
 case "$SCENARIO" in smoke|queue-surge|hot-seats) ;; *) usage ;; esac
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+[[ -z $VUS || $VUS =~ ^[1-9][0-9]*$ ]] || { echo '--vus에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 
 for command in docker curl java jq taskset; do
   command -v "$command" >/dev/null || { printf '필요한 도구가 없습니다: %s\n' "$command" >&2; exit 1; }
@@ -164,29 +167,47 @@ run_once() {
 
   local k6_args=(run --summary-export "$dir/k6-summary.json")
   if $OBSERVABILITY; then k6_args+=(-o experimental-prometheus-rw); fi
-  local k6_status=0
-  K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
+  local k6_status=0 vus_env=()
+  [[ -z $VUS ]] || vus_env=(VUS="$VUS")
+  env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
     BASE_URL=http://localhost:8000 JWT_SECRET="$JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-    taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 || k6_status=$?
+    "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 || k6_status=$?
 
-  local integrity='해당 없음'
+  local integrity='해당 없음' integrity_ok=true
   if [[ $SCENARIO != smoke ]]; then
     sleep 10
     local schedule_id
     schedule_id=$(jq -r .scheduleId "$schedule_file")
-    if "$ROOT/scripts/loadtest/verify-integrity.sh" "$schedule_id" > "$dir/integrity.log" 2>&1; then integrity='통과'; else integrity='위반(integrity.log 참고)'; fi
+    if "$ROOT/scripts/loadtest/verify-integrity.sh" "$schedule_id" > "$dir/integrity.log" 2>&1; then
+      integrity='통과'
+    else
+      integrity='위반(integrity.log 참고)'
+      integrity_ok=false
+    fi
     cp "$OUT/integrity-$schedule_id.json" "$dir/integrity.json" 2>/dev/null || true
   fi
 
   cleanup # SIGTERM으로 종료해 JFR이 파일로 남게 한다
 
-  local thresholds='통과' reqs failed p95
-  ((k6_status == 0)) || thresholds="실패(k6 종료 코드 $k6_status)"
+  # k6 종료 코드 99는 threshold 미달이다. 기준 측정은 미달 항목을 그대로 기록하므로 스크립트 실패로 보지 않는다.
+  # smoke의 99는 checks 실패(연결 이상)라서 실패로 본다
+  local thresholds='통과' script_ok=true reqs failed p95
+  if ((k6_status == 99)) && [[ $SCENARIO != smoke ]]; then
+    thresholds='미달(k6 종료 코드 99, 기록용이며 실패 아님)'
+  elif ((k6_status != 0)); then
+    thresholds="스크립트 오류(k6 종료 코드 $k6_status, k6.log 참고)"
+    script_ok=false
+  fi
+  # 반복 중 던져진 스크립트 예외는 k6 종료 코드에 드러나지 않으므로 로그에서 찾는다
+  if rg -q 'source=stacktrace|script exception' "$dir/k6.log"; then
+    thresholds="$thresholds, 스크립트 예외 발생(k6.log의 source=stacktrace 참고)"
+    script_ok=false
+  fi
   reqs=$(jq -r '.metrics.http_reqs.count // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
   failed=$(jq -r '.metrics.http_req_failed | (.value // .rate) // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
-  p95=$(jq -r '.metrics.booking_create_duration["p(95)"] // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
+  p95=$(jq -r '.metrics["http_req_duration{name:booking_create}"]["p(95)"] // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
   SUMMARY+=("run $n: thresholds $thresholds, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 디렉터리 $dir")
-  return $k6_status
+  $script_ok && $integrity_ok
 }
 
 overall=0
