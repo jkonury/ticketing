@@ -69,7 +69,7 @@ cd web && npm run dev
 - 문서 검사: `./scripts/agent/docs/check-docs.sh [경로...]` (lychee 오프라인으로 상대 경로 링크와 `#anchor`를, `check-doc-refs.sh`로 문서의 백틱 경로를 검사). 문서를 옮기거나 제목·링크를 바꾸면 실행합니다. 설정은 `lychee.toml`입니다.
 - 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
 - E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"]`. 사전 조건은 `.env`, 실행 중인 Docker, 비어 있는 8000·8080·8081·8082 포트다. 로그는 `build/e2e/logs/`에 저장한다. `build`·`check`에는 포함되지 않으므로 core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
-- Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌린다(`docs/rules/backend.md`). 테스트 규칙(한국어 백틱 이름, `Clock` 고정, `runTest`)도 같은 문서를 따른다.
+- Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌리고, 다이어그램은 `./gradlew :core:modulithDocs`로 생성한다(`docs/rules/backend.md`). 테스트 규칙(한국어 백틱 이름, `Clock` 고정, `runTest`)도 같은 문서를 따른다.
 
 ## 8. 공통 규칙
 

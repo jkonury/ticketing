@@ -70,3 +70,20 @@ tasks.compileKotlin {
 tasks.matching { it.name.startsWith("runKtlint") || it.name.startsWith("ktlint") }.configureEach {
     mustRunAfter(generateJooq)
 }
+
+// 문서 생성 테스트는 docs/를 덮어쓰므로 기본 test에서 빼고, 모듈 의존을 바꿨을 때만 modulithDocs로 실행한다.
+tasks.test {
+    useJUnitPlatform {
+        excludeTags("docs")
+    }
+}
+
+tasks.register<Test>("modulithDocs") {
+    group = "documentation"
+    description = "Modulith 모듈 의존 다이어그램(docs/modulith)을 생성한다."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("docs")
+    }
+}

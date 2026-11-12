@@ -34,7 +34,7 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - 모듈 간 호출은 이벤트로 한다. 발행은 `ApplicationEventPublisher`, 수신은 `@ApplicationModuleListener`.
 - 이벤트는 불변이고 과거형 이름을 쓴다 (`BookingConfirmed`, `PaymentFailed`). 엔티티가 아니라 ID와 필요한 값만 담는다. 추후 Kafka로 외부화되므로 직렬화 가능한 단순 타입만 쓴다.
 - 이벤트 리스너는 **멱등**하게 만든다. 같은 이벤트가 다시 와도 결과가 같아야 한다.
-- 모듈을 추가하거나 의존을 바꾸면 Modulith 검증 테스트를 실행한다.
+- 모듈을 추가하거나 의존을 바꾸면 Modulith 검증 테스트를 실행하고, `./gradlew :core:modulithDocs`로 `docs/modulith/` 다이어그램을 다시 생성해 함께 커밋한다. 기본 `test`는 문서를 생성하지 않는다.
 
 ## 헥사고날 (`booking`, `payment`, `settlement`)
 
