@@ -15,6 +15,8 @@
 | SSE 티켓 | `sse:ticket:<ticket>` String (회원 ID), TTL 30초 | 코어 `member` 발급, Gateway 1회 소비 |
 | rate limit | SCG `RedisRateLimiter` 내부 키 | Gateway |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
+| BFF 세션 | `bff:session:<sessionId>` String(JSON), TTL 14일 | `web` BFF |
+| BFF 토큰 갱신 락 | `bff:refresh-lock:<sessionId>` String, `SET NX PX` | `web` BFF |
 
 `catalog` 캐시는 트랜잭션 안의 변경을 커밋 뒤 적용하고, Redis 쓰기·삭제 완료를 기다린다(`RedisCacheWriter.immediateWrites`).
 

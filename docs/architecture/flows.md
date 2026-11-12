@@ -27,7 +27,7 @@ realtime 규칙 ([ADR 0021](../adr/0021-realtime-queue-and-sse-contracts.md)):
 - 입장 스케줄러는 기본 1초 주기로 회차별 최대 50명을 입장시키며, 입장 토큰 TTL 기본값은 10분이다.
 - SSE heartbeat와 대기 상태 조회는 마지막 신호를 기록한다. 기본 30초 유예를 넘긴 대기자는 입장 직전에 제거한다.
 - 순번 SSE 경로는 `GET /api/v1/streams/queues/{scheduleId}`이며 `position`(본문 `position`), `admitted`(본문 `admissionToken`, `expiresAt`), `removed` 이벤트를 보낸다. 좌석 SSE 경로는 `GET /api/v1/streams/schedules/{scheduleId}/seats`이며 `snapshot`(본문 `seats`), `seat`(본문 `seatIds`, `status`, `holdExpiresAt`, `at`) 이벤트를 보낸다. 두 스트림 모두 15초마다 heartbeat 주석을 보낸다.
-- 좌석 SSE의 `Last-Event-ID`가 Stream에 남아 있으면 이후 변경을 재생하고, 형식이 잘못됐거나 Stream에서 잘려 나간 ID면 스냅샷부터 보낸다.
+- 좌석 SSE의 `Last-Event-ID`가 Stream에 남아 있으면 이후 변경을 재생하고, 형식이 잘못됐거나 Stream에서 잘려 나간 ID면 스냅샷부터 보낸다. 헤더가 없으면 `lastEventId` 쿼리를 쓴다(브라우저 재연결용, [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)).
 - 인증된 회원 ID가 없거나 숫자가 아니면 401 `UNAUTHORIZED`, 코어가 만든 회차 좌석 스냅샷 키가 없으면 404 `SCHEDULE_NOT_FOUND`, 회원의 대기열 항목이 없으면 404 `QUEUE_ENTRY_NOT_FOUND`로 응답한다.
 - 좌석 SSE는 인스턴스마다 회차별 공유 리더가 비블로킹 `XREAD`를 주기적으로 실행한다.
 
