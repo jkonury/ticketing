@@ -86,3 +86,5 @@ web/src
 - 컴포넌트: 사용자 관점의 동작 위주로 테스트한다.
 - E2E(Playwright): 로그인 → 대기열 → 좌석 선택 → 결제 → 예매 완료.
 - 토큰 비노출 검증: E2E에서 브라우저 저장소와 네트워크 응답에 JWT가 없음을 확인한다 (M4 완료 기준).
+- 실행: `./scripts/agent/test/web-check.sh [--build]`
+- 실행: `./scripts/e2e/run.sh --web`

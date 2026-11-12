@@ -20,7 +20,7 @@
 ## 8. BFF (Next.js)
 
 - 일반 API 요청은 전부 BFF를 거친다.
-- 세션은 Redis `bff:session:<sessionId>`에 회원 ID, 역할, access·refresh 토큰과 access 만료 시각을 저장하며 TTL은 14일이다. 쿠키에는 불투명 세션 ID만 담고 `HttpOnly`, `SameSite=Lax`, `Path=/`를 설정한다. 운영 환경에서는 `Secure`도 설정한다.
+- 세션은 Redis `bff:session:<sessionId>`에 회원 ID, 이름, 역할, access·refresh 토큰과 access 만료 시각을 저장하며 TTL은 14일이다. 쿠키 `ticketing_session`에는 불투명 세션 ID만 담고 `HttpOnly`, `SameSite=Lax`, `Path=/`, 14일 만료를 설정한다. `SESSION_COOKIE_SECURE` 환경 변수로 `Secure`를 켜며 로컬 HTTP에서는 끈다.
 - access 토큰은 만료 30초 전 또는 하위 API가 401을 반환하면 갱신한다. 세션당 한 번만 갱신하도록 프로세스 안 single-flight와 Redis 락을 사용하며, 갱신 실패 시 세션을 파기하고 로그인으로 보낸다.
 - 상태를 바꾸는 Route Handler는 `Origin`(없으면 `Referer`)이 web origin과 같은지 검사한다. Server Action도 Next 내장 검사에 더해 같은 검사를 적용한다.
 - 조합(Aggregation) 화면
@@ -31,6 +31,20 @@
 - 세션·갱신·조합 API 결정은 [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)를 따른다.
 - 예매 화면은 공개 `GET /api/v1/schedules/{id}`에서 공연 ID·제목과 회차 시각을 조회한다 ([ADR 0023](../adr/0023-schedule-detail-api.md)).
 - 주최자 화면은 최소한으로 만들고, 초기 공연 데이터는 시드 스크립트로 넣는다.
+
+### BFF Route Handler
+
+브라우저가 호출하는 Route Handler는 `web/src/app/api/` 아래에 둔다.
+
+| 경로 | 메서드 | 역할 |
+|---|---|---|
+| `/api/bookings` | POST | 좌석 예매 생성 |
+| `/api/bookings/[id]` | GET | 예매 상태 조회 |
+| `/api/bookings/[id]/cancel` | POST | 예매 취소 |
+| `/api/bookings/[id]/payments` | POST | 결제 요청 |
+| `/api/queues/[scheduleId]/entries` | POST | 대기열 진입 |
+| `/api/queues/[scheduleId]/entries/me` | GET | 내 대기열 상태 조회 |
+| `/api/streams/tickets` | POST | SSE 연결용 단기 티켓 발급 |
 
 ## 10. 외부 연동
 

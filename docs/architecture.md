@@ -58,6 +58,8 @@
 | jOOQ | 3.21.9 | Boot BOM 관리. 코드 생성은 Testcontainers + Flyway 기반 |
 | Gradle | 9.8.2 | wrapper |
 | PostgreSQL / Redis | 18.3-alpine / 8.6.2-alpine | Compose, Testcontainers 공통 |
+| Next.js | 16.4.6 | App Router |
+| Node.js | 24 | web 런타임 |
 
 버전은 `gradle/libs.versions.toml`이 기준이다. Boot BOM이 관리하는 라이브러리(jOOQ, Flyway, Testcontainers)는 BOM을 따른다.
 
@@ -202,7 +204,7 @@ Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJ
 - 통합 테스트: Testcontainers
 - 모듈 테스트: Modulith 모듈 단위 테스트(`@ApplicationModuleTest`)
 - 동시성 테스트: 같은 좌석에 대한 동시 선점·확정
-- E2E: `e2e` 모듈과 `scripts/e2e/run.sh`가 Compose 스택과 core·gateway·realtime 두 프로세스를 띄워 대기열 → 입장 → 예매 확정 → 다른 사용자 좌석 SSE 도달 및 입장 토큰 차단을 검증한다. `build`·`check`에는 포함되지 않는다.
+- E2E: `e2e` 모듈과 `scripts/e2e/run.sh`가 Compose 스택과 core·gateway·realtime 두 프로세스를 띄워 대기열 → 입장 → 예매 확정 → 다른 사용자 좌석 SSE 도달 및 입장 토큰 차단을 검증한다. `./scripts/e2e/run.sh --web`은 여기에 web(Playwright)을 추가해 전체 예매 시나리오와 JWT 비노출을 검사한다. `build`·`check`에는 포함되지 않는다.
 - 다중 인스턴스: realtime 통합 테스트는 같은 Redis를 사용하는 컨텍스트 두 개에서 순번·입장 락·좌석 push·`Last-Event-ID` 재연결을 검증한다. E2E에서는 Gateway가 realtime 한 인스턴스를 가리키고 두 번째에는 직접 연결한다. 부하 분산은 M6의 k8s Service에서 한다.
 - 부하 테스트: k6, "1만 명 동시 진입" 시나리오. 개선 전후 수치를 기록한다.
 - 관측: Actuator로 시작. 부하 테스트 단계에서 Micrometer + Prometheus + Grafana + 분산 추적으로 확장.
