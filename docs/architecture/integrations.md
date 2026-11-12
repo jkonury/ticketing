@@ -29,6 +29,7 @@
   - 주최자 대시보드: 판매 현황과 정산은 둘 다 부가 데이터이며 둘 다 실패하면 오류 화면을 표시한다.
 - 조합에 사용하는 코어 API는 `GET /api/v1/schedules/availability?scheduleIds=...`, 확장된 `GET /api/v1/bookings/me?performanceId=...`, `GET /api/v1/payments/me?bookingIds=...`, `GET /api/v1/organizer/sales`다. 각 API는 소유 모듈의 스키마만 조회한다.
 - 세션·갱신·조합 API 결정은 [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)를 따른다.
+- 예매 화면은 공개 `GET /api/v1/schedules/{id}`에서 공연 ID·제목과 회차 시각을 조회한다 ([ADR 0023](../adr/0023-schedule-detail-api.md)).
 - 주최자 화면은 최소한으로 만들고, 초기 공연 데이터는 시드 스크립트로 넣는다.
 
 ## 10. 외부 연동

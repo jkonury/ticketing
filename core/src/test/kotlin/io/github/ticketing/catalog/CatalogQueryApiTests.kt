@@ -117,6 +117,22 @@ class CatalogQueryApiTests(
     }
 
     @Test
+    fun `회차 상세는 공연 제목과 시작 시각을 반환하고 없는 회차는 404다`() {
+        val performanceId = performance(venue())
+        val scheduleId = schedule(performanceId, "2027-05-01T10:00:00Z")
+
+        mvc.perform(get("/api/v1/schedules/$scheduleId"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(scheduleId))
+            .andExpect(jsonPath("$.performanceId").value(performanceId))
+            .andExpect(jsonPath("$.performanceTitle").value("조회 공연"))
+            .andExpect(jsonPath("$.startsAt").value("2027-05-01T10:00:00Z"))
+        mvc.perform(get("/api/v1/schedules/999999999"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("SCHEDULE_NOT_FOUND"))
+    }
+
+    @Test
     fun `회차 좌석 배치는 좌석과 등급·가격을 담고 상태는 담지 않는다`() {
         val scheduleId = schedule(performance(venue()), "2027-05-01T10:00:00Z")
 

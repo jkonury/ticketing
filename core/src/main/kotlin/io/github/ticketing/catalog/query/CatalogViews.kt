@@ -13,6 +13,8 @@ data class GradePrice(val grade: String, val price: BigDecimal)
 
 data class ScheduleSummary(val id: Long, val startsAt: Instant)
 
+data class ScheduleDetail(val id: Long, val performanceId: Long, val performanceTitle: String, val startsAt: Instant)
+
 data class PerformanceDetail(
     val id: Long,
     val title: String,

@@ -4,6 +4,7 @@ import io.github.ticketing.catalog.config.CatalogCaches
 import io.github.ticketing.catalog.query.CatalogQueryRepository
 import io.github.ticketing.catalog.query.PerformanceDetail
 import io.github.ticketing.catalog.query.PerformancePage
+import io.github.ticketing.catalog.query.ScheduleDetail
 import io.github.ticketing.catalog.query.SeatLayout
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
@@ -11,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional
 
 @Service
 class CatalogQueryService(private val queries: CatalogQueryRepository) {
+
+    @Transactional(readOnly = true)
+    fun schedule(id: Long): ScheduleDetail = queries.findSchedule(id) ?: throw ScheduleNotFoundException()
 
     @Transactional(readOnly = true)
     fun performances(cursor: Long?, size: Int): PerformancePage = queries.findPerformances(cursor, size.coerceIn(1, MAX_PAGE_SIZE))

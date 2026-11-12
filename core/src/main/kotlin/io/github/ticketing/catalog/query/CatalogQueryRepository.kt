@@ -13,6 +13,20 @@ import java.math.BigDecimal
 @Repository
 class CatalogQueryRepository(private val dsl: DSLContext) {
 
+    fun findSchedule(id: Long): ScheduleDetail? = dsl
+        .select(SCHEDULE.ID, PERFORMANCE.ID, PERFORMANCE.TITLE, SCHEDULE.STARTS_AT)
+        .from(SCHEDULE)
+        .join(PERFORMANCE).on(PERFORMANCE.ID.eq(SCHEDULE.PERFORMANCE_ID))
+        .where(SCHEDULE.ID.eq(id))
+        .fetchOne {
+            ScheduleDetail(
+                requireNotNull(it[SCHEDULE.ID]),
+                requireNotNull(it[PERFORMANCE.ID]),
+                requireNotNull(it[PERFORMANCE.TITLE]),
+                requireNotNull(it[SCHEDULE.STARTS_AT]).toInstant(),
+            )
+        }
+
     /** ID 내림차순 커서 페이지. 다음 페이지 존재 여부를 알기 위해 1건 더 읽는다. */
     fun findPerformances(cursor: Long?, size: Int): PerformancePage {
         val firstStartsAt = DSL.field(

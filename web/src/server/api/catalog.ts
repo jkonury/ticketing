@@ -65,6 +65,18 @@ export function getSeats(id: number) {
     auth: 'none',
   });
 }
+export function getSchedule(id: number) {
+  return gateway.call({
+    path: `/api/v1/schedules/${id}`,
+    schema: z.object({
+      id: z.number(),
+      performanceId: z.number(),
+      performanceTitle: z.string(),
+      startsAt: z.string(),
+    }),
+    auth: 'none',
+  });
+}
 export function createVenue(body: unknown) {
   return gateway.call({
     path: '/api/v1/venues',

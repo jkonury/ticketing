@@ -35,3 +35,4 @@
 | [0020](0020-gateway-verification-contracts.md) | Gateway 검증 계약 구체화 | 수락 |
 | [0021](0021-realtime-queue-and-sse-contracts.md) | realtime 대기열·SSE 계약 | 수락 |
 | [0022](0022-bff-session-and-aggregation-apis.md) | BFF 세션과 조합 API | 수락 |
+| [0023](0023-schedule-detail-api.md) | 예매 화면용 회차 조회 API | 수락 |

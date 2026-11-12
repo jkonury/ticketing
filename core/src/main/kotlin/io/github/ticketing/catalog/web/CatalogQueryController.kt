@@ -2,6 +2,7 @@ package io.github.ticketing.catalog.web
 
 import io.github.ticketing.catalog.query.PerformanceDetail
 import io.github.ticketing.catalog.query.PerformancePage
+import io.github.ticketing.catalog.query.ScheduleDetail
 import io.github.ticketing.catalog.query.SeatView
 import io.github.ticketing.catalog.service.CatalogQueryService
 import org.springframework.web.bind.annotation.GetMapping
@@ -22,6 +23,9 @@ class CatalogQueryController(private val service: CatalogQueryService) {
 
     @GetMapping("/performances/{id}")
     fun performance(@PathVariable id: Long): PerformanceDetail = service.performance(id)
+
+    @GetMapping("/schedules/{id}")
+    fun schedule(@PathVariable id: Long): ScheduleDetail = service.schedule(id)
 
     @GetMapping("/schedules/{id}/seats")
     fun seats(@PathVariable id: Long): List<SeatView> = service.seats(id).seats
