@@ -13,8 +13,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.job.Job
 import org.springframework.batch.core.job.parameters.JobParametersBuilder
-import org.springframework.batch.core.launch.JobLauncher
-import org.springframework.context.annotation.Import
+import org.springframework.batch.core.launch.JobOperator
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.test.context.event.RecordApplicationEvents
 import java.math.BigDecimal
@@ -22,7 +21,7 @@ import java.time.Instant
 
 @RecordApplicationEvents
 class ReconcileSeatSnapshotJobTests(
-    private val launcher: JobLauncher,
+    private val operator: JobOperator,
     private val reconcileSeatSnapshotJob: Job,
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
@@ -43,12 +42,12 @@ class ReconcileSeatSnapshotJobTests(
         hash.put(snapshotKey(upcoming), "1", "SOLD")
         hash.put(snapshotKey(started), "1", "SOLD")
 
-        val first = launcher.run(reconcileSeatSnapshotJob, parameters(1))
+        val first = operator.start(reconcileSeatSnapshotJob, parameters(1))
         assertThat(first.status).isEqualTo(BatchStatus.COMPLETED)
         assertThat(hash.get(snapshotKey(upcoming), "1")).isEqualTo("AVAILABLE")
         assertThat(hash.get(snapshotKey(started), "1")).isEqualTo("SOLD")
         val before = redis.opsForStream<String, String>().size(streamKey(upcoming))
-        val second = launcher.run(reconcileSeatSnapshotJob, parameters(2))
+        val second = operator.start(reconcileSeatSnapshotJob, parameters(2))
 
         assertThat(second.status).isEqualTo(BatchStatus.COMPLETED)
         // changed 합계는 같은 컨텍스트의 다른 테스트 회차를 포함하므로 이 테스트의 회차 상태로만 단언한다.

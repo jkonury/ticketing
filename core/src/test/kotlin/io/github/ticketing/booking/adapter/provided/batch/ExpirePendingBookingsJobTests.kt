@@ -5,11 +5,8 @@ import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.BookingExpired
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.holdKey
-import io.github.ticketing.booking.application.port.provided.ExpireBookingUseCase
-import io.github.ticketing.booking.application.port.provided.ExpireResult
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
-import io.github.ticketing.booking.application.service.ExpireBookingService
 import io.github.ticketing.booking.domain.BookedSeat
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingStatus
@@ -23,26 +20,18 @@ import org.junit.jupiter.api.Test
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.job.Job
 import org.springframework.batch.core.job.parameters.JobParametersBuilder
-import org.springframework.batch.core.launch.JobLauncher
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
-import org.springframework.dao.OptimisticLockingFailureException
+import org.springframework.batch.core.launch.JobOperator
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
-import java.util.concurrent.atomic.AtomicBoolean
 
 @RecordApplicationEvents
 class ExpirePendingBookingsJobTests(
-    private val launcher: JobLauncher,
+    private val operator: JobOperator,
     private val expirePendingBookingsJob: Job,
     private val bookings: BookingCommandPort,
     private val seatHold: SeatHoldPort,
@@ -63,10 +52,10 @@ class ExpirePendingBookingsJobTests(
         failingUseCase.failingId = requireNotNull(conflict.id).value
         failingUseCase.failNext.set(true)
 
-        assertThat(launcher.run(expirePendingBookingsJob, parameters(11)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(expirePendingBookingsJob, parameters(11)).status).isEqualTo(BatchStatus.COMPLETED)
         assertThat(status(conflict)).isEqualTo(BookingStatus.PENDING)
         assertThat(status(other)).isEqualTo(BookingStatus.EXPIRED)
-        assertThat(launcher.run(expirePendingBookingsJob, parameters(12)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(expirePendingBookingsJob, parameters(12)).status).isEqualTo(BatchStatus.COMPLETED)
         assertThat(status(conflict)).isEqualTo(BookingStatus.EXPIRED)
     }
 
@@ -80,8 +69,8 @@ class ExpirePendingBookingsJobTests(
         val token = expired.holdToken
         seatHold.hold(expired.scheduleId, expired.seats.map { it.seatId }, token, Duration.ofHours(1), NOW)
 
-        assertThat(launcher.run(expirePendingBookingsJob, parameters(1)).status).isEqualTo(BatchStatus.COMPLETED)
-        assertThat(launcher.run(expirePendingBookingsJob, parameters(2)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(expirePendingBookingsJob, parameters(1)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(expirePendingBookingsJob, parameters(2)).status).isEqualTo(BatchStatus.COMPLETED)
 
         assertThat(status(expired)).isEqualTo(BookingStatus.EXPIRED)
         assertThat(status(graceExpired)).isEqualTo(BookingStatus.EXPIRED)

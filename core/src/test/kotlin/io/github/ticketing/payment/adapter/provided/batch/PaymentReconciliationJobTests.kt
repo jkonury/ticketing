@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.job.Job
 import org.springframework.batch.core.job.parameters.JobParametersBuilder
-import org.springframework.batch.core.launch.JobLauncher
+import org.springframework.batch.core.launch.JobOperator
 import ticketing.jooq.payment.tables.references.RECONCILIATION_MISMATCH
 import java.math.BigDecimal
 import java.time.Instant
@@ -19,7 +19,7 @@ import java.time.ZoneOffset
 import ticketing.jooq.payment.tables.references.PAYMENT_ as PAYMENT
 
 class PaymentReconciliationJobTests(
-    private val launcher: JobLauncher,
+    private val operator: JobOperator,
     private val paymentReconciliationJob: Job,
     private val pg: TestPgTransactions,
     private val dsl: DSLContext,
@@ -61,12 +61,12 @@ class PaymentReconciliationJobTests(
             99104L to "MISSING_INTERNAL",
         )
 
-        assertThat(launcher.run(paymentReconciliationJob, params(date)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(paymentReconciliationJob, params(date)).status).isEqualTo(BatchStatus.COMPLETED)
         assertThat(mismatches(date)).isEqualTo(expected)
-        assertThat(launcher.run(paymentReconciliationJob, params(date, 1)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(paymentReconciliationJob, params(date, 1)).status).isEqualTo(BatchStatus.COMPLETED)
         assertThat(mismatches(date)).isEqualTo(expected)
         pg.transactions = listOf(transaction(99101), transaction(99102), transaction(99103))
-        assertThat(launcher.run(paymentReconciliationJob, params(date, 2)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(paymentReconciliationJob, params(date, 2)).status).isEqualTo(BatchStatus.COMPLETED)
 
         assertThat(mismatches(date)).containsExactly(99103L to "TRANSACTION_ID_MISMATCH")
     }
@@ -81,7 +81,7 @@ class PaymentReconciliationJobTests(
         pg.fail = false
         pg.transactions = transactions + first + second + transaction(99301).copy(requestedAt = timestamp)
 
-        assertThat(launcher.run(paymentReconciliationJob, params(target)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(paymentReconciliationJob, params(target)).status).isEqualTo(BatchStatus.COMPLETED)
 
         assertThat(mismatches(target)).hasSize(101).contains(99300L to "MISSING_INTERNAL", 99301L to "MISSING_INTERNAL")
     }
@@ -93,8 +93,8 @@ class PaymentReconciliationJobTests(
         pg.transactions = emptyList()
         val parameters = params(target)
 
-        assertThat(launcher.run(paymentReconciliationJob, parameters).status).isEqualTo(BatchStatus.FAILED)
+        assertThat(operator.start(paymentReconciliationJob, parameters).status).isEqualTo(BatchStatus.FAILED)
         pg.fail = false
-        assertThat(launcher.run(paymentReconciliationJob, parameters).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(paymentReconciliationJob, parameters).status).isEqualTo(BatchStatus.COMPLETED)
     }
 }

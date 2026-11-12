@@ -2,12 +2,9 @@ package io.github.ticketing.settlement.adapter.provided.batch
 
 import io.github.ticketing.FailingDailySettlementWriter
 import io.github.ticketing.IntegrationTestSupport
-import io.github.ticketing.settlement.adapter.required.jooq.DailySettlementJooqAdapter
 import io.github.ticketing.settlement.application.port.provided.RecordRefundCommand
 import io.github.ticketing.settlement.application.port.provided.RecordSaleCommand
-import io.github.ticketing.settlement.application.port.required.DailySettlementCommandPort
 import io.github.ticketing.settlement.application.port.required.SettlementCopyCommandPort
-import io.github.ticketing.settlement.domain.DailySettlement
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.jooq.DSLContext
@@ -15,20 +12,14 @@ import org.junit.jupiter.api.Test
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.job.Job
 import org.springframework.batch.core.job.parameters.JobParametersBuilder
-import org.springframework.batch.core.launch.JobLauncher
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
-import org.springframework.test.context.TestPropertySource
+import org.springframework.batch.core.launch.JobOperator
 import ticketing.jooq.settlement.tables.references.DAILY_SETTLEMENT
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
-import java.util.concurrent.atomic.AtomicBoolean
 
 class DailySettlementJobTests(
-    private val launcher: JobLauncher,
+    private val operator: JobOperator,
     private val dailySettlementJob: Job,
     private val copies: SettlementCopyCommandPort,
     private val dsl: DSLContext,
@@ -60,9 +51,9 @@ class DailySettlementJobTests(
         val previous = LocalDate.parse("2026-11-10")
         val today = LocalDate.parse("2026-11-11")
 
-        assertThat(launcher.run(dailySettlementJob, params(previous.toString())).status).isEqualTo(BatchStatus.COMPLETED)
-        assertThat(launcher.run(dailySettlementJob, params(today.toString())).status).isEqualTo(BatchStatus.COMPLETED)
-        assertThat(launcher.run(dailySettlementJob, params(today.toString(), 1)).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(dailySettlementJob, params(previous.toString())).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(dailySettlementJob, params(today.toString())).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(dailySettlementJob, params(today.toString(), 1)).status).isEqualTo(BatchStatus.COMPLETED)
 
         val rows = dsl.selectFrom(DAILY_SETTLEMENT).where(DAILY_SETTLEMENT.PERFORMANCE_ID.between(97001L, 97003L)).fetch()
         assertThat(rows).hasSize(3)
@@ -84,15 +75,15 @@ class DailySettlementJobTests(
         writer.failNext.set(true)
         val parameters = params("2027-01-10")
 
-        assertThat(launcher.run(dailySettlementJob, parameters).status).isEqualTo(BatchStatus.FAILED)
-        assertThat(launcher.run(dailySettlementJob, parameters).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(dailySettlementJob, parameters).status).isEqualTo(BatchStatus.FAILED)
+        assertThat(operator.start(dailySettlementJob, parameters).status).isEqualTo(BatchStatus.COMPLETED)
 
         assertThat(dsl.fetchCount(DAILY_SETTLEMENT, DAILY_SETTLEMENT.PERFORMANCE_ID.between(97101L, 97102L))).isEqualTo(2)
     }
 
     @Test
     fun `대상 날짜가 없으면 실행하지 않는다`() {
-        assertThatThrownBy { launcher.run(dailySettlementJob, JobParametersBuilder().toJobParameters()) }
+        assertThatThrownBy { operator.start(dailySettlementJob, JobParametersBuilder().toJobParameters()) }
             .hasMessageContaining("targetDate")
     }
 }
