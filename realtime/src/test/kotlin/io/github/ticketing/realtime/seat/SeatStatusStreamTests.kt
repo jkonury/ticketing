@@ -86,6 +86,35 @@ class SeatStatusStreamTests(client: WebTestClient, redis: ReactiveStringRedisTem
     }
 
     @Test
+    fun `쿼리 ID 이후를 재생하고 헤더가 있으면 헤더를 우선한다`() = runTest {
+        withContext(Dispatchers.Default) {
+            val schedule = 408L
+            prepareSchedule(schedule)
+            val first = add(schedule, "SOLD")
+            val second = add(schedule, "AVAILABLE")
+            val third = add(schedule, "HELD")
+            coroutineScope {
+                val queryReplay = stream(schedule, queryId = first).asFlow().produceIn(this)
+                val replayedFromQuery = nextData(queryReplay)
+                assertThat(replayedFromQuery.event()).isEqualTo("seat")
+                assertThat(replayedFromQuery.id()).isEqualTo(second)
+                assertThat(nextData(queryReplay).id()).isEqualTo(third)
+                queryReplay.cancel()
+
+                val headerReplay = stream(schedule, first, second).asFlow().produceIn(this)
+                val replayed = nextData(headerReplay)
+                assertThat(replayed.event()).isEqualTo("seat")
+                assertThat(replayed.id()).isEqualTo(second)
+                headerReplay.cancel()
+
+                val invalid = stream(schedule, queryId = "invalid").asFlow().produceIn(this)
+                assertThat(nextData(invalid).event()).isEqualTo("snapshot")
+                invalid.cancel()
+            }
+        }
+    }
+
+    @Test
     fun `빈 스트림 스냅샷 이후 연속 변경은 순서대로 한 번씩 전달된다`() = runTest {
         withContext(Dispatchers.Default) {
             val schedule = 406L
@@ -170,9 +199,20 @@ class SeatStatusStreamTests(client: WebTestClient, redis: ReactiveStringRedisTem
             .withStreamKey(streamKey(schedule)),
     ).awaitSingle().value
 
-    private fun stream(schedule: Long, lastId: String? = null) = clientFor(1).get().uri("/api/v1/streams/schedules/$schedule/seats")
+    private fun stream(schedule: Long, lastId: String? = null, queryId: String? = null) = clientFor(1).get().uri { builder ->
+        builder.path("/api/v1/streams/schedules/$schedule/seats")
+            .apply { if (queryId != null) queryParam("lastEventId", queryId) }.build()
+    }
         .apply { if (lastId != null) header("Last-Event-ID", lastId) }.exchange().expectStatus().isOk
         .returnResult(object : ParameterizedTypeReference<ServerSentEvent<String>>() {}).responseBody
+
+    private suspend fun nextData(events: ReceiveChannel<ServerSentEvent<String>>): ServerSentEvent<String> = withTimeout(5000) {
+        while (true) {
+            val event = events.receive()
+            if (event.event() != null) return@withTimeout event
+        }
+        error("unreachable")
+    }
 
     private suspend fun next(events: ReceiveChannel<ServerSentEvent<String>>, name: String): ServerSentEvent<String> = withTimeout(5000) {
         while (true) {

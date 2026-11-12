@@ -21,6 +21,7 @@ import org.springframework.http.codec.ServerSentEvent
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestHeader
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigInteger
 import java.time.Clock
@@ -37,6 +38,7 @@ class SeatStatusStreamController(
         @PathVariable scheduleId: Long,
         @RequestHeader("X-Member-Id", required = false) member: String?,
         @RequestHeader("Last-Event-ID", required = false) lastEventId: String?,
+        @RequestParam("lastEventId", required = false) lastEventIdQuery: String?,
     ): Flow<ServerSentEvent<Any>> {
         memberId(member)
         if (!redis.hasKey(snapshotKey(scheduleId)).awaitSingle()) {
@@ -55,7 +57,7 @@ class SeatStatusStreamController(
                     }
                 }
                 try {
-                    var lastSent = initial(scheduleId, lastEventId) { send(it) }
+                    var lastSent = initial(scheduleId, lastEventId?.takeIf { it.isNotBlank() } ?: lastEventIdQuery) { send(it) }
                     for (event in buffered) {
                         val id = requireNotNull(StreamId.parse(event.id))
                         if (id > lastSent) {
