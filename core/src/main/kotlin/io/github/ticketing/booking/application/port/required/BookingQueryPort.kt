@@ -13,7 +13,7 @@ interface BookingQueryPort {
 
     fun findSweepCandidateIds(cutoff: Instant, paymentCutoff: Instant, afterId: Long?, limit: Int): List<Long>
 
-    fun findMyBookings(memberId: Long, cursor: Long?, size: Int): BookingPage
+    fun findMyBookings(memberId: Long, cursor: Long?, size: Int, performanceId: Long?): BookingPage
 
     fun findDetail(bookingId: Long): BookingDetailView?
 }

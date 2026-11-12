@@ -18,6 +18,7 @@ data class CreateBookingResult(val booking: BookingResult, val created: Boolean)
 
 data class BookingSummaryView(
     val bookingId: Long,
+    val performanceId: Long,
     val status: String,
     val performanceTitle: String,
     val startsAt: Instant,

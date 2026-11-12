@@ -45,7 +45,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
             .orderBy(BOOKING.ID.asc()).limit(limit).fetch { requireNotNull(it[BOOKING.ID]) }
 
     /** ID 내림차순 커서 페이지. 다음 페이지 존재 여부를 알기 위해 1건 더 읽는다. */
-    override fun findMyBookings(memberId: Long, cursor: Long?, size: Int): BookingPage {
+    override fun findMyBookings(memberId: Long, cursor: Long?, size: Int, performanceId: Long?): BookingPage {
         val seatCount = DSL.field(
             DSL.selectCount().from(BOOKING_SEAT).where(BOOKING_SEAT.BOOKING_ID.eq(BOOKING.ID)),
         )
@@ -53,6 +53,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
         val rows = dsl.select(
             BOOKING.ID,
             BOOKING.STATUS,
+            SCHEDULE.PERFORMANCE_ID,
             SCHEDULE.PERFORMANCE_TITLE,
             SCHEDULE.STARTS_AT,
             seatCount,
@@ -63,12 +64,14 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
             .join(SCHEDULE).on(SCHEDULE.SCHEDULE_ID.eq(BOOKING.SCHEDULE_ID))
             .where(BOOKING.MEMBER_ID.eq(memberId))
             .and(if (cursor != null) BOOKING.ID.lt(cursor) else DSL.noCondition())
+            .and(if (performanceId != null) SCHEDULE.PERFORMANCE_ID.eq(performanceId) else DSL.noCondition())
             .orderBy(BOOKING.ID.desc())
             .limit(size + 1)
             .fetch {
                 BookingSummaryView(
                     bookingId = requireNotNull(it[BOOKING.ID]),
                     status = requireNotNull(it[BOOKING.STATUS]),
+                    performanceId = requireNotNull(it[SCHEDULE.PERFORMANCE_ID]),
                     performanceTitle = requireNotNull(it[SCHEDULE.PERFORMANCE_TITLE]),
                     startsAt = requireNotNull(it[SCHEDULE.STARTS_AT]).toInstant(),
                     seatCount = requireNotNull(it[seatCount]),

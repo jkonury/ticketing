@@ -51,8 +51,9 @@ class BookingController(
     fun mine(
         authentication: Authentication,
         @RequestParam(required = false) cursor: Long?,
+        @RequestParam(required = false) performanceId: Long?,
         @RequestParam(defaultValue = "${BookingQueryUseCase.DEFAULT_PAGE_SIZE}") size: Int,
-    ): BookingPageResponse = BookingPageResponse.from(queries.myBookings(authentication.name.toLong(), cursor, size))
+    ): BookingPageResponse = BookingPageResponse.from(queries.myBookings(authentication.name.toLong(), cursor, size, performanceId))
 
     @GetMapping("/{id}")
     fun detail(authentication: Authentication, @PathVariable id: Long): BookingDetailResponse =
@@ -101,6 +102,7 @@ data class BookingResponse(
 
 data class BookingSummaryResponse(
     val bookingId: Long,
+    val performanceId: Long,
     val status: String,
     val performanceTitle: String,
     val startsAt: java.time.Instant,
@@ -115,6 +117,7 @@ data class BookingPageResponse(val items: List<BookingSummaryResponse>, val next
             page.items.map {
                 BookingSummaryResponse(
                     it.bookingId,
+                    it.performanceId,
                     it.status,
                     it.performanceTitle,
                     it.startsAt,

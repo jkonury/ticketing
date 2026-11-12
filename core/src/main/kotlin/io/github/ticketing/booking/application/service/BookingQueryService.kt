@@ -10,8 +10,8 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class BookingQueryService(private val queries: BookingQueryPort) : BookingQueryUseCase {
     @Transactional(readOnly = true)
-    override fun myBookings(memberId: Long, cursor: Long?, size: Int): BookingPage =
-        queries.findMyBookings(memberId, cursor, size.coerceIn(1, BookingQueryUseCase.MAX_PAGE_SIZE))
+    override fun myBookings(memberId: Long, cursor: Long?, size: Int, performanceId: Long?): BookingPage =
+        queries.findMyBookings(memberId, cursor, size.coerceIn(1, BookingQueryUseCase.MAX_PAGE_SIZE), performanceId)
 
     @Transactional(readOnly = true)
     override fun detail(memberId: Long, bookingId: Long): BookingDetailView {
