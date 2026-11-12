@@ -15,9 +15,16 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - 도메인 모델은 `val` 우선. 상태 변경은 의미 있는 이름의 메서드로만 한다 (`booking.confirm()`), setter를 노출하지 않는다.
 - 식별자는 `@JvmInline value class`로 감싼다 (`BookingId`, `SeatId`, `MemberId`). 서로 다른 ID를 `Long`으로 섞어 쓰지 않는다.
 - 상태와 결과의 분기는 `sealed interface` / `enum` + `when`으로 표현하고 `else`를 두지 않는다.
-- JPA 엔티티는 `data class`로 만들지 않는다. `equals`/`hashCode`는 식별자 기준으로 직접 정의한다.
+- JPA 엔티티는 `data class`로 만들지 않는다. `equals`는 식별자 기준으로, `hashCode`는 클래스 기준 상수(`javaClass.hashCode()`)로 직접 정의한다. 식별자로 `hashCode`를 만들면 영속 전후에 값이 바뀌어 `Set`·`Map`에서 엔티티를 잃는다. 프록시와 비교될 수 있으므로 `equals`는 `other is 엔티티클래스`로 비교하고 `id`는 getter로 읽는다.
 - JPA 엔티티(`@Embeddable` 포함)의 영속 속성에는 `val`을 쓰지 않는다. `@Id`, `@EmbeddedId`, 컬렉션, `updatable = false` 컬럼을 포함해 생성자와 본문 모두 `var`로 선언한다. `val`은 영속성 provider가 reflection으로 바꿀 수 있어 실제로 불변이 아니고, final 필드와 setter가 없어 JPA Auditing 같은 기능이 어긋나며, Kotlin 데이터 흐름 분석이 틀려 런타임 오류가 날 수 있다 (IDE의 JPA 검사도 같은 이유로 경고한다). 변경하면 안 되는 컬럼은 `updatable = false`로 표현한다. 엔티티 외 도메인 모델의 `val` 원칙은 그대로다.
 - 확장 함수는 그것을 쓰는 모듈 안에 둔다. 전역 유틸 모듈을 만들지 않는다.
+
+### 엔티티·DTO의 Kotlin 함정
+
+- **setter 가시성.** `domain` 패키지에 둔 엔티티(계층형 모듈 `member`, `catalog`, `notification`)의 영속 속성은 `var` + `protected set`으로 선언해 외부 변경을 막는다. `private set`은 `allOpen`이 속성을 open으로 만들어 컴파일 오류가 나므로 쓰지 않는다. 헥사고날 모듈의 `*JpaEntity`는 같은 어댑터의 매퍼가 값을 채우므로 예외다. 대신 어댑터 밖으로 노출하지 않는다 (`internal` 또는 패키지 비공개 사용).
+- **컬렉션 노출.** Kotlin `List`는 읽기 전용 뷰일 뿐이라 `as MutableList` 캐스팅으로 수정된다. 엔티티는 내부 컬렉션을 그대로 반환하지 않고 `Collections.unmodifiableList(...)` 또는 복사본(`toList()`)을 반환한다. 컬렉션 속성은 JPA 필드명을 유지한다.
+- **검증 애노테이션 사용처.** 요청 DTO의 Bean Validation 애노테이션은 `@field:`를 명시한다 (`@field:NotBlank val name: String`). 컴파일러 옵션(`-Xannotation-default-target`)에 기대지 않는다. 필수 값을 non-null로 선언하면 누락이 검증 오류가 아니라 역직렬화 오류(`HttpMessageNotReadableException`)가 되므로, 응답 형식을 통일해야 하면 `ApiExceptionHandler`가 둘 다 같은 `ProblemDetail`로 변환하는지 확인한다.
+- **불변식 실패의 종류.** 생성 시 인자 불변식은 `require`, 객체 상태가 허용하지 않는 호출은 `check`로 막는다. 호출자(사용자)에게 의미 있는 업무 오류는 `DomainException`(안정적 `code`)으로 던진다. `IllegalStateException`·`IllegalArgumentException`이 API 경계까지 올라가 500이 되지 않게 한다.
 
 ### 가독성 (코드 스타일)
 
@@ -141,6 +148,14 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - 시간 의존 로직은 `Clock`을 고정해 테스트한다. `Thread.sleep`으로 기다리지 않는다.
 - 테스트 이름은 한국어 백틱 문장으로 쓴다 (``fun `만료된 예매는 확정할 수 없다`()``).
 - 코루틴 테스트는 `runTest`를 쓴다.
+
+### 테스트 작성 보조 규칙
+
+- 단언은 AssertJ로 통일한다 (`assertThat`, `assertThatThrownBy`). JUnit `Assertions`와 섞지 않는다.
+- 같은 객체 생성 코드를 두 테스트 클래스 이상이 쓰면 대상 패키지의 `object XxxFixture`로 모은다. 선택 값은 기본 인자로 받는다 (`createBooking(status = ...)`). 한 클래스에서만 쓰면 `private fun` 헬퍼로 둔다.
+- 특정 상태의 객체는 도메인 메서드를 호출해 만든다 (`createPending().apply { confirm() }`). 리플렉션이나 랜덤 객체 생성으로 도메인 상태를 주입하면 불변식을 우회하므로 쓰지 않는다. 리플렉션은 영속 후에만 생기는 `id`가 필요할 때로 한정한다.
+- 테스트 클래스의 공용 상태가 Spring 빈이 아니면 `private lateinit var` + `@BeforeEach`를 쓸 수 있다. JUnit은 테스트마다 인스턴스를 새로 만든다.
+- 엔티티의 컬렉션 불변성, `@field:` 검증 동작처럼 Kotlin 특성에서 오는 규칙은 회귀 방지 테스트를 한 번씩 둔다.
 
 ### 테스트 의존성 주입
 
