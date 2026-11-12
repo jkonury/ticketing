@@ -8,7 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import java.util.UUID
 
 class BatchInfrastructureTests(private val repository: JobRepository, private val jdbcTemplate: JdbcTemplate) :
-    BatchIntegrationTestSupport() {
+    IntegrationTestSupport() {
     @Test
     fun `배치 저장소는 batch 스키마에 작업 인스턴스를 저장한다`() {
         val name = "test-${UUID.randomUUID()}"

@@ -32,6 +32,21 @@
 
 스위트 시간 합계가 약 21.4% 줄었다. 별도 컨텍스트가 필요한 테스트의 데이터 격리는 유지한다.
 
+## 단계 C: 컨텍스트 통합
+
+측정일: 2026-11-12. 대상은 core 테스트 198개다. 같은 조건(`:core:test --rerun`)에서 통합 전 61.9초·컨텍스트 13회였다.
+
+- Clock(`MutableClock`)·가짜 PG(`TestPg`, `TestPgTransactions`)·배치 실패 주입(`FailingExpireBookingUseCase`, `FailingDailySettlementWriter`)을 `CommonTestConfiguration`의 `@Primary` 공용 빈으로 올렸다. `IntegrationTestSupport`가 매 테스트 전에 초기화하고, 시각이 필요한 테스트는 `@BeforeEach`에서 `clock.now`를 설정한다.
+- `batch` 프로필과 `chunk-size=1`을 베이스에 합쳤다. `batch` 프로필이 끄는 웹 환경은 `spring.main.web-application-type=servlet`으로 되살렸다. `BatchIntegrationTestSupport`는 없앴다.
+- 결제·환불 리스너와 `PaymentResultListener`의 `@MockitoBean`을 제거했다. 공용 `TestPg`가 결제를 수락만 하고 웹훅은 보내지 않으므로 흐름이 이어지지 않는다.
+- `ReconcileSeatSnapshotJobTests`는 잡이 모든 회차를 훑어 `changed` 합계에 다른 테스트의 회차가 섞이므로, 자기 회차의 Redis 상태로 단언하도록 바꿨다.
+
+| 지표 | 통합 전 | 통합 후 |
+|---|---:|---:|
+| 테스트 수 | 198 | 198 |
+| 스위트 시간 합계 | 61.9초 | 53.1~53.6초 (2회) |
+| Spring 컨텍스트 기동 | 13회 | 5회 (기본 1, seed 1, `@ApplicationModuleTest` 3) |
+
 ## 근거
 
 - [Spring 테스트 생성자 주입](https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/support-classes.html)

@@ -1,8 +1,10 @@
 package io.github.ticketing.e2e
 
+import io.github.ticketing.EventCollector
+import io.github.ticketing.MutableClock
+import io.github.ticketing.TestPg
 import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.e2e.support.FlowSupport
-import io.github.ticketing.payment.flow.PaymentFlowTests
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -15,9 +17,9 @@ class PaymentFailurePathTests(
     mvc: MockMvc,
     jdbc: JdbcTemplate,
     redis: StringRedisTemplate,
-    pg: PaymentFlowTests.TestPg,
-    clock: PaymentFlowTests.MutableClock,
-    collector: PaymentFlowTests.EventCollector,
+    pg: TestPg,
+    clock: MutableClock,
+    collector: EventCollector,
 ) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
 
     @Test

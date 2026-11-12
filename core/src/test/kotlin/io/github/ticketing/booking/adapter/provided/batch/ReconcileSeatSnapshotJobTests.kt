@@ -1,12 +1,14 @@
 package io.github.ticketing.booking.adapter.provided.batch
 
-import io.github.ticketing.BatchIntegrationTestSupport
+import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.snapshotKey
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.streamKey
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.booking.domain.ScheduleId
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.job.Job
@@ -18,14 +20,19 @@ import org.springframework.test.context.event.RecordApplicationEvents
 import java.math.BigDecimal
 import java.time.Instant
 
-@Import(ExpirePendingBookingsJobTests.TestConfig::class)
 @RecordApplicationEvents
 class ReconcileSeatSnapshotJobTests(
     private val launcher: JobLauncher,
     private val reconcileSeatSnapshotJob: Job,
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
-) : BatchIntegrationTestSupport() {
+    private val clock: MutableClock,
+) : IntegrationTestSupport() {
+    @BeforeEach
+    fun fixClock() {
+        clock.now = NOW
+    }
+
     @Test
     fun `시작 전 회차만 보정하고 재실행은 변경하지 않는다`() {
         val upcoming = ScheduleId(880001)
@@ -44,7 +51,8 @@ class ReconcileSeatSnapshotJobTests(
         val second = launcher.run(reconcileSeatSnapshotJob, parameters(2))
 
         assertThat(second.status).isEqualTo(BatchStatus.COMPLETED)
-        assertThat(second.stepExecutions.single().executionContext.getLong("changed", 0)).isZero()
+        // changed 합계는 같은 컨텍스트의 다른 테스트 회차를 포함하므로 이 테스트의 회차 상태로만 단언한다.
+        assertThat(hash.get(snapshotKey(upcoming), "1")).isEqualTo("AVAILABLE")
         assertThat(redis.opsForStream<String, String>().size(streamKey(upcoming))).isEqualTo(before)
     }
 

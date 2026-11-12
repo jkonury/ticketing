@@ -29,10 +29,6 @@ class BookingApiIntegrationTests(
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
 ) : IntegrationTestSupport() {
-    @MockitoBean lateinit var paymentRequestListener: PaymentRequestListener
-
-    @MockitoBean lateinit var refundRequestListener: RefundRequestListener
-
     private val json = JsonMapper.builder().build()
 
     private fun newSchedule(seatCount: Int = 6, title: String = "테스트 공연"): Long {

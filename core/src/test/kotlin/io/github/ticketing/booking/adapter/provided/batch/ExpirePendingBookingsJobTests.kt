@@ -1,6 +1,8 @@
 package io.github.ticketing.booking.adapter.provided.batch
 
-import io.github.ticketing.BatchIntegrationTestSupport
+import io.github.ticketing.FailingExpireBookingUseCase
+import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.BookingExpired
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.holdKey
 import io.github.ticketing.booking.application.port.provided.ExpireBookingUseCase
@@ -16,6 +18,7 @@ import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.batch.core.BatchStatus
 import org.springframework.batch.core.job.Job
@@ -37,7 +40,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicBoolean
 
-@Import(ExpirePendingBookingsJobTests.TestConfig::class)
 @RecordApplicationEvents
 class ExpirePendingBookingsJobTests(
     private val launcher: JobLauncher,
@@ -46,29 +48,12 @@ class ExpirePendingBookingsJobTests(
     private val seatHold: SeatHoldPort,
     private val redis: StringRedisTemplate,
     private val transaction: TransactionTemplate,
-    private val failingUseCase: FailingUseCase,
-) : BatchIntegrationTestSupport() {
-    @TestConfiguration(proxyBeanMethods = false)
-    class TestConfig {
-        @Bean
-        @Primary
-        fun fixedClock(): Clock = Clock.fixed(NOW, ZoneOffset.UTC)
-
-        @Bean
-        @Primary
-        fun failingUseCase(delegate: ExpireBookingService) = FailingUseCase(delegate)
-    }
-
-    class FailingUseCase(private val delegate: ExpireBookingService) : ExpireBookingUseCase {
-        var failingId = 0L
-        val failNext = AtomicBoolean(false)
-
-        override fun expireIfDue(bookingId: Long): ExpireResult {
-            if (bookingId == failingId && failNext.compareAndSet(true, false)) {
-                throw OptimisticLockingFailureException("동시 수정")
-            }
-            return delegate.expireIfDue(bookingId)
-        }
+    private val failingUseCase: FailingExpireBookingUseCase,
+    private val clock: MutableClock,
+) : IntegrationTestSupport() {
+    @BeforeEach
+    fun fixClock() {
+        clock.now = NOW
     }
 
     @Test

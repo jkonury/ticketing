@@ -1,12 +1,14 @@
 package io.github.ticketing.payment.adapter.provided
 
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.adapter.provided.event.PaymentResultListener
 import io.github.ticketing.payment.application.port.required.PaymentCommandPort
 import io.github.ticketing.payment.domain.MemberId
 import io.github.ticketing.payment.domain.OrderId
 import io.github.ticketing.payment.domain.Payment
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
@@ -30,27 +32,21 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@Import(PaymentWebhookHttpTests.FixedClock::class)
 class PaymentWebhookHttpTests(
     private val mvc: MockMvc,
     private val payments: PaymentCommandPort,
     private val tx: TransactionTemplate,
     private val jdbc: JdbcTemplate,
+    private val clock: MutableClock,
 ) : IntegrationTestSupport() {
-
-    @TestConfiguration(proxyBeanMethods = false)
-    class FixedClock {
-
-        @Bean
-        @Primary
-        fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-11-11T00:00:00Z"), ZoneOffset.UTC)
-    }
-
-    @MockitoBean
-    lateinit var bookingListener: PaymentResultListener
 
     private val now = Instant.parse("2026-11-11T00:00:00Z")
     private val path = "/api/v1/payments/webhooks/fake-pg"
+
+    @BeforeEach
+    fun fixClock() {
+        clock.now = now
+    }
 
     private fun body(event: String, order: Long, transaction: String, amount: String = "100") =
         """{"eventId":"$event","type":"PAYMENT_APPROVED","transactionId":"$transaction","orderId":"$order","amount":$amount,"occurredAt":"$now","failureReason":null}"""

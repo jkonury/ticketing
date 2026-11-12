@@ -1,6 +1,8 @@
 package io.github.ticketing.booking.application.flow
 
+import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.booking.BookingExpired
@@ -47,7 +49,6 @@ import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
-@Import(BookingPaymentFlowTests.TestClockConfig::class)
 class BookingPaymentFlowTests(
     private val mvc: MockMvc,
     private val register: RegisterScheduleSeatsUseCase,
@@ -59,52 +60,7 @@ class BookingPaymentFlowTests(
     private val collector: EventCollector,
 ) : IntegrationTestSupport() {
 
-    @MockitoBean
-    lateinit var paymentRequestListener: PaymentRequestListener
-
-    @MockitoBean
-    lateinit var refundRequestListener: RefundRequestListener
-
-    class MutableClock : Clock() {
-        @Volatile var now: Instant = Instant.now()
-        override fun getZone(): ZoneId = ZoneId.of("UTC")
-        override fun withZone(zone: ZoneId): Clock = this
-        override fun instant(): Instant = now
-    }
-
-    @Component
-    class EventCollector {
-        val events = CopyOnWriteArrayList<Any>()
-
-        @EventListener
-        fun on(event: Any) {
-            if (event.javaClass.name.startsWith("io.github.ticketing.booking.Booking") ||
-                event.javaClass.name.startsWith("io.github.ticketing.payment.")
-            ) {
-                events += event
-            }
-        }
-
-        fun <T : Any> of(type: Class<T>, predicate: (T) -> Boolean): List<T> = events.filterIsInstance(type).filter(predicate)
-    }
-
-    @TestConfiguration(proxyBeanMethods = false)
-    class TestClockConfig {
-
-        @Bean
-        @Primary
-        fun mutableClock() = MutableClock()
-
-        @Bean
-        fun eventCollector() = EventCollector()
-    }
-
     private val json = JsonMapper.builder().build()
-
-    @BeforeEach
-    fun resetClock() {
-        clock.now = Instant.now()
-    }
 
     private fun newSchedule(seatCount: Int = 4): Long {
         val scheduleId = System.nanoTime()

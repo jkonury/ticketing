@@ -1,6 +1,9 @@
 package io.github.ticketing.payment.flow
 
+import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
+import io.github.ticketing.TestPg
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.booking.BookingExpired
@@ -56,7 +59,6 @@ import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-@Import(PaymentFlowTests.TestClockConfig::class)
 class PaymentFlowTests(
     private val pg: TestPg,
     private val incomplete: IncompleteEventPublications,
@@ -70,87 +72,7 @@ class PaymentFlowTests(
     private val collector: EventCollector,
 ) : IntegrationTestSupport() {
 
-    class MutableClock : Clock() {
-        @Volatile var now: Instant = Instant.now()
-        override fun getZone(): ZoneId = ZoneId.of("UTC")
-        override fun withZone(zone: ZoneId): Clock = this
-        override fun instant(): Instant = now
-    }
-
-    @Component
-    class EventCollector {
-        val events = CopyOnWriteArrayList<Any>()
-
-        @EventListener
-        fun on(event: Any) {
-            if (event.javaClass.name.startsWith("io.github.ticketing.booking.Booking") ||
-                event.javaClass.name.startsWith("io.github.ticketing.payment.")
-            ) {
-                events += event
-            }
-        }
-
-        fun <T : Any> of(type: Class<T>, predicate: (T) -> Boolean): List<T> = events.filterIsInstance(type).filter(predicate)
-    }
-
-    @TestConfiguration(proxyBeanMethods = false)
-    class TestClockConfig {
-
-        @Bean
-        @Primary
-        fun mutableClock() = MutableClock()
-
-        @Bean
-        @Primary
-        fun pg() = TestPg()
-
-        @Bean
-        fun eventCollector() = EventCollector()
-    }
-
-    class TestPg : PgPort {
-        val requests = CopyOnWriteArrayList<PgPaymentRequest>()
-        val refunds = CopyOnWriteArrayList<Pair<String, String>>()
-        val transactions = ConcurrentHashMap<String, String>()
-
-        @Volatile var gate: CountDownLatch? = null
-
-        @Volatile var paymentResult = "accepted"
-
-        @Volatile var refundResult = "accepted"
-
-        override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
-            check(!TransactionSynchronizationManager.isActualTransactionActive())
-            requests += request
-            gate?.let { check(it.await(10, TimeUnit.SECONDS)) }
-            val transaction = transactions.computeIfAbsent(request.idempotencyKey) { "tx-${request.orderId}" }
-            return when (paymentResult) {
-                "unknown" -> PgRequestResult.Unknown("timeout")
-                "rejected" -> PgRequestResult.Rejected("declined")
-                else -> PgRequestResult.Accepted(transaction)
-            }
-        }
-
-        override fun requestRefund(transactionId: String, idempotencyKey: String): PgRequestResult {
-            check(!TransactionSynchronizationManager.isActualTransactionActive())
-            refunds += transactionId to idempotencyKey
-            return when (refundResult) {
-                "unknown" -> PgRequestResult.Unknown("timeout")
-                "rejected" -> PgRequestResult.Rejected("declined")
-                else -> PgRequestResult.Accepted(transactionId)
-            }
-        }
-    }
-
     private val json = JsonMapper.builder().build()
-
-    @BeforeEach
-    fun resetClock() {
-        clock.now = Instant.now()
-        pg.gate = null
-        pg.paymentResult = "accepted"
-        pg.refundResult = "accepted"
-    }
 
     private fun newSchedule(seatCount: Int = 4): Long {
         val scheduleId = System.nanoTime()

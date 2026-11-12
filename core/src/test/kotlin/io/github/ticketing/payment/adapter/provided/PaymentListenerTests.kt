@@ -1,6 +1,8 @@
 package io.github.ticketing.payment.adapter.provided
 
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
+import io.github.ticketing.TestPg
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.RefundRequested
 import io.github.ticketing.payment.application.port.required.PaymentCommandPort
@@ -12,6 +14,7 @@ import io.github.ticketing.payment.domain.OrderId
 import io.github.ticketing.payment.domain.Payment
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.ApplicationEventPublisher
@@ -29,50 +32,21 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-@Import(PaymentListenerTests.FixedClock::class)
 class PaymentListenerTests(
     private val pg: TestPg,
+    private val clock: MutableClock,
     private val payments: PaymentCommandPort,
     private val tx: TransactionTemplate,
     private val publisher: ApplicationEventPublisher,
     private val jdbc: JdbcTemplate,
 ) : IntegrationTestSupport() {
 
-    @TestConfiguration(proxyBeanMethods = false)
-    class FixedClock {
-
-        @Bean
-        @Primary
-        fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-11-11T00:00:00Z"), ZoneOffset.UTC)
-
-        @Bean
-        @Primary
-        fun testPg() = TestPg()
-    }
-
-    class TestPg : PgPort {
-
-        val flags = ConcurrentHashMap<String, Boolean>()
-
-        override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
-            flags[request.orderId] = TransactionSynchronizationManager.isActualTransactionActive()
-            return if (request.idempotencyKey.startsWith(
-                    "unknown",
-                )
-            ) {
-                PgRequestResult.Unknown("timeout")
-            } else {
-                PgRequestResult.Accepted("tx-${request.orderId}")
-            }
-        }
-
-        override fun requestRefund(transactionId: String, idempotencyKey: String): PgRequestResult {
-            flags[transactionId] = TransactionSynchronizationManager.isActualTransactionActive()
-            return if (transactionId.startsWith("reject")) PgRequestResult.Rejected("rejected") else PgRequestResult.Accepted(transactionId)
-        }
-    }
-
     private val now = Instant.parse("2026-11-11T00:00:00Z")
+
+    @BeforeEach
+    fun fixClock() {
+        clock.now = now
+    }
 
     private fun publish(event: Any) {
         tx.executeWithoutResult { publisher.publishEvent(event) }

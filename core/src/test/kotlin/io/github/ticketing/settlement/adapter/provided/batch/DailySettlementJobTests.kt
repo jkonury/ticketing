@@ -1,6 +1,7 @@
 package io.github.ticketing.settlement.adapter.provided.batch
 
-import io.github.ticketing.BatchIntegrationTestSupport
+import io.github.ticketing.FailingDailySettlementWriter
+import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.settlement.adapter.required.jooq.DailySettlementJooqAdapter
 import io.github.ticketing.settlement.application.port.provided.RecordRefundCommand
 import io.github.ticketing.settlement.application.port.provided.RecordSaleCommand
@@ -26,34 +27,13 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
 
-@Import(DailySettlementJobTests.TestConfig::class)
-@TestPropertySource(properties = ["ticketing.settlement.chunk-size=1"])
 class DailySettlementJobTests(
     private val launcher: JobLauncher,
     private val dailySettlementJob: Job,
     private val copies: SettlementCopyCommandPort,
     private val dsl: DSLContext,
-    private val writer: FailingWriter,
-) : BatchIntegrationTestSupport() {
-    @TestConfiguration(proxyBeanMethods = false)
-    class TestConfig {
-        @Bean
-        @Primary
-        fun failingWriter(adapter: DailySettlementJooqAdapter): FailingWriter = FailingWriter(adapter)
-    }
-
-    class FailingWriter(private val delegate: DailySettlementJooqAdapter) : DailySettlementCommandPort {
-        val failNext = AtomicBoolean(false)
-        var failingPerformance = 0L
-
-        override fun upsertAll(settlements: List<DailySettlement>) {
-            if (settlements.any { it.performanceId == failingPerformance } && failNext.compareAndSet(true, false)) {
-                error("의도된 두 번째 청크 실패")
-            }
-            delegate.upsertAll(settlements)
-        }
-    }
-
+    private val writer: FailingDailySettlementWriter,
+) : IntegrationTestSupport() {
     private fun sale(booking: Long, performance: Long, instant: String, amount: String = "101") {
         copies.insertSaleIfAbsent(
             RecordSaleCommand(booking, performance, 987, 1, BigDecimal(amount), Instant.parse(instant)),

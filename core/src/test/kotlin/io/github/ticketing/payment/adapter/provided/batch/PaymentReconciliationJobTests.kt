@@ -1,6 +1,6 @@
 package io.github.ticketing.payment.adapter.provided.batch
 
-import io.github.ticketing.BatchIntegrationTestSupport
+import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.TestPgTransactions
 import io.github.ticketing.payment.application.port.required.PgTransaction
 import io.github.ticketing.payment.application.port.required.PgTransactionStatus
@@ -23,7 +23,7 @@ class PaymentReconciliationJobTests(
     private val paymentReconciliationJob: Job,
     private val pg: TestPgTransactions,
     private val dsl: DSLContext,
-) : BatchIntegrationTestSupport() {
+) : IntegrationTestSupport() {
     private val date = LocalDate.parse("2030-05-11")
     private val instant = Instant.parse("2030-05-10T15:00:00Z")
 
