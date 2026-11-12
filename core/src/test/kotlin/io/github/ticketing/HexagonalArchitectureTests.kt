@@ -15,11 +15,15 @@ import org.springframework.data.jpa.repository.Query
 
 class HexagonalArchitectureTests {
 
-    private val classes = ClassFileImporter()
-        .withImportOption(ImportOption.DoNotIncludeTests())
-        .importPackages("io.github.ticketing")
-
+    private val classes get() = importedClasses
     private val hexagonalModules = listOf("booking", "payment", "settlement")
+
+    companion object {
+        // 테스트 메서드마다 인스턴스가 새로 만들어지므로 클래스 분석은 한 번만 한다
+        private val importedClasses = ClassFileImporter()
+            .withImportOption(ImportOption.DoNotIncludeTests())
+            .importPackages("io.github.ticketing")
+    }
 
     @Test
     fun `헥사고날 모듈은 adapter에서 application으로 application에서 domain으로만 의존한다`() {
