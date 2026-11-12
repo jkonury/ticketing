@@ -9,8 +9,8 @@ export async function getOrganizerDashboard(range: {
   to: string;
 }) {
   const [sales, settlements] = await Promise.all([
-    optional(getSales()),
-    optional(getSettlements(range)),
+    optional(getSales(), true),
+    optional(getSettlements(range), true),
   ]);
   if (sales.status === 'unavailable' && settlements.status === 'unavailable')
     throw new ApiError(502, 'UPSTREAM_UNAVAILABLE');
@@ -39,6 +39,7 @@ export async function getOrganizerDashboard(range: {
       totals.set(item.performanceId, total);
     }
   return {
+    schedules: sales.status === 'ok' ? sales.data : [],
     sales:
       sales.status === 'ok'
         ? { status: 'ok' as const, data: Array.from(totals.values()) }

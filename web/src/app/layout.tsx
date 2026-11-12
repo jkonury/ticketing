@@ -18,6 +18,14 @@ async function UserMenu() {
       <span>
         {user.name} ({user.role})
       </span>
+      {user.role === 'USER' ? (
+        <Link href="/my">마이페이지</Link>
+      ) : (
+        <>
+          <Link href="/organizer">주최자 대시보드</Link>
+          <Link href="/organizer/new">공연 등록</Link>
+        </>
+      )}
       <form action={logoutAction}>
         <button>로그아웃</button>
       </form>

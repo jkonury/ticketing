@@ -33,7 +33,10 @@ export async function getPerformanceDetail(id: number) {
       (mine.status === 'ok'
         ? {
             status: 'ok' as const,
-            data: { hasBooking: mine.data.items.length > 0 },
+            data: {
+              hasBooking: mine.data.items.length > 0,
+              statuses: mine.data.items.map((item) => item.status),
+            },
           }
         : mine),
   };
