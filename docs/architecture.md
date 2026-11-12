@@ -13,6 +13,9 @@
 | [architecture/flows.md](./architecture/flows.md) | §6 | 대기열·입장, 좌석 선점, 예매 시퀀스, 상태 전이, 결제 |
 | [architecture/integrations.md](./architecture/integrations.md) | §7, §8, §10 | 인증·인가, BFF, 외부 연동(fake-pg 계약) |
 | [architecture/batch.md](./architecture/batch.md) | §9 | Batch Job과 정산·대사 규칙 |
+| [architecture/events.md](./architecture/events.md) | §4 | 이벤트 카탈로그: 도메인 이벤트, 좌석 Stream, SSE 이벤트 |
+| [architecture/data-ownership.md](./architecture/data-ownership.md) | §5 | 데이터 소유: 스키마·Redis 키 소유자와 접근 방법 |
+| [architecture/api-conventions.md](./architecture/api-conventions.md) | §7, §8 | API 규약: 인증, 헤더, 오류 형식, 페이지네이션, API 목록 |
 
 ## 1. 프로젝트 개요
 

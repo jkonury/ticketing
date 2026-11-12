@@ -78,7 +78,7 @@ docker compose exec redis redis-cli HGETALL 'booking:seats:{1}'     # 좌석 스
 - 세션은 Redis `bff:session:<sessionId>`에 14일 TTL로 있다. Redis를 초기화하면 모든 사용자가 다시 로그인해야 한다.
 - access 토큰 갱신은 `bff:refresh-lock:<sessionId>` 락으로 직렬화한다. 락이 남아 있어 갱신이 막히면 TTL 만료를 기다린다.
 - 브라우저에 JWT가 보이면 설계 위반이다. 즉시 [ADR 0013](./adr/0013-jwt-behind-bff.md)을 기준으로 원인을 찾는다. `./scripts/e2e/run.sh --web`이 이 항목을 검사한다.
-- `web/.env.local`의 `GATEWAY_URL`, `GATEWAY_PUBLIC_URL`, `REDIS_URL`, `WEB_ORIGIN`이 실제 주소와 같은지 본다. HTTPS가 아닌 로컬에서는 `SESSION_COOKIE_SECURE=false`여야 쿠키가 저장된다.
+- web 디렉터리의 `.env.local`의 `GATEWAY_URL`, `GATEWAY_PUBLIC_URL`, `REDIS_URL`, `WEB_ORIGIN`이 실제 주소와 같은지 본다. HTTPS가 아닌 로컬에서는 `SESSION_COOKIE_SECURE=false`여야 쿠키가 저장된다.
 
 ### 3.6 rate limit에 걸린다
 
