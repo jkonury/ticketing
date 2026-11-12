@@ -2,7 +2,7 @@
 
 지정석 공연 티켓 예매 서비스. 대기열, 좌석 선점, 결제, 정산을 다루며 Modulith로 시작해 MSA + k8s로 전환하는 과정을 담는 학습·포트폴리오 프로젝트다.
 
-> 현재 상태: 설계 합의 완료, 구현 미착수. 진행 상황은 [로드맵](docs/roadmap.md) 참고.
+> 현재 상태: M0–M4 구현 완료, M5(부하 테스트와 관측)부터 진행 예정. 자세한 진행 상황은 [로드맵](docs/roadmap.md) 참고.
 
 ## 다루는 문제
 
@@ -56,11 +56,13 @@ flowchart LR
 | [docs/architecture.md](docs/architecture.md) | 아키텍처 문서 |
 | [docs/roadmap.md](docs/roadmap.md) | 단계별 구현 로드맵 (M0 ~ M6) |
 | [docs/adr/](docs/adr/README.md) | 아키텍처 결정 기록: 검토한 대안과 선택 이유 |
+| [docs/onboarding.md](docs/onboarding.md) | 온보딩: 로컬 실행, 저장소 지도, 검증 방법 |
+| [docs/runbook.md](docs/runbook.md) | 런북: 기동·종료, 장애 진단, Batch 실행 |
 | [CLAUDE.md](CLAUDE.md) | 작업 지침 |
 
 ## 실행
 
-M0(프로젝트 뼈대) 완료 후 작성한다.
+전체 절차는 [온보딩](docs/onboarding.md)을 따른다.
 
 fake-pg 컨테이너는 빌드된 jar를 복사하므로 먼저 bootJar를 만든 뒤 Compose를 올린다.
 
