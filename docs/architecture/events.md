@@ -27,10 +27,10 @@
 |---|---|---|---|---|
 | `ScheduleRegistered` | `catalog` | catalog | booking | 회차 등록 |
 | `PaymentRequested` | `payment` | booking | payment | 예매의 결제 요청 |
-| `RefundRequested` | `payment` | booking | payment | 환불이 필요한 취소·만료 후 입금 |
-| `PaymentSucceeded` | `payment` | payment | booking | PG 승인 웹훅 처리 |
-| `PaymentFailed` | `payment` | payment | booking | PG 실패 웹훅·거절 처리 |
-| `PaymentRefunded` | `payment` | payment | booking | PG 환불 완료 웹훅 처리 |
+| `RefundRequested` | `payment` | booking | payment | 사용자 취소, 만료·취소된 예매나 좌석 충돌 등으로 환불이 필요한 결제 성공 |
+| `PaymentSucceeded` | `payment` | payment | booking | PG 승인 웹훅(`PAYMENT_APPROVED`) 처리 |
+| `PaymentFailed` | `payment` | payment | booking | PG 실패 웹훅(`PAYMENT_FAILED`) 처리 또는 PG 접수 거절 |
+| `PaymentRefunded` | `payment` | payment | booking | PG 환불 완료 웹훅(`REFUND_COMPLETED`) 처리 |
 | `BookingConfirmed` | `booking` | booking | notification, settlement | 결제 성공으로 예매 확정 |
 | `BookingCancelled` | `booking` | booking | notification, settlement | 예매 취소 |
 | `BookingExpired` | `booking` | booking | notification | 미결제 예매 만료 |
@@ -41,11 +41,11 @@
 
 | 구독 클래스 | 이벤트 | 처리 | 멱등 근거 |
 |---|---|---|---|
-| booking `ScheduleRegisteredListener` | `ScheduleRegistered` | `booking.schedule`, `booking.schedule_seat`에 사본 적재 | 회차 ID 기준으로 이미 있으면 건너뜀 |
-| payment `PaymentRequestListener` | `PaymentRequested` | PG에 결제 요청 | 멱등 키. 예매 하나에 결제 하나 |
-| payment `RefundRequestListener` | `RefundRequested` | PG에 환불 요청 | 환불 멱등 키 |
-| booking `PaymentResultListener` | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` | 예매 확정·실패 처리. `PaymentRefunded`는 로그만 | 예매 상태 전이 검사 |
-| settlement `BookingEventListener` | `BookingConfirmed`, `BookingCancelled` | `booking_sale`, `booking_refund`에 사본 적재 | 예매 ID 기준 |
+| booking `ScheduleRegisteredListener` | `ScheduleRegistered` | `booking.schedule`, `booking.schedule_seat`에 사본 적재, 커밋 후 Redis 스냅샷 초기화 | `saveIfAbsent`로 이미 있으면 건너뜀. 스냅샷은 `HSETNX` |
+| payment `PaymentRequestListener` | `PaymentRequested` | 결제 기록 생성 후 PG에 결제 요청(트랜잭션 밖) | `orderId`·멱등 키로 기존 결제를 찾아 재사용. `REQUESTED`이고 PG 거래 ID가 없을 때만 재요청 |
+| payment `RefundRequestListener` | `RefundRequested` | 환불 전이 후 PG에 환불 요청(트랜잭션 밖) | 이미 `REFUNDED`면 건너뜀 |
+| booking `PaymentResultListener` | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` | 예매 확정·실패 처리. `PaymentRefunded`는 로그만 | 예매 상태 전이 검사. 이미 `CONFIRMED`면 `AlreadyConfirmed`로 무시하고, `EXPIRED`·`CANCELLED`면 환불 경로로 보낸다 |
+| settlement `BookingEventListener` | `BookingConfirmed`, `BookingCancelled` | `BookingConfirmed`는 `booking_sale`에 적재. `BookingCancelled`는 `refundRequired=true`일 때만 `booking_refund`에 적재 | `ON CONFLICT (booking_id) DO NOTHING` |
 | notification `BookingNotificationListener` | `BookingConfirmed`, `BookingCancelled` (`BookingExpired`) | 로그 출력 | 없음. 재전달 시 로그가 중복될 수 있음 |
 
 상태 전이와 환불 조건은 [flows.md §6.3, §6.4](./flows.md#63-예매-상태-전이)를 본다.
