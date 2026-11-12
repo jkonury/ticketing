@@ -4,18 +4,29 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
 KEEP=false
-if [[ ${1:-} == --keep ]]; then KEEP=true; shift; fi
+WEB=false
+TEST_PATTERN=
+while (($#)); do
+  case "$1" in
+    --keep) KEEP=true; shift ;;
+    --web) WEB=true; shift ;;
+    --tests) [[ $# -ge 2 ]] || { echo '--tests 패턴이 필요합니다.' >&2; exit 1; }; TEST_PATTERN=$2; shift 2 ;;
+    *) printf '알 수 없는 옵션: %s\n' "$1" >&2; exit 1 ;;
+  esac
+done
 for command in docker curl java; do
   command -v "$command" >/dev/null || { printf '필요한 도구가 없습니다: %s\n' "$command" >&2; exit 1; }
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
+ports=(8000 8080 8081 8082)
+if $WEB; then ports+=(3000); fi
 if command -v ss >/dev/null; then
-  for port in 8000 8080 8081 8082; do
+  for port in "${ports[@]}"; do
     occupied=$(ss -ltnp "sport = :$port" | tail -n +2)
     [[ -z "$occupied" ]] || { printf '포트 %s 사용 중: %s\n' "$port" "$occupied" >&2; exit 1; }
   done
 elif command -v lsof >/dev/null; then
-  for port in 8000 8080 8081 8082; do
+  for port in "${ports[@]}"; do
     occupied=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN || true)
     [[ -z "$occupied" ]] || { printf '포트 %s 사용 중: %s\n' "$port" "$occupied" >&2; exit 1; }
   done
@@ -68,7 +79,35 @@ health core 8080 "${PIDS[0]}"
 health realtime-a 8081 "${PIDS[1]}"
 health realtime-b 8082 "${PIDS[2]}"
 health gateway 8000 "${PIDS[3]}"
-if ./gradlew :e2e:e2eTest "$@" > "$LOG_DIR/test.log" 2>&1; then
+if $WEB; then
+  if [[ ! -d web/node_modules ]]; then
+    (cd web && pnpm install --frozen-lockfile) > "$LOG_DIR/web.log" 2>&1 || { echo "web 설치 실패: $LOG_DIR/web.log" >&2; exit 1; }
+  fi
+  (cd web && pnpm build) > "$LOG_DIR/web.log" 2>&1 || { echo "web 빌드 실패: $LOG_DIR/web.log" >&2; exit 1; }
+  (cd web && GATEWAY_URL=http://localhost:8000 GATEWAY_PUBLIC_URL=http://localhost:8000 REDIS_URL=redis://localhost:6379 WEB_ORIGIN=http://localhost:3000 exec pnpm start) >> "$LOG_DIR/web.log" 2>&1 &
+  PIDS+=("$!")
+  deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-120}))
+  until curl -s -o /dev/null http://localhost:3000; do
+    if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[4]}" 2>/dev/null; then
+      echo "web 기동 실패: $LOG_DIR/web.log" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  args=()
+  if [[ -n $TEST_PATTERN ]]; then args=(-g "$TEST_PATTERN"); fi
+  if (cd web && pnpm e2e "${args[@]}") > "$LOG_DIR/web-e2e.log" 2>&1; then
+    echo '웹 E2E 테스트 통과'
+  else
+    echo "웹 E2E 테스트 실패: $LOG_DIR/web-e2e.log" >&2
+    tail -n 40 "$LOG_DIR/web-e2e.log" >&2
+    exit 1
+  fi
+  exit 0
+fi
+args=()
+if [[ -n $TEST_PATTERN ]]; then args=(--tests "$TEST_PATTERN"); fi
+if ./gradlew :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
   echo 'E2E 테스트 통과'
 else
   shopt -s nullglob
