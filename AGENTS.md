@@ -54,7 +54,7 @@ docker compose up -d                 # PostgreSQL, Redis, fake-pg
 ./gradlew :core:bootRun
 ./gradlew :realtime:bootRun
 ./gradlew :gateway:bootRun           # BFF·클라이언트는 Gateway(8000)를 거쳐 호출
-cd web && npm run dev
+cd web && pnpm install && pnpm dev
 ```
 
 ## 7. 테스트 실행
@@ -65,6 +65,7 @@ cd web && npm run dev
 - test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
 - 품질 검사: Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). 작업 종료 시 Stop hook(`scripts/agent/hook/stop_quality.sh`, Claude Code·Codex 공용)과 커밋 시 `.githooks/pre-commit`이 같은 검사를 하며, 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행해 활성화한다. `@Suppress`·baseline 추가·`--no-verify`로 우회하지 않는다.
+- web 변경 후 `./scripts/agent/test/web-check.sh`(빌드 확인은 `--build`)를 통과시킨다. Stop hook·pre-commit이 같은 검사를 한다.
 - 같은 작업 디렉터리의 test와 check는 순차 실행한다. 동시에 실행하면 Gradle 테스트 결과 파일이 충돌할 수 있다. 성능 측정도 다른 Gradle 검사가 끝난 뒤 단독 실행한다.
 - 문서 검사: `./scripts/agent/docs/check-docs.sh [경로...]` (lychee 오프라인으로 상대 경로 링크와 `#anchor`를, `check-doc-refs.sh`로 문서의 백틱 경로를 검사). 문서를 옮기거나 제목·링크를 바꾸면 실행합니다. 설정은 `lychee.toml`입니다.
 - 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.

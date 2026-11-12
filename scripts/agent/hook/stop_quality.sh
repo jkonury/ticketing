@@ -12,17 +12,19 @@ fi
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 cd "$ROOT" || exit 0
 
-# 커밋되지 않은 Kotlin 변경이 없으면 검사하지 않는다.
-if ! git status --porcelain | rg -q '\.(kt|kts)$'; then
-  exit 0
+if git status --porcelain | rg -q '\.(kt|kts)$'; then
+  if ! OUT="$(./scripts/agent/test/check-summary.sh ktlintCheck detekt 2>&1)"; then
+    {
+      echo "ktlintCheck/detekt 실패. ./gradlew ktlintFormat 후 남은 지적을 코드로 고친다. @Suppress·baseline 추가로 우회하지 않는다."
+      printf '%s\n' "$OUT" | head -60
+    } >&2
+    exit 2
+  fi
 fi
 
-if OUT="$(./scripts/agent/test/check-summary.sh ktlintCheck detekt 2>&1)"; then
-  exit 0
+if git status --porcelain --untracked-files=all | rg -q '^...web/'; then
+  if ! OUT="$(./scripts/agent/test/web-check.sh 2>&1)"; then
+    printf 'web 검사 실패.\n%s\n' "$OUT" >&2
+    exit 2
+  fi
 fi
-
-{
-  echo "ktlintCheck/detekt 실패. ./gradlew ktlintFormat 후 남은 지적을 코드로 고친다. @Suppress·baseline 추가로 우회하지 않는다."
-  printf '%s\n' "$OUT" | head -60
-} >&2
-exit 2

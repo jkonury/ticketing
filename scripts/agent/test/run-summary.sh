@@ -2,7 +2,7 @@
 # 명령의 전체 로그를 보관하고 성공 시 한 줄, 실패 시 마지막 일부만 출력한다.
 # 사용법: scripts/agent/test/run-summary.sh [-C 디렉터리] [--] 명령 [인자...]
 # 예: scripts/agent/test/run-summary.sh -- ./gradlew :core:compileKotlin
-#     scripts/agent/test/run-summary.sh -C web npm run build
+#     scripts/agent/test/run-summary.sh -C web pnpm run build
 # pipeline이 필요하면: scripts/agent/test/run-summary.sh bash -o pipefail -c '...'
 # 기본은 현재 디렉터리, -C는 호출 위치 기준 상대 경로나 절대 경로이다.
 # 명령 인자와 종료 코드를 그대로 유지한다.

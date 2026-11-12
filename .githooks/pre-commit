@@ -6,12 +6,18 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
 
-if ! git diff --cached --name-only --diff-filter=ACMR | rg -q '\.(kt|kts)$'; then
-  exit 0
+if git diff --cached --name-only --diff-filter=ACMR | rg -q '\.(kt|kts)$'; then
+  echo "[pre-commit] ktlintCheck detekt 실행"
+  if ! ./scripts/agent/test/check-summary.sh ktlintCheck detekt; then
+    echo "[pre-commit] 품질 검사 실패. ./gradlew ktlintFormat 후 detekt 지적을 고치고 다시 커밋한다. @Suppress로 우회하지 않는다."
+    exit 1
+  fi
 fi
 
-echo "[pre-commit] ktlintCheck detekt 실행"
-if ! ./scripts/agent/test/check-summary.sh ktlintCheck detekt; then
-  echo "[pre-commit] 품질 검사 실패. ./gradlew ktlintFormat 후 detekt 지적을 고치고 다시 커밋한다. @Suppress로 우회하지 않는다."
-  exit 1
+if git diff --cached --name-only --diff-filter=ACMRD | rg -q '^web/'; then
+  echo "[pre-commit] web 검사 실행"
+  if ! ./scripts/agent/test/web-check.sh; then
+    echo "[pre-commit] web 검사 실패."
+    exit 1
+  fi
 fi
