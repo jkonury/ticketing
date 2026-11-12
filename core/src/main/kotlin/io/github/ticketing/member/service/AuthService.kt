@@ -57,6 +57,11 @@ class AuthService(
         return issue(member)
     }
 
+    @Transactional
+    fun revoke(rawRefreshToken: String) {
+        refreshTokens.findByTokenHash(hash(rawRefreshToken))?.revoke(clock.instant())
+    }
+
     private fun rejectReuse(stored: RefreshToken, now: Instant): Nothing {
         log.warn("폐기된 리프레시 토큰이 재사용되었습니다. memberId={}", stored.memberId)
         refreshTokens.revokeAllByMemberId(stored.memberId, now)

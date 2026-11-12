@@ -32,6 +32,10 @@ class MemberAuthIntegrationTests(private val mvc: MockMvc) : IntegrationTestSupp
         post("/api/v1/auth/tokens/refresh").contentType(MediaType.APPLICATION_JSON).content(body("refreshToken" to token)),
     )
 
+    private fun revoke(token: String) = mvc.perform(
+        post("/api/v1/auth/tokens/revoke").contentType(MediaType.APPLICATION_JSON).content(body("refreshToken" to token)),
+    )
+
     private fun tokens(email: String): Map<String, Any> {
         signUp(email).andExpect(status().isCreated)
         val result = login(email).andExpect(status().isOk).andReturn().response.contentAsString
@@ -91,5 +95,19 @@ class MemberAuthIntegrationTests(private val mvc: MockMvc) : IntegrationTestSupp
             post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
                 .content(body("email" to "not-an-email", "password" to "short", "name" to "")),
         ).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+    }
+
+    @Test
+    fun `리프레시 토큰 폐기는 인증 없이 멱등이며 해당 토큰만 폐기한다`() {
+        val email = email()
+        val first = tokens(email)["refreshToken"] as String
+        val second = json.readValue(login(email).andReturn().response.contentAsString, Map::class.java)["refreshToken"] as String
+
+        revoke(first).andExpect(status().isNoContent)
+        revoke(first).andExpect(status().isNoContent)
+        revoke("unknown-token").andExpect(status().isNoContent)
+        refresh(second).andExpect(status().isOk)
+        refresh(first).andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"))
+        revoke("").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
     }
 }

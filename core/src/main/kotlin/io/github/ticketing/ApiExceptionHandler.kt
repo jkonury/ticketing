@@ -5,8 +5,11 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.MethodArgumentNotValidException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.HandlerMethodValidationException
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 
 /** 예외 → RFC 9457 ProblemDetail 변환은 이 클래스 한 곳에서만 한다. */
 @RestControllerAdvice
@@ -25,6 +28,17 @@ class ApiExceptionHandler {
         val problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.")
         problem.setProperty("code", "INVALID_REQUEST")
         problem.setProperty("errors", e.bindingResult.fieldErrors.map { mapOf("field" to it.field, "message" to it.defaultMessage) })
+        return ResponseEntity.badRequest().body(problem)
+    }
+
+    @ExceptionHandler(
+        HandlerMethodValidationException::class,
+        MethodArgumentTypeMismatchException::class,
+        MissingServletRequestParameterException::class,
+    )
+    fun handleParameterValidation(): ResponseEntity<ProblemDetail> {
+        val problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.")
+        problem.setProperty("code", "INVALID_REQUEST")
         return ResponseEntity.badRequest().body(problem)
     }
 

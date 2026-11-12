@@ -38,7 +38,13 @@ class SecurityConfig {
             .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
-                it.requestMatchers(HttpMethod.POST, "/api/v1/members", "/api/v1/auth/tokens", "/api/v1/auth/tokens/refresh").permitAll()
+                it.requestMatchers(
+                    HttpMethod.POST,
+                    "/api/v1/members",
+                    "/api/v1/auth/tokens",
+                    "/api/v1/auth/tokens/refresh",
+                    "/api/v1/auth/tokens/revoke",
+                ).permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/fake-pg").permitAll()
                     .requestMatchers("/actuator/health/**").permitAll()
                     // 공연·회차 조회는 공개 API다 (catalog 모듈의 경로)

@@ -35,6 +35,12 @@ class AuthController(private val memberService: MemberService, private val authS
 
     @PostMapping("/auth/tokens/refresh")
     fun refresh(@Valid @RequestBody request: RefreshRequest): TokenResponse = TokenResponse.from(authService.refresh(request.refreshToken))
+
+    @PostMapping("/auth/tokens/revoke")
+    fun revoke(@Valid @RequestBody request: RefreshRequest): ResponseEntity<Void> {
+        authService.revoke(request.refreshToken)
+        return ResponseEntity.noContent().build()
+    }
 }
 
 data class SignUpRequest(
