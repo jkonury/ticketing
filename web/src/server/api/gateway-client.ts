@@ -63,6 +63,8 @@ export function createGatewayClient(deps: Dependencies) {
     throw new ApiError(
       response.status,
       parsed.success ? parsed.data.code : undefined,
+      undefined,
+      parsed.success ? parsed.data.seatIds : undefined,
     );
   }
   async function refresh(id: string, old: SessionData): Promise<SessionData> {
