@@ -4,6 +4,7 @@ import io.github.ticketing.realtime.MutableClock
 import io.github.ticketing.realtime.RealtimeIntegrationTestSupport
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.reactor.awaitSingle
+import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -20,6 +21,21 @@ class AdmissionServiceTests(
     private val clock: MutableClock,
     private val meters: MeterRegistry,
 ) : RealtimeIntegrationTestSupport(client, redis) {
+    @Test
+    fun `상태 조회 사이에 입장하면 토큰과 순번을 모두 찾지 못할 수 있다`() = runTest {
+        val schedule = 206L
+        prepareSchedule(schedule)
+        enter(schedule, 1)
+
+        val tokenBeforeAdmission = redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingleOrNull()
+        assertThat(service.admit(schedule)).isEqualTo(1)
+        val rankAfterAdmission = redis.opsForZSet().rank(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()
+
+        assertThat(tokenBeforeAdmission).isNull()
+        assertThat(rankAfterAdmission).isNull()
+        assertThat(redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingle()).isNotBlank()
+    }
+
     @Test
     fun `실제 입장과 생존 신호가 없는 제거 명시 이탈을 구분해 센다`() = runTest {
         val schedule = 205L

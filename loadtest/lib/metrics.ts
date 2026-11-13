@@ -14,6 +14,13 @@ export const bookingNotConfirmed = new Counter('booking_not_confirmed');
 export const soldOutExits = new Counter('sold_out_exits');
 // 첫 이벤트를 받지 못한 스트림. stream·status(HTTP 상태, 연결 오류는 0) 태그로 원인을 구분한다
 export const sseFailures = new Counter('sse_failures');
+// 입장 결과를 받지 못한 원인. timeout과 기타 연결 종료는 확실히 구분할 수 없다.
+export const queueStreamExits = {
+  removed: new Counter('queue_stream_removed'),
+  ticketFailed: new Counter('queue_stream_ticket_failed'),
+  streamError: new Counter('queue_stream_error'),
+  closedWithoutResult: new Counter('queue_stream_closed_without_result'),
+};
 // 예상하지 못한 응답의 원인 구분용. name·status(네트워크 오류는 0) 태그
 export const unexpectedResponses = new Counter('unexpected_responses');
 

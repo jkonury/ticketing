@@ -116,12 +116,15 @@ start() {
   local name=$1 dir=$2 heap=$3 jar=$4
   shift 4
   local opts=($heap) # 힙 옵션은 공백으로 나뉜 한 문자열
+  opts+=("-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=$dir/$name.hprof")
   if $JFR; then
     opts+=("-XX:StartFlightRecording=filename=$dir/$name.jfr,dumponexit=true,settings=profile,jdk.VirtualThreadPinned#threshold=0ms")
   fi
   if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+    local scouter_conf=ticketing.conf
+    [[ "$name" == realtime ]] && scouter_conf=ticketing-realtime.conf
     opts+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
-      "-Dscouter.config=$ROOT/deploy/scouter/ticketing.conf"
+      "-Dscouter.config=$ROOT/deploy/scouter/$scouter_conf"
       "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"
       "-Dobj_name=$name" -Djdk.attach.allowAttachSelf=true)
     printf 'Scouter agent 연결: obj_name=%s, collector=%s:6100\n' "$name" "${SCOUTER_COLLECTOR_IP:-127.0.0.1}" >&2

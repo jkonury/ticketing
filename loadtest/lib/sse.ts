@@ -1,7 +1,7 @@
 // xk6-sse 기반 스트림 헬퍼. 스트림을 열 때마다 SSE 티켓을 새로 발급한다.
 import sse from 'k6/x/sse';
 import { issueSseTicket } from './api.ts';
-import { sseConnectSuccess, sseFailures, unexpectedErrors } from './metrics.ts';
+import { queueStreamExits, sseConnectSuccess, sseFailures, unexpectedErrors } from './metrics.ts';
 
 const BASE_URL = __ENV.BASE_URL;
 const QUEUE_STREAM_TIMEOUT = '16m';
@@ -18,10 +18,12 @@ function consume(path: string, token: string, name: string, timeout: string, onE
   const ticket = issueSseTicket(token);
   if (ticket === null) {
     sseConnectSuccess.add(false); // 티켓 발급 실패는 sse_ticket 요청에서 이미 오류로 센다
+    if (name === 'sse_queue') queueStreamExits.ticketFailed.add(1);
     return false;
   }
   let connected = false;
   let completed = false;
+  let streamError = false;
   const result = sse.open(`${BASE_URL}${path}?ticket=${ticket}`, { tags: { name }, timeout }, (client) => {
     client.on('event', (event: SseEvent) => {
       if (!event.name) return; // heartbeat 주석
@@ -34,7 +36,10 @@ function consume(path: string, token: string, name: string, timeout: string, onE
         client.close();
       }
     });
-    client.on('error', () => client.close());
+    client.on('error', () => {
+      streamError = true;
+      client.close();
+    });
   });
   if (!connected) {
     sseConnectSuccess.add(false);
@@ -42,6 +47,9 @@ function consume(path: string, token: string, name: string, timeout: string, onE
     if (__ENV.LOADTEST_DEBUG === '1') console.error(`SSE 연결 실패: ${name} ${result.status} ${result.error ?? ''}`);
   }
   if (!completed) unexpectedErrors.add(true);
+  if (name === 'sse_queue' && !completed) {
+    (streamError ? queueStreamExits.streamError : queueStreamExits.closedWithoutResult).add(1);
+  }
   return completed;
 }
 
@@ -55,7 +63,10 @@ export function waitForAdmission(scheduleId: number, token: string): Admission |
   const startedAt = Date.now();
   let admissionToken: string | null = null;
   const completed = consume(`/api/v1/streams/queues/${scheduleId}`, token, 'sse_queue', QUEUE_STREAM_TIMEOUT, (event) => {
-    if (event.name === 'removed') return true; // 아래에서 실패로 센다
+    if (event.name === 'removed') {
+      queueStreamExits.removed.add(1);
+      return true; // 아래에서 실패로 센다
+    }
     if (event.name !== 'admitted') return false;
     admissionToken = (JSON.parse(event.data) as { admissionToken: string }).admissionToken;
     return true;

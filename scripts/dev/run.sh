@@ -69,10 +69,12 @@ start() {
 }
 start_java() {
   local name=$1
-  local -a jvm_args=()
+  local -a jvm_args=("-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=$ROOT/build/dev/logs/$name.hprof")
   if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+    local scouter_conf=ticketing.conf
+    [[ "$name" == realtime ]] && scouter_conf=ticketing-realtime.conf
     jvm_args+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
-      "-Dscouter.config=$ROOT/deploy/scouter/ticketing.conf"
+      "-Dscouter.config=$ROOT/deploy/scouter/$scouter_conf"
       "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"
       "-Dobj_name=$name" -Djdk.attach.allowAttachSelf=true)
     printf 'Scouter agent 연결: obj_name=%s, collector=%s:6100\n' "$name" "${SCOUTER_COLLECTOR_IP:-127.0.0.1}" >&2
