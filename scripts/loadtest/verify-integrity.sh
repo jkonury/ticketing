@@ -13,7 +13,7 @@ mkdir -p build/loadtest
 
 # booking 스키마만 조회한다. 스키마를 넘는 조인은 하지 않는다
 psql_q() {
-  docker compose exec -T postgres sh -c 'psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt -c "$1"' sh "$1"
+  docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt -c "$1"' sh "$1"
 }
 
 sold_dup=$(psql_q "SELECT count(*) FROM (SELECT 1 FROM booking.sold_seat WHERE schedule_id = $SCHEDULE_ID GROUP BY schedule_id, seat_id HAVING count(*) > 1) t")

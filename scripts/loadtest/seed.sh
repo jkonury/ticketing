@@ -18,7 +18,7 @@ source "$ROOT/scripts/loadtest/lib/jwt.sh"
 mkdir -p "$OUT"
 
 psql_run() {
-  docker compose exec -T postgres sh -c 'psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt "$@"' sh "$@"
+  docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt "$@"' sh "$@"
 }
 
 usage() {

@@ -4,7 +4,6 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingFlow } from './booking-flow';
@@ -81,6 +80,12 @@ describe('예매 흐름', () => {
       ),
     );
   }
+  it('바로 입장하면 대기열을 표시하지 않는다', async () => {
+    render(<BookingFlow schedule={schedule} seats={seats} />);
+    expect(screen.queryByText('대기열')).not.toBeInTheDocument();
+    await screen.findByText('좌석 선택');
+    expect(screen.queryByText('대기열')).not.toBeInTheDocument();
+  });
   it('좌석은 4개까지만 선택하고 선점된 좌석을 선택에서 뺀다', async () => {
     await openSeats();
     for (let index = 1; index <= 5; index++)
@@ -157,6 +162,9 @@ describe('예매 흐름', () => {
       screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
     );
     fireEvent.click(screen.getByRole('button', { name: '예매하기' }));
-    await waitFor(() => expect(screen.getByText('대기열')).toBeInTheDocument());
+    expect(screen.queryByText('대기열')).not.toBeInTheDocument();
+    expect(
+      await screen.findByText('대기 순번: 2', {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
   });
 });

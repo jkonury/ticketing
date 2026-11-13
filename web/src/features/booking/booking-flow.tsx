@@ -144,6 +144,7 @@ function Queue({
   onAdmitted: (admission: Admission) => void;
 }) {
   const [waiting, setWaiting] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [removed, setRemoved] = useState(false);
   const [position, setPosition] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -173,6 +174,11 @@ function Queue({
       active = false;
     };
   }, [scheduleId, attempt, onAdmitted, router]);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setShowQueue(true), 2000);
+    return () => clearTimeout(timer);
+  }, [waiting]);
   const stream = useEventStream({
     request: { kind: 'queue', scheduleId },
     enabled: waiting,
@@ -191,14 +197,21 @@ function Queue({
       removed() {
         stream.close();
         setWaiting(false);
+        setShowQueue(false);
         setRemoved(true);
       },
     },
   });
   return (
     <section>
-      <h2>대기열</h2>
-      {waiting && <p>대기 순번: {position ?? '확인 중'}</p>}
+      {showQueue && waiting ? (
+        <>
+          <h2>대기열</h2>
+          <p>대기 순번: {position ?? '확인 중'}</p>
+        </>
+      ) : (
+        !removed && !error && <p role="status">입장을 확인하고 있습니다.</p>
+      )}
       {removed && (
         <>
           <p>대기열에서 제외되었습니다.</p>
