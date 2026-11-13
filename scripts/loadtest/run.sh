@@ -8,8 +8,9 @@ cd "$ROOT"
 usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
-            [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15]
+            [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
+--no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 USAGE
   exit 1
@@ -24,6 +25,7 @@ KEEP=false
 VUS=
 K6_CPUS=0-3
 APP_CPUS=4-15
+NO_SCOUTER=false
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
   case "$1" in
@@ -36,6 +38,7 @@ while (($#)); do
     --jfr) JFR=true; shift ;;
     --observability) OBSERVABILITY=true; shift ;;
     --keep) KEEP=true; shift ;;
+    --no-scouter) NO_SCOUTER=true; shift ;;
     -h|--help) usage ;;
     *) printf '알 수 없는 옵션: %s\n' "$1" >&2; usage ;;
   esac
@@ -62,6 +65,7 @@ set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+if $NO_SCOUTER; then unset SCOUTER_AGENT_DIR; fi
 
 if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
   [[ -f "$SCOUTER_AGENT_DIR/scouter.agent.jar" ]] || { echo "SCOUTER_AGENT_DIR에 scouter.agent.jar가 없습니다: $SCOUTER_AGENT_DIR" >&2; exit 1; }
@@ -73,6 +77,7 @@ SUFFIX=
 if $FAILURE_INJECT; then SUFFIX=-fi; fi
 RUN_ROOT="$OUT/runs/$STAMP-$SCENARIO$SUFFIX"
 mkdir -p "$RUN_ROOT"
+git diff --binary HEAD > "$RUN_ROOT/source.patch"
 
 PIDS=()
 SAMPLER_PID=
@@ -158,6 +163,7 @@ write_env() {
     printf 'os: %s\n' "$(uname -srm)"
     printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
     printf 'scouter: %s\n' "$([[ -n ${SCOUTER_AGENT_DIR:-} ]] && echo 활성 || echo 비활성)"
+    printf 'hikari-maximum-pool-size: %s\n' "${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:-10}"
     printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
   } > "$1/env.txt"
 }

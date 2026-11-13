@@ -8,6 +8,7 @@ import io.github.ticketing.booking.domain.SeatId
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
 import ticketing.jooq.booking.tables.references.SCHEDULE
+import ticketing.jooq.booking.tables.references.SCHEDULE_SEAT
 import java.time.ZoneOffset
 
 @Repository
@@ -47,7 +48,17 @@ internal class ScheduleSeatPersistenceAdapter(private val seatRepository: Schedu
 
     override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> {
         if (seatIds.isEmpty()) return emptyList()
-        return seatRepository.findByKeyScheduleIdAndKeySeatIdIn(scheduleId.value, seatIds.map { it.value })
-            .map { it.toDomain() }
+        return dsl.selectFrom(SCHEDULE_SEAT)
+            .where(SCHEDULE_SEAT.SCHEDULE_ID.eq(scheduleId.value))
+            .and(SCHEDULE_SEAT.SEAT_ID.`in`(seatIds.map { it.value }))
+            .fetch {
+                ScheduleSeatCopy(
+                    scheduleId,
+                    SeatId(requireNotNull(it.seatId)),
+                    requireNotNull(it.grade),
+                    requireNotNull(it.label),
+                    requireNotNull(it.price).toBigDecimal(),
+                )
+            }
     }
 }

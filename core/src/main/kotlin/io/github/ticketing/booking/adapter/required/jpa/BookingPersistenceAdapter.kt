@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository
 import ticketing.jooq.booking.tables.references.SOLD_SEAT
 import java.time.Instant
 import java.time.ZoneOffset
+import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 
 @Repository
 internal class BookingPersistenceAdapter(private val bookings: BookingJpaRepository, private val dsl: DSLContext) : BookingCommandPort {
@@ -30,8 +31,11 @@ internal class BookingPersistenceAdapter(private val bookings: BookingJpaReposit
 
     override fun findById(id: BookingId): Booking? = bookings.findWithSeatsById(id.value)?.toDomain()
 
-    override fun findByMemberAndIdempotencyKey(memberId: MemberId, key: String): Booking? =
-        bookings.findWithSeatsByMemberIdAndIdempotencyKey(memberId.value, key)?.toDomain()
+    override fun findByMemberAndIdempotencyKey(memberId: MemberId, key: String): Booking? {
+        // 신규 요청과 선점 경합의 패자는 예매가 없으므로 엔티티·좌석 컬렉션을 로드하지 않는다.
+        if (!dsl.fetchExists(BOOKING, BOOKING.MEMBER_ID.eq(memberId.value).and(BOOKING.IDEMPOTENCY_KEY.eq(key)))) return null
+        return bookings.findWithSeatsByMemberIdAndIdempotencyKey(memberId.value, key)?.toDomain()
+    }
 
     override fun insertSoldSeats(bookingId: BookingId, scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant): Int {
         if (seatIds.isEmpty()) return 0
