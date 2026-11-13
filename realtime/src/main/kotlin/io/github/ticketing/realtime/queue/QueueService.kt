@@ -37,16 +37,23 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
             return it
         }
         val sequence = redis.opsForValue().increment(QueueKeys.sequence(scheduleId)).awaitSingle()
-        val added = redis.execute(
-            addWaiting,
-            listOf(QueueKeys.waiting(scheduleId)),
-            sequence.toString(),
-            memberId.toString(),
-        ).next().awaitSingle()
+        val started = System.nanoTime()
+        val registration = try {
+            redis.execute(
+                addWaiting,
+                listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId)),
+                sequence.toString(),
+                memberId.toString(),
+                clock.millis().toString(),
+            ).next().awaitSingle()
+        } finally {
+            meters.timer("queue.presence.update").record(System.nanoTime() - started, TimeUnit.NANOSECONDS)
+        }
+        val added = registration[0] as Long
+        val position = registration[1] as Long
         meters.counter("queue.registration", "result", if (added == 1L) "new" else "existing").increment()
         redis.opsForSet().add(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
-        markSeen(scheduleId, memberId)
-        return waiting(scheduleId, memberId) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
+        return QueueStatus.Waiting(position + 1)
     }
 
     /**
@@ -103,7 +110,14 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
     }
 
     companion object {
-        private val addWaiting = DefaultRedisScript("return redis.call('ZADD', KEYS[1], 'NX', ARGV[1], ARGV[2])", Long::class.java)
+        private val addWaiting = DefaultRedisScript(
+            """
+            local added = redis.call('ZADD', KEYS[1], 'NX', ARGV[1], ARGV[2])
+            redis.call('ZADD', KEYS[2], ARGV[3], ARGV[2])
+            return {added, redis.call('ZRANK', KEYS[1], ARGV[2])}
+            """.trimIndent(),
+            List::class.java,
+        )
     }
 }
 

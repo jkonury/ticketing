@@ -33,7 +33,7 @@ function request(name: string, method: string, path: string, token: string, opti
   const headers: Record<string, string> = { Authorization: `Bearer ${token}`, ...options.headers };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   const params: Record<string, unknown> = { headers, tags: { name } };
-  if (options.readBody) params.responseType = 'text';
+  if (options.readBody || DEBUG) params.responseType = 'text';
   const body = options.body === undefined ? null : JSON.stringify(options.body);
 
   for (let attempt = 0; ; attempt++) {

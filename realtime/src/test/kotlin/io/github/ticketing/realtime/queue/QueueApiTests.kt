@@ -20,7 +20,9 @@ class QueueApiTests(client: WebTestClient, redis: ReactiveStringRedisTemplate) :
             clientFor(member).post().uri(path).exchange().expectStatus().isOk.expectBody()
                 .jsonPath("$.status").isEqualTo("WAITING").jsonPath("$.position").isEqualTo(member.toInt())
         }
+        redis.opsForZSet().add(QueueKeys.seen(schedule), "2", 1.0).awaitSingle()
         clientFor(2).post().uri(path).exchange().expectStatus().isOk.expectBody().jsonPath("$.position").isEqualTo(2)
+        assertThat(redis.opsForZSet().score(QueueKeys.seen(schedule), "2").awaitSingle()).isEqualTo(now.toEpochMilli().toDouble())
     }
 
     @Test
