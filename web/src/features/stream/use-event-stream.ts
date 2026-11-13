@@ -9,17 +9,32 @@ type Options = {
   request: { kind: 'queue' | 'seats'; scheduleId: number };
   handlers: Record<string, (data: unknown, id: string | null) => void>;
   enabled?: boolean;
+  freshSnapshot?: boolean;
+  onDisconnect?: () => void;
 };
 
-export function useEventStream({ request, handlers, enabled = true }: Options) {
+export function useEventStream({
+  request,
+  handlers,
+  enabled = true,
+  freshSnapshot = false,
+  onDisconnect,
+}: Options) {
   const { kind, scheduleId } = request;
   const [state, setState] = useState<State>('connecting');
   const router = useRouter();
+  const [generation, setGeneration] = useState(0);
+  const restart = useCallback(() => {
+    setState('connecting');
+    setGeneration((value) => value + 1);
+  }, []);
   const handlersRef = useRef(handlers);
+  const disconnectRef = useRef(onDisconnect);
   const closeRef = useRef<() => void>(() => {});
   useEffect(() => {
     handlersRef.current = handlers;
-  }, [handlers]);
+    disconnectRef.current = onDisconnect;
+  }, [handlers, onDisconnect]);
   const close = useCallback(() => closeRef.current(), []);
 
   useEffect(() => {
@@ -42,6 +57,7 @@ export function useEventStream({ request, handlers, enabled = true }: Options) {
     };
     const retry = () => {
       if (stopped) return;
+      disconnectRef.current?.();
       setState('reconnecting');
       const delay = Math.min(30000, 1000 * 2 ** failures++);
       timer = setTimeout(
@@ -57,7 +73,9 @@ export function useEventStream({ request, handlers, enabled = true }: Options) {
           body: JSON.stringify({
             kind,
             scheduleId,
-            ...(kind === 'seats' && lastEventId ? { lastEventId } : {}),
+            ...(kind === 'seats' && lastEventId && !freshSnapshot
+              ? { lastEventId }
+              : {}),
           }),
           signal: abort.signal,
         });
@@ -65,15 +83,27 @@ export function useEventStream({ request, handlers, enabled = true }: Options) {
         if (!response.ok) {
           const problem = z
             .object({ code: z.string() })
-            .safeParse(await response.json());
+            .safeParse(await response.json().catch(() => null));
           if (
             response.status === 401 &&
             problem.success &&
             problem.data.code === 'SESSION_EXPIRED'
           ) {
+            disconnectRef.current?.();
             stop();
             setState('failed');
             router.push('/login');
+            return;
+          }
+          if (
+            response.status >= 400 &&
+            response.status < 500 &&
+            response.status !== 408 &&
+            response.status !== 429
+          ) {
+            disconnectRef.current?.();
+            stop();
+            setState('failed');
             return;
           }
           throw new Error('ticket');
@@ -113,6 +143,6 @@ export function useEventStream({ request, handlers, enabled = true }: Options) {
       stop();
       closeRef.current = () => {};
     };
-  }, [enabled, kind, scheduleId, router]);
-  return { state, close };
+  }, [enabled, kind, scheduleId, router, generation, freshSnapshot]);
+  return { state, close, restart };
 }

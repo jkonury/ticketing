@@ -11,9 +11,8 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request.headers);
-    return Response.json(
-      await createBooking(schema.parse(await request.json())),
-    );
+    const booking = await createBooking(schema.parse(await request.json()));
+    return Response.json({ ...booking, serverTime: new Date().toISOString() });
   } catch (error) {
     return errorResponse(error);
   }

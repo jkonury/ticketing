@@ -17,7 +17,15 @@ export function Payment({
   onReset: () => void;
 }) {
   const [remaining, setRemaining] = useState(() =>
-    Math.max(0, Math.ceil((Date.parse(booking.expiresAt) - Date.now()) / 1000)),
+    Math.max(
+      0,
+      Math.ceil(
+        (Date.parse(booking.expiresAt) -
+          Date.parse(booking.serverTime) -
+          (performance.now() - booking.receivedAt)) /
+          1000,
+      ),
+    ),
   );
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
@@ -29,13 +37,18 @@ export function Payment({
         setRemaining(
           Math.max(
             0,
-            Math.ceil((Date.parse(booking.expiresAt) - Date.now()) / 1000),
+            Math.ceil(
+              (Date.parse(booking.expiresAt) -
+                Date.parse(booking.serverTime) -
+                (performance.now() - booking.receivedAt)) /
+                1000,
+            ),
           ),
         ),
       1000,
     );
     return () => clearInterval(timer);
-  }, [booking.expiresAt]);
+  }, [booking.expiresAt, booking.serverTime, booking.receivedAt]);
   const handleFailure = (error: unknown) => {
     const code = codeOf(error);
     if (code === 'SESSION_EXPIRED') router.push('/login');

@@ -79,4 +79,41 @@ describe('useEventStream', () => {
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it.each([400, 403])(
+    '%i 오류는 재시도를 중단하고 다시 연결할 수 있다',
+    async (status) => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status,
+        json: async () => ({ code: 'ERROR' }),
+      } as Response);
+      const { result } = renderHook(() =>
+        useEventStream({
+          request: { kind: 'queue', scheduleId: 1 },
+          handlers: {},
+        }),
+      );
+      await waitFor(() => expect(result.current.state).toBe('failed'));
+      expect(fetch).toHaveBeenCalledTimes(1);
+      act(() => result.current.restart());
+      await waitFor(() => expect(FakeSource.instances).toHaveLength(1));
+    },
+  );
+  it('일시적인 5xx 오류는 재시도한다', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    } as Response);
+    const { result } = renderHook(() =>
+      useEventStream({
+        request: { kind: 'queue', scheduleId: 1 },
+        handlers: {},
+      }),
+    );
+    await waitFor(() => expect(result.current.state).toBe('reconnecting'));
+    await waitFor(() => expect(FakeSource.instances).toHaveLength(1), {
+      timeout: 2000,
+    });
+  });
 });

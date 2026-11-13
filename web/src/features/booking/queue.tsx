@@ -89,6 +89,20 @@ export function Queue({
       ) : (
         !removed && !error && <p role="status">입장을 확인하고 있습니다.</p>
       )}
+      {waiting &&
+        stream.state !== 'open' &&
+        (stream.state === 'failed' ? (
+          <p role="alert">
+            대기열 연결에 실패했습니다.{' '}
+            <button onClick={stream.restart}>다시 연결</button>
+          </p>
+        ) : (
+          <p role="status">
+            {stream.state === 'reconnecting'
+              ? '대기열에 다시 연결하고 있습니다. 순번이 오래되었을 수 있습니다.'
+              : '대기열에 연결하고 있습니다.'}
+          </p>
+        ))}
       {removed && (
         <>
           <p>대기열에서 제외되었습니다.</p>

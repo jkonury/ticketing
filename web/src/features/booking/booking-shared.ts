@@ -17,6 +17,8 @@ export type Admission = { admissionToken: string; expiresAt: string };
 export type Booking = {
   bookingId: number;
   expiresAt: string;
+  serverTime: string;
+  receivedAt: number;
   totalAmount: number;
   seats: { seatId: number; label: string; price: number }[];
 };
@@ -34,6 +36,7 @@ export const queueSchema = z.object({
 export const bookingSchema = z.object({
   bookingId: z.number(),
   expiresAt: z.string(),
+  serverTime: z.string().datetime({ offset: true }),
   totalAmount: z.number(),
   seats: z.array(
     z.object({ seatId: z.number(), label: z.string(), price: z.number() }),

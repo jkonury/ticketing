@@ -7,8 +7,13 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingFlow } from './booking-flow';
+import { Payment } from './payment';
+import { Seats } from './seats';
+import { Queue } from './queue';
 
 const stream = vi.hoisted(() => ({
+  state: 'open',
+  onDisconnect: () => {},
   handlers: {} as Record<string, (data: unknown, id: string | null) => void>,
 }));
 vi.mock('next/navigation', () => {
@@ -19,12 +24,17 @@ vi.mock('@/features/stream/use-event-stream', () => ({
   useEventStream: ({
     request,
     handlers,
+    onDisconnect,
   }: {
     request: { kind: string };
     handlers: typeof stream.handlers;
+    onDisconnect?: () => void;
   }) => {
-    if (request.kind === 'seats') stream.handlers = handlers;
-    return { state: 'open', close: vi.fn() };
+    if (request.kind === 'seats') {
+      stream.handlers = handlers;
+      stream.onDisconnect = onDisconnect ?? (() => {});
+    }
+    return { state: stream.state, close: vi.fn(), restart: vi.fn() };
   },
 }));
 const seats = Array.from({ length: 5 }, (_, index) => ({
@@ -45,6 +55,7 @@ function response(data: unknown, status = 200) {
 }
 describe('예매 흐름', () => {
   beforeEach(() => {
+    stream.state = 'open';
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((path: string) =>
@@ -118,6 +129,7 @@ describe('예매 흐름', () => {
         return Promise.resolve(
           response({
             bookingId: 4,
+            serverTime: '2026-01-01T00:00:00Z',
             expiresAt: '2099-01-01T00:00:00Z',
             totalAmount: 10000,
             seats: [{ seatId: 1, label: 'A 3-1', price: 10000 }],
@@ -166,5 +178,103 @@ describe('예매 흐름', () => {
     expect(
       await screen.findByText('대기 순번: 2', {}, { timeout: 3000 }),
     ).toBeInTheDocument();
+  });
+  it.each(['2000-01-01', '2090-01-01'])(
+    '기기 시각이 %s여도 서버 기준 만료 경계에서 버튼을 비활성화한다',
+    (deviceTime) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(deviceTime));
+      const receivedAt = performance.now();
+      render(
+        <Payment
+          booking={{
+            bookingId: 1,
+            expiresAt: '2026-01-01T00:00:02Z',
+            serverTime: '2026-01-01T00:00:00Z',
+            receivedAt,
+            totalAmount: 1,
+            seats: [],
+          }}
+          onDone={vi.fn()}
+          onReset={vi.fn()}
+        />,
+      );
+      expect(screen.getByText('남은 시간: 2초')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
+      act(() => vi.advanceTimersByTime(2000));
+      expect(screen.getByText('선점이 만료되었습니다.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '결제하기' })).toBeDisabled();
+      vi.useRealTimers();
+    },
+  );
+  it('좌석 최초 연결과 단절 후 새 스냅샷을 기다리며 제출을 막는다', () => {
+    stream.state = 'connecting';
+    const props = {
+      scheduleId: 1,
+      seats,
+      admission: {
+        admissionToken: 'opaque',
+        expiresAt: '2099-01-01T00:00:00Z',
+      },
+      onBooking: vi.fn(),
+      onReset: vi.fn(),
+    };
+    const view = render(<Seats {...props} />);
+    expect(
+      screen.getByText('좌석 정보를 확인하고 있습니다.'),
+    ).toBeInTheDocument();
+    stream.state = 'open';
+    view.rerender(<Seats {...props} />);
+    act(() =>
+      stream.handlers.snapshot(
+        { seats: [{ seatId: 1, status: 'AVAILABLE' }] },
+        null,
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+    );
+    expect(screen.getByRole('button', { name: '예매하기' })).toBeEnabled();
+    act(() => stream.onDisconnect());
+    stream.state = 'reconnecting';
+    view.rerender(<Seats {...props} />);
+    expect(
+      screen.getByText(/표시된 정보는 오래되었을 수 있습니다/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '예매하기' })).toBeDisabled();
+    stream.state = 'open';
+    view.rerender(<Seats {...props} />);
+    expect(screen.getByRole('button', { name: '예매하기' })).toBeDisabled();
+    act(() =>
+      stream.handlers.snapshot(
+        { seats: [{ seatId: 1, status: 'AVAILABLE' }] },
+        null,
+      ),
+    );
+    expect(screen.getByRole('button', { name: '예매하기' })).toBeEnabled();
+  });
+  it('대기열 연결 실패와 재연결 상태를 알린다', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      response({ status: 'WAITING', position: 2 }) as Response,
+    );
+    stream.state = 'connecting';
+    const props = { scheduleId: 1, onAdmitted: vi.fn() };
+    const view = render(<Queue {...props} />);
+    expect(
+      await screen.findByText('대기열에 연결하고 있습니다.'),
+    ).toBeInTheDocument();
+    stream.state = 'reconnecting';
+    view.rerender(<Queue {...props} />);
+    expect(
+      screen.getByText(/순번이 오래되었을 수 있습니다/),
+    ).toBeInTheDocument();
+    stream.state = 'failed';
+    view.rerender(<Queue {...props} />);
+    expect(screen.getByText(/대기열 연결에 실패했습니다/)).toBeInTheDocument();
+    stream.state = 'open';
+    view.rerender(<Queue {...props} />);
+    expect(
+      screen.queryByText(/대기열 연결에 실패했습니다/),
+    ).not.toBeInTheDocument();
   });
 });

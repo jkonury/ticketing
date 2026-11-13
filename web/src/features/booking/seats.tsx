@@ -30,6 +30,7 @@ export function Seats({
   onBooking: (booking: Booking) => void;
   onReset: () => void;
 }) {
+  const [hasSnapshot, setHasSnapshot] = useState(false);
   const [statuses, setStatuses] = useState<Record<number, SeatStatus>>({});
   const [selected, setSelected] = useState<number[]>([]);
   const [notice, setNotice] = useState('');
@@ -57,12 +58,17 @@ export function Seats({
     },
     [selected],
   );
-  useEventStream({
+  const stream = useEventStream({
     request: { kind: 'seats', scheduleId },
+    freshSnapshot: true,
+    onDisconnect: () => setHasSnapshot(false),
     handlers: {
       snapshot(data) {
         const parsed = snapshotSchema.safeParse(data);
-        if (parsed.success) apply(parsed.data.seats);
+        if (parsed.success) {
+          apply(parsed.data.seats);
+          setHasSnapshot(true);
+        }
       },
       seat(data) {
         const parsed = changeSchema.safeParse(data);
@@ -76,12 +82,13 @@ export function Seats({
       },
     },
   });
+  const ready = stream.state === 'open' && hasSnapshot;
   async function submit() {
     setPending(true);
     setNotice('');
     try {
-      onBooking(
-        bookingSchema.parse(
+      onBooking({
+        ...bookingSchema.parse(
           await call('/api/bookings', 'POST', {
             scheduleId,
             seatIds: selected,
@@ -89,7 +96,8 @@ export function Seats({
             idempotencyKey: key.current,
           }),
         ),
-      );
+        receivedAt: performance.now(),
+      });
     } catch (error) {
       const code = codeOf(error);
       const parsed = errorSchema.safeParse(error);
@@ -119,6 +127,19 @@ export function Seats({
     <section>
       <h2>좌석 선택</h2>
       <p>최대 4석</p>
+      {stream.state === 'failed' ? (
+        <p role="alert">
+          좌석 정보를 연결할 수 없습니다.{' '}
+          <button onClick={stream.restart}>다시 연결</button>
+        </p>
+      ) : !ready ? (
+        <p role="status">
+          좌석 정보를{' '}
+          {stream.state === 'reconnecting'
+            ? '다시 연결하고 있습니다. 표시된 정보는 오래되었을 수 있습니다.'
+            : '확인하고 있습니다.'}
+        </p>
+      ) : null}
       <p className="field-hint">
         좌석은 선택 가능, 선점됨, 판매됨 상태로 표시됩니다. 좌석 배치는 가로로
         스크롤할 수 있습니다.
@@ -164,7 +185,7 @@ export function Seats({
                           aria-label={`${seat.section}구역 ${seat.row}열 ${seat.number}번, ${seat.grade}석, ${label}`}
                           aria-pressed={selectedSeat}
                           className="seat-button"
-                          disabled={status !== 'AVAILABLE' || pending}
+                          disabled={!ready || status !== 'AVAILABLE' || pending}
                           onClick={() => {
                             if (!selectedSeat && selected.length >= 4) {
                               setNotice(bookingError('TOO_MANY_SEATS'));
@@ -199,7 +220,7 @@ export function Seats({
       </p>
       {notice && <p role="alert">{notice}</p>}
       <button
-        disabled={!selected.length || pending}
+        disabled={!ready || !selected.length || pending}
         onClick={() => void submit()}
       >
         {pending ? '예매 중' : '예매하기'}
