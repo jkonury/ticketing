@@ -146,4 +146,14 @@ GUI로 볼 때는 `$MAT/MemoryAnalyzer`에서 hprof를 열고 Dominator Tree(보
 
 - 증상: Scouter를 켰을 때만 realtime(`/api/v1/streams/queues/{scheduleId}`)에서 `OutOfMemoryError: Java heap space`.
 - 덤프: `TraceContext` 9,850개(연결당 약 55KB)가 `ThreadCallPossibleStep` 222만 개, `MethodStep` 95만 개, `ParameterizedMessageStep` 55만 개를 들고 있었다.
-- 조치: realtime은 별도 설정 파일 `deploy/scouter/ticketing-realtime.conf`를 쓰고, 여기서 `hook_async_*` 세 항목을 끄고 `*Service.*`를 메서드 추적에서 뺐다(공통 항목을 고치면 `ticketing.conf`와 같이 고친다). 1차 조치 후 재측정한 덤프에서도 `TraceContext` 9,942개가 힙의 51.5%였다. `ThreadCallPossibleStep`은 사라지고 `MethodStep`은 연결당 3개로 줄었지만, `ParameterizedMessageStep` 96만 개(보존 391MB)가 남았다. 리액터 체크포인트 프로파일링(`profile_reactor_checkpoint_enabled`, 기본 켜짐)이 만드는 스텝이라 realtime 설정에서 끈 것이 2차 조치이며, 효과는 재측정 전이다.
+- 조치: realtime은 별도 설정 파일 `deploy/scouter/ticketing-realtime.conf`를 쓰고, 여기서 `hook_async_*` 세 항목을 끄고 `*Service.*`를 메서드 추적에서 뺐다(공통 항목을 고치면 `ticketing.conf`와 같이 고친다). 1차 조치(async 훅 off, `*Service.*` 추적 제외) 후 재측정한 덤프에서도 `TraceContext` 약 9,900개가 힙의 51.5%였다. `ThreadCallPossibleStep`은 사라지고 `MethodStep`은 연결당 3개로 줄었지만 `ParameterizedMessageStep` 96만 개(보존 391MB)가 남았다. 리액터 체크포인트(`profile_reactor_checkpoint_enabled`)를 꺼도 줄지 않았다. MAT OQL로 스텝 내용을 뽑아 보니 `EXISTS key<booking:seats:{30}>` 같은 Redis 명령이었다. 2차 조치로 realtime 설정에서 `_hook_redis_enabled=false`를 두었으며 효과는 재측정 전이다.
+
+MAT로 스텝 내용 보기(인덱스가 있으면 빠르다):
+
+```bash
+$MAT/ParseHeapDump.sh <앱>.hprof -command='oql "SELECT s.hash, toString(s.paramString) FROM scouter.lang.step.ParameterizedMessageStep s"' org.eclipse.mat.api:query
+```
+
+`-command`는 report ID(`org.eclipse.mat.api:query`)보다 앞에 둬야 한다. `-format`, `-limit`을 붙이면 `Invalid command line` 오류가 난다.
+
+실제로 붙은 에이전트는 덤프의 System Properties(`scouter.dir`, `scouter.config`)로 확인한다. 이번에는 `/home/hong/dev/tool/scouter-2.21/agent.java21plus`였다.
