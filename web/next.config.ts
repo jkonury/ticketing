@@ -1,7 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: process.env.WEB_ORIGIN
+    ? [new URL(process.env.WEB_ORIGIN).hostname]
+    : [],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

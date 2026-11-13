@@ -127,4 +127,4 @@ fake-pg는 웹훅을 `host.docker.internal:18080`의 core로 보낸다. 그래�
 ./scripts/dev/install-nginx.sh
 ```
 
-복사 후 `nginx -t`로 검사하고 사용하는 환경의 절차에 따라 Nginx를 다시 로드한다. `web/.env.local`에서 `GATEWAY_PUBLIC_URL`과 `WEB_ORIGIN`을 `https://<설정한 도메인>`으로 설정하고 `SESSION_COOKIE_SECURE=true`로 바꾼다. `GATEWAY_URL`은 서버에서 접근하는 로컬 Gateway 주소를 유지한다. 설정 변경 후 web을 재시작한다.
+복사 후 `nginx -t`로 검사하고 사용하는 환경의 절차에 따라 Nginx를 다시 로드한다. `web/.env.local`에서 `GATEWAY_PUBLIC_URL`과 `WEB_ORIGIN`을 `https://<설정한 도메인>`으로 설정하고 `SESSION_COOKIE_SECURE=true`로 바꾼다. `GATEWAY_URL`은 서버에서 접근하는 로컬 Gateway 주소를 유지한다. 개발 서버는 `WEB_ORIGIN`의 호스트를 HMR 허용 출처로 사용하므로 설정 변경 후 web을 재시작한다.
