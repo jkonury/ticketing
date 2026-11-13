@@ -9,6 +9,8 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15]
+SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
+SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 USAGE
   exit 1
 }
@@ -60,6 +62,10 @@ set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+
+if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+  [[ -f "$SCOUTER_AGENT_DIR/scouter.agent.jar" ]] || { echo "SCOUTER_AGENT_DIR에 scouter.agent.jar가 없습니다: $SCOUTER_AGENT_DIR" >&2; exit 1; }
+fi
 
 OUT="$ROOT/build/loadtest"
 STAMP=$(date +%Y%m%d-%H%M%S)
@@ -113,6 +119,13 @@ start() {
   if $JFR; then
     opts+=("-XX:StartFlightRecording=filename=$dir/$name.jfr,dumponexit=true,settings=profile,jdk.VirtualThreadPinned#threshold=0ms")
   fi
+  if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+    opts+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
+      "-Dscouter.config=$ROOT/deploy/scouter/ticketing.conf"
+      "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"
+      "-Dobj_name=$name" -Djdk.attach.allowAttachSelf=true)
+    printf 'Scouter agent 연결: obj_name=%s, collector=%s:6100\n' "$name" "${SCOUTER_COLLECTOR_IP:-127.0.0.1}" >&2
+  fi
   env "$@" taskset -c "$APP_CPUS" java "${opts[@]}" -jar "$jar" > "$dir/$name.log" 2>&1 &
   PIDS+=("$!")
 }
@@ -141,6 +154,7 @@ write_env() {
     printf 'k6-cpus: %s\napp-cpus: %s\n' "$K6_CPUS" "$APP_CPUS"
     printf 'os: %s\n' "$(uname -srm)"
     printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
+    printf 'scouter: %s\n' "$([[ -n ${SCOUTER_AGENT_DIR:-} ]] && echo 활성 || echo 비활성)"
     printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
   } > "$1/env.txt"
 }
