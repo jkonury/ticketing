@@ -47,7 +47,7 @@ for command in docker curl java jq taskset; do
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo 'Docker가 실행 중이어야 합니다.' >&2; exit 1; }
-for port in 8000 8080 8081 8090; do
+for port in 18000 18080 18081 18090; do
   if command -v ss >/dev/null; then
     occupied=$(ss -ltnp "sport = :$port" | tail -n +2)
   else
@@ -156,15 +156,15 @@ run_once() {
   if $OBSERVABILITY; then obs=(TRACING_EXPORT_ENABLED=true TRACING_SAMPLING_PROBABILITY=0.1); fi
 
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
-    FAKE_PG_WEBHOOK_URL=http://localhost:8080/api/v1/payments/webhooks/fake-pg \
+    FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
   start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core-0.0.1-SNAPSHOT.jar "${obs[@]}"
   start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar "${batch[@]}" "${obs[@]}"
   start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar "${obs[@]}"
-  health fake-pg 8090 "${PIDS[0]}" "$dir" || return 1
-  health core 8080 "${PIDS[1]}" "$dir" || return 1
-  health realtime 8081 "${PIDS[2]}" "$dir" || return 1
-  health gateway 8000 "${PIDS[3]}" "$dir" || return 1
+  health fake-pg 18090 "${PIDS[0]}" "$dir" || return 1
+  health core 18080 "${PIDS[1]}" "$dir" || return 1
+  health realtime 18081 "${PIDS[2]}" "$dir" || return 1
+  health gateway 18000 "${PIDS[3]}" "$dir" || return 1
 
   "$ROOT/scripts/loadtest/seed.sh" members > "$dir/seed.log" 2>&1 || { echo "회원 시드 실패: $dir/seed.log" >&2; return 1; }
   local schedule_file="$OUT/schedule-$SCENARIO.json"
@@ -179,8 +179,8 @@ run_once() {
   [[ -z $VUS ]] || vus_env=(VUS="$VUS")
   local k6_from k6_to
   k6_from=$(date +%s)
-  env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
-    BASE_URL=http://localhost:8000 JWT_SECRET="$JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+  env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
+    BASE_URL=http://localhost:18000 JWT_SECRET="$JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
     "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
   local k6_pid=$!
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &

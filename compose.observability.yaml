@@ -11,7 +11,7 @@ services:
       - --web.enable-remote-write-receiver
       - --enable-feature=exemplar-storage
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:19090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -27,8 +27,8 @@ services:
     image: grafana/tempo:2.9.0
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     ports:
-      - "127.0.0.1:3200:3200"
-      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13200:3200"
+      - "127.0.0.1:14318:4318"
     volumes:
       - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo-data:/var/tempo
@@ -41,7 +41,7 @@ services:
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       GF_SERVER_HTTP_PORT: "3001"
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:13001:3001"
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro

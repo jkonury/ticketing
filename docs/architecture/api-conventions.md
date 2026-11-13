@@ -6,8 +6,8 @@
 ## 1. 호출 경로
 
 ```
-브라우저 ─▶ Next.js BFF ─▶ Gateway(8000) ─▶ 코어(8080)
-브라우저 ─(SSE, 단기 티켓)─▶ Gateway(8000) ─▶ realtime(8081)
+브라우저 ─▶ Next.js BFF ─▶ Gateway(18000) ─▶ 코어(18080)
+브라우저 ─(SSE, 단기 티켓)─▶ Gateway(18000) ─▶ realtime(18081)
 ```
 
 - 브라우저는 코어 API를 직접 부르지 않고 BFF Route Handler를 거친다. SSE만 예외다.

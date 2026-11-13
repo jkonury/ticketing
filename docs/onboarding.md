@@ -23,31 +23,31 @@ git clone <저장소> && cd ticketing
 ./scripts/setup-hooks.sh            # pre-commit(ktlint, detekt, web 검사) 활성화. 클론 후 1회
 cp .env.example .env                # 로컬 비밀 값. git 제외
 ./gradlew :fake-pg:bootJar          # fake-pg 컨테이너가 빌드된 jar를 복사하므로 먼저 만든다
-docker compose up -d --wait         # PostgreSQL 5432, Redis 6379, fake-pg 8090
+docker compose up -d --wait         # PostgreSQL 15432, Redis 16379, fake-pg 18090
 ./gradlew build                     # 전체 빌드 + 테스트
 ```
 
 각 앱은 별도 터미널에서 띄운다.
 
 ```bash
-./gradlew :core:bootRun             # 8080 (시드 데이터: SPRING_PROFILES_ACTIVE=seed ./gradlew :core:bootRun)
-./gradlew :realtime:bootRun         # 8081
-./gradlew :gateway:bootRun          # 8000. 클라이언트·BFF는 여기를 거친다
+./gradlew :core:bootRun             # 18080 (시드 데이터: SPRING_PROFILES_ACTIVE=seed ./gradlew :core:bootRun)
+./gradlew :realtime:bootRun         # 18081
+./gradlew :gateway:bootRun          # 18000. 클라이언트·BFF는 여기를 거친다
 cp web/.env.example web/.env.local  # 최초 1회
-cd web && pnpm install && pnpm dev  # 3000
+cd web && pnpm install && pnpm dev  # 13000
 ```
 
 | 앱 | 포트 | 상태 확인 |
 |---|---|---|
-| core | 8080 | `curl localhost:8080/actuator/health` |
-| realtime | 8081 | `curl localhost:8081/actuator/health` |
-| gateway | 8000 | `curl localhost:8000/actuator/health` |
-| web | 3000 | 브라우저 |
-| fake-pg | 8090 | Compose 상태 |
+| core | 18080 | `curl localhost:18080/actuator/health` |
+| realtime | 18081 | `curl localhost:18081/actuator/health` |
+| gateway | 18000 | `curl localhost:18000/actuator/health` |
+| web | 13000 | 브라우저 |
+| fake-pg | 18090 | Compose 상태 |
 
 시드 데이터는 공연장 2곳, 공연 3편, 회차 각 3개이며 다시 실행해도 늘지 않는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)다.
 
-fake-pg는 웹훅을 `host.docker.internal:8080`의 core로 보낸다. 그래서 core는 컨테이너가 아니라 호스트에서 `bootRun`으로 띄운다. `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 core와 fake-pg가 같아야 서명 검증이 통과한다.
+fake-pg는 웹훅을 `host.docker.internal:18080`의 core로 보낸다. 그래서 core는 컨테이너가 아니라 호스트에서 `bootRun`으로 띄운다. `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 core와 fake-pg가 같아야 서명 검증이 통과한다.
 
 ## 4. 저장소 지도
 
@@ -98,7 +98,7 @@ fake-pg는 웹훅을 `host.docker.internal:8080`의 core로 보낸다. 그래서
 | 문서 링크 | `./scripts/agent/docs/check-docs.sh [경로...]` |
 
 - 같은 작업 디렉터리에서 test와 check는 순차 실행한다. 동시에 실행하면 결과 파일이 충돌한다.
-- E2E는 `build`·`check`에 포함되지 않는다. core·gateway·realtime 흐름을 바꿨다면 직접 실행한다. 8000·8080·8081·8082(`--web`이면 3000)가 비어 있어야 한다.
+- E2E는 `build`·`check`에 포함되지 않는다. core·gateway·realtime 흐름을 바꿨다면 직접 실행한다. 18000·18080·18081·18082(`--web`이면 13000)가 비어 있어야 한다.
 - `@Suppress`, baseline 추가, `--no-verify`로 검사를 우회하지 않는다.
 
 ## 8. 코드·커밋 규칙

@@ -15,8 +15,8 @@ dependencies {
 
 tasks.test { enabled = false }
 
-val gatewayUrl = providers.systemProperty("e2e.gatewayUrl").orElse("http://localhost:8000")
-val realtimeBUrl = providers.systemProperty("e2e.realtimeBUrl").orElse("http://localhost:8082")
+val gatewayUrl = providers.systemProperty("e2e.gatewayUrl").orElse("http://localhost:18000")
+val realtimeBUrl = providers.systemProperty("e2e.realtimeBUrl").orElse("http://localhost:18082")
 tasks.register<Test>("e2eTest") {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath

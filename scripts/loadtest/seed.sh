@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
 OUT="$ROOT/build/loadtest"
-CORE_URL=${CORE_URL:-http://localhost:8080}
+CORE_URL=${CORE_URL:-http://localhost:18080}
 ORGANIZER_EMAIL='load-organizer@loadtest.local'
 # 로그인하지 않으므로 값은 무관하다. 형식($2a$10$ + 53자)만 맞춘다
 PASSWORD_HASH='$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ01234'

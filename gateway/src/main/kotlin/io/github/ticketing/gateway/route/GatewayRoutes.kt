@@ -20,8 +20,8 @@ private const val DEFAULT_BOOKING_BODY_MAX_BYTES = 16384
 
 @ConfigurationProperties("ticketing.gateway")
 data class GatewayProperties(
-    val coreUri: String = "http://localhost:8080",
-    val realtimeUri: String = "http://localhost:8081",
+    val coreUri: String = "http://localhost:18080",
+    val realtimeUri: String = "http://localhost:18081",
     val bookingBodyMaxBytes: Int = DEFAULT_BOOKING_BODY_MAX_BYTES,
 )
 

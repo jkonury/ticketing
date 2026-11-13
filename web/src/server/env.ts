@@ -3,10 +3,10 @@ import 'server-only';
 import { z } from 'zod';
 
 const envSchema = z.object({
-  GATEWAY_URL: z.url().default('http://localhost:8000'),
-  GATEWAY_PUBLIC_URL: z.url().default('http://localhost:8000'),
-  REDIS_URL: z.url().default('redis://localhost:6379'),
-  WEB_ORIGIN: z.url().default('http://localhost:3000'),
+  GATEWAY_URL: z.url().default('http://localhost:18000'),
+  GATEWAY_PUBLIC_URL: z.url().default('http://localhost:18000'),
+  REDIS_URL: z.url().default('redis://localhost:16379'),
+  WEB_ORIGIN: z.url().default('http://localhost:13000'),
   SESSION_COOKIE_SECURE: z
     .enum(['true', 'false'])
     .default('false')

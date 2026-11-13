@@ -50,12 +50,12 @@ M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 �
 
 ```bash
 docker compose up -d                 # PostgreSQL, Redis, fake-pg
-docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 스택 (Prometheus, Tempo, Grafana 3001)
-./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats>  # 부하 테스트 (k6, Gateway 8000 호출)
+docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 스택 (Prometheus, Tempo, Grafana 13001)
+./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats>  # 부하 테스트 (k6, Gateway 18000 호출)
 ./gradlew build                      # 전체 빌드 + 테스트
 ./gradlew :core:bootRun
 ./gradlew :realtime:bootRun
-./gradlew :gateway:bootRun           # BFF·클라이언트는 Gateway(8000)를 거쳐 호출
+./gradlew :gateway:bootRun           # BFF·클라이언트는 Gateway(18000)를 거쳐 호출
 # 최초 1회: web 환경 변수 파일 생성
 cp web/.env.example web/.env.local
 cd web && pnpm install && pnpm dev
@@ -73,7 +73,7 @@ cd web && pnpm install && pnpm dev
 - 같은 작업 디렉터리의 test와 check는 순차 실행한다. 동시에 실행하면 Gradle 테스트 결과 파일이 충돌할 수 있다. 성능 측정도 다른 Gradle 검사가 끝난 뒤 단독 실행한다.
 - 문서 검사: `./scripts/agent/docs/check-docs.sh [경로...]` (lychee 오프라인으로 상대 경로 링크와 `#anchor`를, `check-doc-refs.sh`로 문서의 백틱 경로를 검사). 문서를 옮기거나 제목·링크를 바꾸면 실행합니다. 설정은 `lychee.toml`입니다.
 - 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
-- E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"]`. 사전 조건은 `.env`, 실행 중인 Docker, 비어 있는 8000·8080·8081·8082 포트다. 로그는 `build/e2e/logs/`에 저장한다. `--web`은 Playwright web 앱을 포트 3000에 추가하므로 해당 포트도 비어 있어야 한다. `build`·`check`에는 포함되지 않으므로 core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
+- E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"]`. 사전 조건은 `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18082 포트다. 로그는 `build/e2e/logs/`에 저장한다. `--web`은 Playwright web 앱을 포트 13000에 추가하므로 해당 포트도 비어 있어야 한다. `build`·`check`에는 포함되지 않으므로 core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
 - 부하 테스트(`scripts/loadtest/run.sh`)는 `build`·`check`에 포함되지 않으며, 다른 Gradle 작업과 동시에 실행하지 않는다. 결과는 `build/loadtest/runs/`에 저장한다.
 - Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌리고, 다이어그램은 `./gradlew :core:modulithDocs`로 생성한다(`docs/rules/backend.md`). 테스트 규칙(한국어 백틱 이름, `Clock` 고정, `runTest`)도 같은 문서를 따른다.
 

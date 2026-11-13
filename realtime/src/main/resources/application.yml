@@ -6,7 +6,7 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: 6379
+      port: 16379
 
 management:
   endpoints:
@@ -37,7 +37,7 @@ management:
     tracing:
       export:
         otlp:
-          endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+          endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:14318/v1/traces}
 
 server:
-  port: 8081
+  port: 18081

@@ -6,13 +6,13 @@
 
 | 구성 | 포트 | 의존 | 상태 확인 |
 |---|---|---|---|
-| gateway | 8000 | Redis, core, realtime | `/actuator/health` |
-| core | 8080 | PostgreSQL, Redis, fake-pg | `/actuator/health` |
-| realtime | 8081 | Redis | `/actuator/health` |
-| web | 3000 | Gateway, Redis(BFF 세션) | 브라우저 |
-| fake-pg | 8090 | core(웹훅) | `docker compose ps` |
-| PostgreSQL | 5432 | - | `pg_isready` |
-| Redis | 6379 | - | `redis-cli ping` |
+| gateway | 18000 | Redis, core, realtime | `/actuator/health` |
+| core | 18080 | PostgreSQL, Redis, fake-pg | `/actuator/health` |
+| realtime | 18081 | Redis | `/actuator/health` |
+| web | 13000 | Gateway, Redis(BFF 세션) | 브라우저 |
+| fake-pg | 18090 | core(웹훅) | `docker compose ps` |
+| PostgreSQL | 15432 | - | `pg_isready` |
+| Redis | 16379 | - | `redis-cli ping` |
 
 기동 순서는 PostgreSQL·Redis·fake-pg → core·realtime → gateway → web이다. 종료는 역순이다.
 
@@ -29,7 +29,7 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 
 - `down -v`는 되돌릴 수 없다. 로컬 데이터를 버려도 될 때만 쓴다. Flyway 마이그레이션은 core 기동 때 다시 적용된다.
 - Redis는 볼륨이 없어서 컨테이너를 다시 만들면 대기열·선점·세션이 사라진다.
-- 포트가 이미 사용 중이면 `ss -ltnp 'sport = :8080'`으로 점유 프로세스를 찾는다.
+- 포트가 이미 사용 중이면 `ss -ltnp 'sport = :18080'`으로 점유 프로세스를 찾는다.
 
 ## 3. 장애 진단
 
@@ -45,7 +45,7 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 결제는 이벤트 기반이다. core가 fake-pg에 요청하고 fake-pg가 웹훅으로 결과를 돌려준다.
 
 1. `docker compose logs fake-pg`에서 요청이 도착했고 웹훅을 보냈는지 본다.
-2. 웹훅이 닿지 않으면 core가 8080에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://host.docker.internal:8080/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다.
+2. 웹훅이 닿지 않으면 core가 18080에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://host.docker.internal:18080/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다.
 3. 웹훅이 거절되면 core와 fake-pg의 `FAKE_PG_WEBHOOK_SECRET`이 같은지 본다. 서명 검증이 이 값을 쓴다.
 4. 웹훅은 중복 도착할 수 있다. 멱등 키로 걸러지므로 중복 로그 자체는 정상이다.
 5. 결제 기록과 PG 거래의 불일치는 `paymentReconciliationJob`(4절)으로 검출한다. 자동 보정은 하지 않는다.
@@ -121,7 +121,7 @@ docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 - 로그는 전체를 출력하지 않고 `rg -n -m 20 '오류 패턴' 로그경로`로 위치를 좁힌다.
 - Gradle 테스트 결과 파일이 깨졌다면 test와 check를 동시에 돌렸는지 확인하고 순차로 다시 실행한다.
 - E2E 실패 시 `build/e2e/logs/`의 앱별 로그를 보고, `--keep`으로 스택을 남겨 재현한다.
-- 포트 점유로 E2E가 시작되지 않으면 8000, 8080, 8081, 8082, 3000(`--web`)을 비운다.
+- 포트 점유로 E2E가 시작되지 않으면 18000, 18080, 18081, 18082, 13000(`--web`)을 비운다.
 - Testcontainers 컨테이너가 남아 있으면 `docker ps`로 확인하고 Ryuk이 정리하지 못한 것만 지운다.
 
 ## 7. 변경 시 확인 사항
@@ -147,15 +147,15 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 
 | 도구 | 주소 | 용도 |
 |---|---|---|
-| Grafana | http://localhost:3001 | 대시보드(`ticketing-overview`). 익명 Admin으로 열린다 |
-| Prometheus | http://localhost:9090 | 지표 조회. k6 지표도 remote-write로 들어온다 |
-| Tempo | http://localhost:3200 | trace 조회. 보통은 Grafana Explore에서 본다 |
+| Grafana | http://localhost:13001 | 대시보드(`ticketing-overview`). 익명 Admin으로 열린다 |
+| Prometheus | http://localhost:19090 | 지표 조회. k6 지표도 remote-write로 들어온다 |
+| Tempo | http://localhost:13200 | trace 조회. 보통은 Grafana Explore에서 본다 |
 
-- Grafana는 3000이 아니라 3001을 쓴다(3000은 web).
-- 앱은 span을 기본으로 내보내지 않는다. 켜려면 앱을 띄울 때 `TRACING_EXPORT_ENABLED=true`를 주고, 비율은 `TRACING_SAMPLING_PROBABILITY`(기본 1.0)로 정한다. 내보내는 주소는 `OTLP_TRACES_ENDPOINT`(기본 `http://localhost:4318/v1/traces`)다. `run.sh --observability`는 이 값을 `true`와 `0.1`로 넣는다.
+- Grafana는 13000이 아니라 13001을 쓴다(13000은 web).
+- 앱은 span을 기본으로 내보내지 않는다. 켜려면 앱을 띄울 때 `TRACING_EXPORT_ENABLED=true`를 주고, 비율은 `TRACING_SAMPLING_PROBABILITY`(기본 1.0)로 정한다. 내보내는 주소는 `OTLP_TRACES_ENDPOINT`(기본 `http://localhost:14318/v1/traces`)다. `run.sh --observability`는 이 값을 `true`와 `0.1`로 넣는다.
 - 지표는 모든 Spring 앱의 `/actuator/prometheus`에서 Prometheus가 수집한다. 앱별 포트는 `application.yml`을 본다.
 
-부하 테스트는 `scripts/loadtest/run.sh`로 실행한다. 필요한 것은 `.env`, 실행 중인 Docker, 비어 있는 8000·8080·8081·8090 포트다. k6 바이너리(`build/loadtest/k6`)는 실행 전에 `build-k6.sh`로 빌드된다. smoke는 없을 때만 빌드한다.
+부하 테스트는 `scripts/loadtest/run.sh`로 실행한다. 필요한 것은 `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18090 포트다. k6 바이너리(`build/loadtest/k6`)는 실행 전에 `build-k6.sh`로 빌드된다. smoke는 없을 때만 빌드한다.
 
 ```bash
 ./scripts/loadtest/run.sh --scenario smoke                                   # 연결과 시나리오 점검

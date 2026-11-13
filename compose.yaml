@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:8.6.2-alpine
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,9 +32,9 @@ services:
       context: ./fake-pg
     environment:
       FAKE_PG_WEBHOOK_SECRET: ${FAKE_PG_WEBHOOK_SECRET}
-      FAKE_PG_WEBHOOK_URL: ${FAKE_PG_WEBHOOK_URL:-http://host.docker.internal:8080/api/v1/payments/webhooks/fake-pg}
+      FAKE_PG_WEBHOOK_URL: ${FAKE_PG_WEBHOOK_URL:-http://host.docker.internal:18080/api/v1/payments/webhooks/fake-pg}
     ports:
-      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:18090:18090"
     # 코어는 호스트에서 bootRun으로 뜨므로 컨테이너가 호스트로 웹훅을 보낼 수 있어야 한다 (Linux 포함)
     extra_hosts:
       - "host.docker.internal:host-gateway"

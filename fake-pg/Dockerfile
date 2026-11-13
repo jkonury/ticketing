@@ -8,5 +8,5 @@ WORKDIR /app
 COPY build/libs/fake-pg.jar app.jar
 
 USER fakepg
-EXPOSE 8090
+EXPOSE 18090
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

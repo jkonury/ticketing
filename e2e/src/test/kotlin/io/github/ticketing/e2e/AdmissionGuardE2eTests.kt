@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 class AdmissionGuardE2eTests {
     @Test
     fun `입장 토큰을 검증하고 유효한 토큰은 예매를 허용한다`() = runTest {
-        val gateway = System.getProperty("e2e.gatewayUrl", "http://localhost:8000")
+        val gateway = System.getProperty("e2e.gatewayUrl", "http://localhost:18000")
         val client = E2eClient(gateway)
         val organizer = client.signUp("ORGANIZER")
         val member = client.signUp("USER")

@@ -12,9 +12,9 @@ vi.mock('./member', () => ({ createSseTicket: vi.fn() }));
 function request(
   path: string,
   body: unknown,
-  origin = 'http://localhost:3000',
+  origin = 'http://localhost:13000',
 ) {
-  return new Request(`http://localhost:3000${path}`, {
+  return new Request(`http://localhost:13000${path}`, {
     method: 'POST',
     headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify(body),

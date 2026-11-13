@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class BookingFlowE2eTests {
     @Test
     fun `대기열 입장부터 결제 확정까지 다른 관람객에게 좌석 변경이 전달된다`() = runTest {
-        val gateway = System.getProperty("e2e.gatewayUrl", "http://localhost:8000")
+        val gateway = System.getProperty("e2e.gatewayUrl", "http://localhost:18000")
         val client = E2eClient(gateway)
         val organizer = client.signUp("ORGANIZER")
         val buyer = client.signUp("USER")

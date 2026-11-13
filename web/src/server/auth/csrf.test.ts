@@ -4,10 +4,10 @@ import { assertSameOrigin } from './csrf';
 describe('CSRF 검사', () => {
   it('같은 origin과 Referer 대체를 허용한다', () => {
     expect(() =>
-      assertSameOrigin(new Headers({ origin: 'http://localhost:3000' })),
+      assertSameOrigin(new Headers({ origin: 'http://localhost:13000' })),
     ).not.toThrow();
     expect(() =>
-      assertSameOrigin(new Headers({ referer: 'http://localhost:3000/path' })),
+      assertSameOrigin(new Headers({ referer: 'http://localhost:13000/path' })),
     ).not.toThrow();
   });
   it('다른 origin과 누락을 거부한다', () => {
@@ -15,7 +15,7 @@ describe('CSRF 검사', () => {
       assertSameOrigin(
         new Headers({
           origin: 'http://other.test',
-          referer: 'http://localhost:3000/',
+          referer: 'http://localhost:13000/',
         }),
       ),
     ).toThrow();

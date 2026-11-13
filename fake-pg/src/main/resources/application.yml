@@ -31,14 +31,14 @@ management:
     tracing:
       export:
         otlp:
-          endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+          endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:14318/v1/traces}
 
 server:
-  port: 8090
+  port: 18090
 
 fake-pg:
   webhook:
-    url: ${FAKE_PG_WEBHOOK_URL:http://localhost:8080/api/v1/payments/webhooks/fake-pg}
+    url: ${FAKE_PG_WEBHOOK_URL:http://localhost:18080/api/v1/payments/webhooks/fake-pg}
     # 기본값을 두지 않는다. 환경 변수로 반드시 주입한다
     secret: ${FAKE_PG_WEBHOOK_SECRET}
     delay: 500ms

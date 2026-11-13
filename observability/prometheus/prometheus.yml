@@ -7,10 +7,10 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets:
-          - host.docker.internal:8000
-          - host.docker.internal:8080
-          - host.docker.internal:8081
-          - host.docker.internal:8090
+          - host.docker.internal:18000
+          - host.docker.internal:18080
+          - host.docker.internal:18081
+          - host.docker.internal:18090
   - job_name: redis
     static_configs:
       - targets: ["redis-exporter:9121"]

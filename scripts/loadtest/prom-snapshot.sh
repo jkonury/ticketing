@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 사용: prom-snapshot.sh <from-epoch> <to-epoch> <outdir>
 # 실행 구간의 서버 측 지표를 Prometheus HTTP API로 뽑아 <outdir>/prometheus.json에 저장한다.
-# PROMETHEUS_URL로 주소를 바꿀 수 있다(기본 http://localhost:9090).
+# PROMETHEUS_URL로 주소를 바꿀 수 있다(기본 http://localhost:19090).
 set -euo pipefail
 
 FROM=${1:-}
@@ -17,7 +17,7 @@ for command in curl jq; do
 done
 mkdir -p "$OUTDIR"
 
-PROM=${PROMETHEUS_URL:-http://localhost:9090}
+PROM=${PROMETHEUS_URL:-http://localhost:19090}
 STEP=5
 # 마지막 scrape(5초 간격)가 들어올 시간을 두고, 구간 끝을 실행 종료보다 6초 뒤로 잡는다
 END=$((TO + 6))

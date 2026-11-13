@@ -12,8 +12,8 @@ import kotlin.test.assertNotNull
 class MultiInstanceE2eTests {
     @Test
     fun `두 인스턴스의 순번 입장 좌석 이벤트와 재연결 결과가 일치한다`() = runTest {
-        val gateway = System.getProperty("e2e.gatewayUrl", "http://localhost:8000")
-        val realtime = System.getProperty("e2e.realtimeBUrl", "http://localhost:8082")
+        val gateway = System.getProperty("e2e.gatewayUrl", "http://localhost:18000")
+        val realtime = System.getProperty("e2e.realtimeBUrl", "http://localhost:18082")
         val client = E2eClient(gateway)
         val direct = E2eClient(realtime)
         val organizer = client.signUp("ORGANIZER")

@@ -10,7 +10,7 @@ import java.time.Duration
 
 @ConfigurationProperties("ticketing.payment.fake-pg")
 class PaymentPgProperties(
-    val baseUrl: String = "http://localhost:8090",
+    val baseUrl: String = "http://localhost:18090",
     val connectTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
     val readTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
     val webhookSecret: String,

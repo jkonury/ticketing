@@ -57,5 +57,5 @@
 - 거래 조회: `GET /v1/transactions?date=YYYY-MM-DD`의 요청 날짜는 Asia/Seoul 기준이다.
 - 웹훅: 코어의 `POST /api/v1/payments/webhooks/fake-pg`로 승인·실패·환불 완료를 전송한다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.
 - 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). 코어와 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
-- 어댑터 기본 주소는 `http://localhost:8090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 [6.4절](./flows.md#64-결제-이벤트-기반) 정책을 따른다.
+- 어댑터 기본 주소는 `http://localhost:18090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 [6.4절](./flows.md#64-결제-이벤트-기반) 정책을 따른다.
 - SUCCESS·FAIL·TIMEOUT·DELAYED·DUPLICATE_WEBHOOK 시나리오는 PG 설정으로 제어한다. TIMEOUT은 HTTP 응답만 늦어도 승인이 진행될 수 있다. fake-pg 자체의 메모리 거래 저장소는 재시작하면 초기화된다.

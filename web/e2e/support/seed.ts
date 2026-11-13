@@ -2,7 +2,7 @@ import { expect, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
 export async function seed(request: APIRequestContext) {
-  const gateway = process.env.E2E_GATEWAY_URL ?? 'http://localhost:8000';
+  const gateway = process.env.E2E_GATEWAY_URL ?? 'http://localhost:18000';
   const unique = randomUUID();
   const organizer = {
     email: `organizer-${unique}@example.com`,

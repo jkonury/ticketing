@@ -55,14 +55,14 @@ class SseTicketFilterTests(client: WebTestClient, private val redis: ReactiveStr
     @Test
     fun `SSE 경로에만 CORS preflight를 허용한다`() {
         client.options().uri("/api/v1/streams/1")
-            .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+            .header(HttpHeaders.ORIGIN, "http://localhost:13000")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.GET.name())
             .exchange().expectStatus().isOk
-            .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:3000")
+            .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:13000")
             .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)
 
         client.options().uri("/api/v1/bookings/me")
-            .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+            .header(HttpHeaders.ORIGIN, "http://localhost:13000")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.GET.name())
             .exchange().expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)
     }
