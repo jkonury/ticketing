@@ -62,10 +62,10 @@ start() {
   java -jar "$jar" "$@" > "$LOG_DIR/$name.log" 2>&1 &
   PIDS+=("$!")
 }
-start core core/build/libs/core-0.0.1-SNAPSHOT.jar
-start realtime-a realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar
-start realtime-b realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar --server.port="$REALTIME_B_PORT"
-start gateway gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar
+start core core/build/libs/core.jar
+start realtime-a realtime/build/libs/realtime.jar
+start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_PORT"
+start gateway gateway/build/libs/gateway.jar
 health() {
   local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-120}))
   until curl -fsS "http://localhost:$port/actuator/health" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do

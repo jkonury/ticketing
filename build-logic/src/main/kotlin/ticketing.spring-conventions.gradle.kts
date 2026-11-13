@@ -1,9 +1,15 @@
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+
 plugins {
     id("ticketing.kotlin-conventions")
     kotlin("plugin.spring")
     id("org.springframework.boot")
     id("io.spring.dependency-management")
     id("ticketing.kotlin-quality")
+}
+
+tasks.named<BootJar>("bootJar") {
+    archiveFileName.set("${project.name}.jar")
 }
 
 val libs = the<VersionCatalogsExtension>().named("libs")

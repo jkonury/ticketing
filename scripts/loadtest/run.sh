@@ -158,9 +158,9 @@ run_once() {
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
     FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
-  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core-0.0.1-SNAPSHOT.jar "${obs[@]}"
-  start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar "${batch[@]}" "${obs[@]}"
-  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar "${obs[@]}"
+  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar "${obs[@]}"
+  start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"
+  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar "${obs[@]}"
   health fake-pg 18090 "${PIDS[0]}" "$dir" || return 1
   health core 18080 "${PIDS[1]}" "$dir" || return 1
   health realtime 18081 "${PIDS[2]}" "$dir" || return 1

@@ -62,9 +62,9 @@ start() {
   pids+=("$!")
   printf '%s 실행 중 (로그: build/dev/logs/%s.log)\n' "$name" "$name"
 }
-$core && start core java -jar core/build/libs/core-0.0.1-SNAPSHOT.jar
-$realtime && start realtime java -jar realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar
-$gateway && start gateway java -jar gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar
+$core && start core java -jar core/build/libs/core.jar
+$realtime && start realtime java -jar realtime/build/libs/realtime.jar
+$gateway && start gateway java -jar gateway/build/libs/gateway.jar
 $web && start web bash -c 'cd "$1/web" && exec pnpm dev' _ "$ROOT"
 if ((${#pids[@]})); then
   echo '앱 종료: Ctrl+C'
