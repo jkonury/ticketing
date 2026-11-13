@@ -6,7 +6,7 @@ const schema = z.object({
   scheduleId: positiveId,
   seatIds: z.array(positiveId).min(1).max(4),
   admissionToken: z.string().min(1),
-  idempotencyKey: z.string().min(1),
+  idempotencyKey: z.string().min(1).max(100),
 });
 export async function POST(request: Request) {
   try {

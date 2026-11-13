@@ -10,7 +10,7 @@ export async function POST(
     assertSameOrigin(request.headers);
     const { id } = await context.params;
     const body = z
-      .object({ idempotencyKey: z.string().min(1) })
+      .object({ idempotencyKey: z.string().min(1).max(100) })
       .parse(await request.json());
     return Response.json(
       await requestPayment(positiveId.parse(id), body.idempotencyKey),
