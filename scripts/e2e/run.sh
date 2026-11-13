@@ -6,6 +6,8 @@ cd "$ROOT"
 KEEP=false
 WEB=false
 TEST_PATTERN=
+REALTIME_B_PORT=${E2E_REALTIME_B_PORT:-8082}
+[[ $REALTIME_B_PORT =~ ^[0-9]+$ ]] && ((REALTIME_B_PORT > 0 && REALTIME_B_PORT <= 65535)) || { echo 'E2E_REALTIME_B_PORT가 유효하지 않습니다.' >&2; exit 1; }
 while (($#)); do
   case "$1" in
     --keep) KEEP=true; shift ;;
@@ -18,7 +20,7 @@ for command in docker curl java; do
   command -v "$command" >/dev/null || { printf '필요한 도구가 없습니다: %s\n' "$command" >&2; exit 1; }
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
-ports=(8000 8080 8081 8082)
+ports=(8000 8080 8081 "$REALTIME_B_PORT")
 if $WEB; then ports+=(3000); fi
 if command -v ss >/dev/null; then
   for port in "${ports[@]}"; do
@@ -62,7 +64,7 @@ start() {
 }
 start core core/build/libs/core-0.0.1-SNAPSHOT.jar
 start realtime-a realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar
-start realtime-b realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar --server.port=8082
+start realtime-b realtime/build/libs/realtime-0.0.1-SNAPSHOT.jar --server.port="$REALTIME_B_PORT"
 start gateway gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar
 health() {
   local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-120}))
@@ -77,7 +79,7 @@ health() {
 }
 health core 8080 "${PIDS[0]}"
 health realtime-a 8081 "${PIDS[1]}"
-health realtime-b 8082 "${PIDS[2]}"
+health realtime-b "$REALTIME_B_PORT" "${PIDS[2]}"
 health gateway 8000 "${PIDS[3]}"
 if $WEB; then
   if [[ ! -d web/node_modules ]]; then
@@ -107,7 +109,7 @@ if $WEB; then
 fi
 args=()
 if [[ -n $TEST_PATTERN ]]; then args=(--tests "$TEST_PATTERN"); fi
-if ./gradlew :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
+if ./gradlew -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
   echo 'E2E 테스트 통과'
 else
   shopt -s nullglob

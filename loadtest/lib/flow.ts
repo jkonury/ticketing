@@ -9,6 +9,7 @@ import {
   bookingConflict,
   bookingNotConfirmed,
   confirmLatency,
+  flowStage,
   queueWait,
   seatsConfirmed,
   soldOutExits,
@@ -67,8 +68,13 @@ export function runBookingFlow(config: FlowConfig): void {
 
   const enteredAt = Date.now();
   if (!ok(enterQueue(token, config.scheduleId).status)) return;
+  flowStage.registered.add(1);
   const admission = waitForAdmission(config.scheduleId, token);
   if (admission === null) return;
+  flowStage.admitted.add(1);
+  if (config.startAt !== undefined) {
+    (Date.now() <= config.startAt ? flowStage.ready_on_time : flowStage.ready_late).add(1);
+  }
   queueWait.add(Date.now() - enteredAt);
   // 대기열 이탈은 하지 않는다. 입장 토큰 TTL로 정리된다
 
@@ -77,6 +83,7 @@ export function runBookingFlow(config: FlowConfig): void {
     if (remaining > 0) sleep(remaining / 1000);
   }
 
+  let attempted = false;
   for (let attempt = 0; attempt <= config.conflictRetries; attempt++) {
     let candidates = config.fixedCandidates;
     if (candidates === undefined) {
@@ -89,10 +96,16 @@ export function runBookingFlow(config: FlowConfig): void {
       }
     }
     const seatIds = pickSeats(candidates);
+    if (!attempted) {
+      flowStage.booking_attempt.add(1);
+      attempted = true;
+    }
     const response = createBooking(token, admission.admissionToken, idempotencyKey(), config.scheduleId, seatIds);
     if (ok(response.status)) {
       const { bookingId } = response.json() as { bookingId: number };
+      flowStage.booking_created.add(1);
       if (!ok(payBooking(token, bookingId, idempotencyKey()).status)) return;
+      flowStage.payment_requested.add(1);
       awaitConfirmation(token, bookingId, seatIds.length);
       return;
     }

@@ -1,6 +1,7 @@
 package io.github.ticketing.realtime.queue
 
 import io.github.ticketing.realtime.support.RealtimeException
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
@@ -9,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 sealed interface QueueStatus {
     data class Waiting(val position: Long) : QueueStatus
@@ -27,12 +29,21 @@ object QueueKeys {
 }
 
 @Service
-class QueueService(private val redis: ReactiveStringRedisTemplate, private val clock: Clock) {
+class QueueService(private val redis: ReactiveStringRedisTemplate, private val clock: Clock, private val meters: MeterRegistry) {
     suspend fun enter(scheduleId: Long, memberId: Long): QueueStatus {
         requireSchedule(scheduleId)
-        admitted(scheduleId, memberId)?.let { return it }
+        admitted(scheduleId, memberId)?.let {
+            meters.counter("queue.registration", "result", "already_admitted").increment()
+            return it
+        }
         val sequence = redis.opsForValue().increment(QueueKeys.sequence(scheduleId)).awaitSingle()
-        redis.execute(addWaiting, listOf(QueueKeys.waiting(scheduleId)), sequence.toString(), memberId.toString()).next().awaitSingle()
+        val added = redis.execute(
+            addWaiting,
+            listOf(QueueKeys.waiting(scheduleId)),
+            sequence.toString(),
+            memberId.toString(),
+        ).next().awaitSingle()
+        meters.counter("queue.registration", "result", if (added == 1L) "new" else "existing").increment()
         redis.opsForSet().add(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
         markSeen(scheduleId, memberId)
         return waiting(scheduleId, memberId) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
@@ -47,7 +58,8 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
     }
 
     suspend fun leave(scheduleId: Long, memberId: Long) {
-        redis.opsForZSet().remove(QueueKeys.waiting(scheduleId), memberId.toString()).awaitSingle()
+        val removed = redis.opsForZSet().remove(QueueKeys.waiting(scheduleId), memberId.toString()).awaitSingle()
+        meters.counter("queue.departure", "reason", "explicit").increment(removed.toDouble())
         redis.opsForZSet().remove(QueueKeys.seen(scheduleId), memberId.toString()).awaitSingle()
     }
 
@@ -76,7 +88,12 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
         }
 
     private suspend fun markSeen(scheduleId: Long, memberId: Long) {
-        redis.opsForZSet().add(QueueKeys.seen(scheduleId), memberId.toString(), clock.millis().toDouble()).awaitSingle()
+        val started = System.nanoTime()
+        try {
+            redis.opsForZSet().add(QueueKeys.seen(scheduleId), memberId.toString(), clock.millis().toDouble()).awaitSingle()
+        } finally {
+            meters.timer("queue.presence.update").record(System.nanoTime() - started, TimeUnit.NANOSECONDS)
+        }
     }
 
     companion object {

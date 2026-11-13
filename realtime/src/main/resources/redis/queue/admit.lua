@@ -7,13 +7,18 @@ local batchSize = tonumber(ARGV[3])
 local candidates = redis.call('ZRANGE', waiting, 0, batchSize * 4 - 1)
 local admitted = {}
 local count = 0
+local inspected = 0
+local missing = 0
+local expired = 0
 
 for _, memberId in ipairs(candidates) do
     if count >= batchSize then break end
+    inspected = inspected + 1
     local lastSeen = redis.call('ZSCORE', seen, memberId)
     if not lastSeen or tonumber(lastSeen) < cutoff then
-        redis.call('ZREM', waiting, memberId)
+        local removed = redis.call('ZREM', waiting, memberId)
         redis.call('ZREM', seen, memberId)
+        if not lastSeen then missing = missing + removed else expired = expired + removed end
     else
         count = count + 1
         local token = ARGV[3 + count]
@@ -25,4 +30,4 @@ for _, memberId in ipairs(candidates) do
         table.insert(admitted, token)
     end
 end
-return admitted
+return {inspected, missing, expired, admitted}

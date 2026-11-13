@@ -47,6 +47,7 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+        hikaricp.connections.acquire: true
   # starter-opentelemetry가 끌어오는 OTLP 지표 푸시는 쓰지 않는다 (지표는 Prometheus가 수집)
   otlp:
     metrics:

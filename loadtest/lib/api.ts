@@ -1,7 +1,7 @@
 // Gateway 호출 래퍼. 요청마다 고정 이름의 name 태그를 붙여 URL에 ID가 들어가도 지표 cardinality가 늘지 않게 한다.
 import http from 'k6/http';
 import { sleep } from 'k6';
-import { unexpectedErrors, unexpectedResponses } from './metrics.ts';
+import { namedHttpDuration, unexpectedErrors, unexpectedResponses } from './metrics.ts';
 
 const BASE_URL = __ENV.BASE_URL;
 const MAX_RATE_LIMIT_RETRIES = 5;
@@ -38,6 +38,8 @@ function request(name: string, method: string, path: string, token: string, opti
 
   for (let attempt = 0; ; attempt++) {
     const response = http.request(method, `${BASE_URL}${path}`, body, params);
+    const trend = namedHttpDuration[name as keyof typeof namedHttpDuration];
+    if (trend !== undefined) trend.add(response.timings.duration);
     const responseBody = typeof response.body === 'string' ? response.body : null;
     const expected = isExpected(name, response.status, responseBody);
     unexpectedErrors.add(!expected);

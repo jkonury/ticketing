@@ -1,5 +1,6 @@
 package io.github.ticketing.realtime.queue
 
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
@@ -16,9 +17,16 @@ import java.security.SecureRandom
 import java.time.Clock
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 @Service
-class AdmissionService(private val redis: ReactiveStringRedisTemplate, private val properties: QueueProperties, private val clock: Clock) {
+class AdmissionService(
+    private val redis: ReactiveStringRedisTemplate,
+    private val properties: QueueProperties,
+    private val clock: Clock,
+    private val meters: MeterRegistry,
+) {
     private val random = SecureRandom()
     private val instanceId = UUID.randomUUID().toString()
 
@@ -26,28 +34,46 @@ class AdmissionService(private val redis: ReactiveStringRedisTemplate, private v
         val lock = "queue:admit-lock:{$scheduleId}"
         if (!redis.opsForValue().setIfAbsent(lock, instanceId, properties.admissionInterval).awaitSingle()) return 0
 
-        val tokens = List(properties.admissionBatchSize) { newToken() }
-        val keys = listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId), "queue:admitted:{$scheduleId}:")
-        val args = listOf(
-            (clock.millis() - properties.presenceGrace.toMillis()).toString(),
-            properties.admissionTokenTtl.toMillis().toString(),
-            properties.admissionBatchSize.toString(),
-        ) + tokens
-        val admitted = redis.execute(admitScript, keys, args).next().awaitSingleOrNull().orEmpty()
-        admitted.chunked(2).forEach { pair ->
-            val memberId = pair[0].toString()
-            val token = pair[1].toString()
-            val tokenKey = "queue:admission:$token"
-            redis.opsForHash<String, String>().putAll(
-                tokenKey,
-                mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString()),
-            ).awaitSingle()
-            redis.expire(tokenKey, properties.admissionTokenTtl).awaitSingle()
+        val started = System.nanoTime()
+        try {
+            val tokens = List(properties.admissionBatchSize) { newToken() }
+            val keys = listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId), "queue:admitted:{$scheduleId}:")
+            val args = listOf(
+                (clock.millis() - properties.presenceGrace.toMillis()).toString(),
+                properties.admissionTokenTtl.toMillis().toString(),
+                properties.admissionBatchSize.toString(),
+            ) + tokens
+            val result = redis.execute(admitScript, keys, args).next().awaitSingleOrNull().orEmpty()
+            val inspected = (result[0] as Number).toLong()
+            val missing = (result[1] as Number).toLong()
+            val expired = (result[2] as Number).toLong()
+            val admitted = result[3] as List<*>
+            meters.counter("queue.admission.candidates").increment(inspected.toDouble())
+            meters.counter("queue.departure", "reason", "seen_missing").increment(missing.toDouble())
+            meters.counter("queue.departure", "reason", "seen_expired").increment(expired.toDouble())
+            meters.counter("queue.admission", "result", "lookup_created").increment((admitted.size / 2).toDouble())
+            admitted.chunked(2).forEach { pair ->
+                val memberId = pair[0].toString()
+                val token = pair[1].toString()
+                val tokenKey = "queue:admission:$token"
+                runCatching {
+                    redis.opsForHash<String, String>().putAll(
+                        tokenKey,
+                        mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString()),
+                    ).awaitSingle()
+                    redis.expire(tokenKey, properties.admissionTokenTtl).awaitSingle()
+                    meters.counter("queue.admission", "result", "gateway_ready").increment()
+                }.onFailure {
+                    meters.counter("queue.admission", "result", "gateway_write_failed").increment()
+                }.getOrThrow()
+            }
+            if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
+                redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
+            }
+            return admitted.size / 2
+        } finally {
+            meters.timer("queue.admission.batch").record(System.nanoTime() - started, TimeUnit.NANOSECONDS)
         }
-        if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
-            redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
-        }
-        return admitted.size / 2
     }
 
     suspend fun admitAll() {
@@ -79,9 +105,14 @@ class AdmissionService(private val redis: ReactiveStringRedisTemplate, private v
 @Configuration
 @EnableScheduling
 @ConditionalOnProperty(prefix = "ticketing.realtime.queue", name = ["admission-enabled"], havingValue = "true", matchIfMissing = true)
-class AdmissionScheduler(private val service: AdmissionService) {
+class AdmissionScheduler(private val service: AdmissionService, private val meters: MeterRegistry) {
+    private val previousStart = AtomicLong()
+
     @Scheduled(fixedDelayString = "\${ticketing.realtime.queue.admission-interval:PT1S}")
     suspend fun admit() {
+        val now = System.nanoTime()
+        val previous = previousStart.getAndSet(now)
+        if (previous != 0L) meters.timer("queue.admission.scheduler.interval").record(now - previous, TimeUnit.NANOSECONDS)
         service.admitAll()
     }
 }

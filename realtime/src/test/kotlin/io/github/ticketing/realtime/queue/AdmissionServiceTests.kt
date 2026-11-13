@@ -2,6 +2,7 @@ package io.github.ticketing.realtime.queue
 
 import io.github.ticketing.realtime.MutableClock
 import io.github.ticketing.realtime.RealtimeIntegrationTestSupport
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
@@ -17,7 +18,28 @@ class AdmissionServiceTests(
     redis: ReactiveStringRedisTemplate,
     private val service: AdmissionService,
     private val clock: MutableClock,
+    private val meters: MeterRegistry,
 ) : RealtimeIntegrationTestSupport(client, redis) {
+    @Test
+    fun `실제 입장과 생존 신호가 없는 제거 명시 이탈을 구분해 센다`() = runTest {
+        val schedule = 205L
+        prepareSchedule(schedule)
+        val admittedBefore = meters.counter("queue.admission", "result", "lookup_created").count()
+        val missingBefore = meters.counter("queue.departure", "reason", "seen_missing").count()
+        val explicitBefore = meters.counter("queue.departure", "reason", "explicit").count()
+        enter(schedule, 1)
+        enter(schedule, 2)
+        enter(schedule, 3)
+        redis.opsForZSet().remove(QueueKeys.seen(schedule), "1").awaitSingle()
+        clientFor(3).delete().uri(path(schedule) + "/me").exchange().expectStatus().isNoContent
+
+        assertThat(service.admit(schedule)).isEqualTo(1)
+
+        assertThat(meters.counter("queue.admission", "result", "lookup_created").count() - admittedBefore).isEqualTo(1.0)
+        assertThat(meters.counter("queue.departure", "reason", "seen_missing").count() - missingBefore).isEqualTo(1.0)
+        assertThat(meters.counter("queue.departure", "reason", "explicit").count() - explicitBefore).isEqualTo(1.0)
+    }
+
     @Test
     fun `앞의 두 명만 입장하고 토큰과 남은 순번을 조회한다`() = runTest {
         val schedule = 201L

@@ -69,7 +69,13 @@ RUN_ROOT="$OUT/runs/$STAMP-$SCENARIO$SUFFIX"
 mkdir -p "$RUN_ROOT"
 
 PIDS=()
+SAMPLER_PID=
 cleanup() {
+  if [[ -n $SAMPLER_PID ]]; then
+    kill "$SAMPLER_PID" 2>/dev/null || true
+    wait "$SAMPLER_PID" 2>/dev/null || true
+    SAMPLER_PID=
+  fi
   if ((${#PIDS[@]})); then
     kill "${PIDS[@]}" 2>/dev/null || true
     wait "${PIDS[@]}" 2>/dev/null || true
@@ -175,7 +181,13 @@ run_once() {
   k6_from=$(date +%s)
   env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
     BASE_URL=http://localhost:8000 JWT_SECRET="$JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-    "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 || k6_status=$?
+    "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
+  local k6_pid=$!
+  python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
+  SAMPLER_PID=$!
+  wait "$k6_pid" || k6_status=$?
+  wait "$SAMPLER_PID" || true
+  SAMPLER_PID=
   k6_to=$(date +%s)
   if $OBSERVABILITY; then
     sleep 6 # 마지막 scrape(5초 간격)가 Prometheus에 들어오게 한다

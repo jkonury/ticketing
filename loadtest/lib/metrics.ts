@@ -16,3 +16,21 @@ export const soldOutExits = new Counter('sold_out_exits');
 export const sseFailures = new Counter('sse_failures');
 // 예상하지 못한 응답의 원인 구분용. name·status(네트워크 오류는 0) 태그
 export const unexpectedResponses = new Counter('unexpected_responses');
+
+// VU별 흐름 단계. 예매 시도는 재시도와 무관하게 한 번만 센다.
+export const flowStage = {
+  registered: new Counter('flow_registered'),
+  admitted: new Counter('flow_admitted'),
+  ready_on_time: new Counter('flow_ready_on_time'),
+  ready_late: new Counter('flow_ready_late'),
+  booking_attempt: new Counter('flow_booking_attempt'),
+  booking_created: new Counter('flow_booking_created'),
+  payment_requested: new Counter('flow_payment_requested'),
+};
+export const namedHttpDuration = {
+  queue_enter: new Trend('duration_queue_enter', true),
+  sse_ticket: new Trend('duration_sse_ticket', true),
+  booking_create: new Trend('duration_booking_create', true),
+  booking_pay: new Trend('duration_booking_pay', true),
+  booking_detail: new Trend('duration_booking_detail', true),
+};

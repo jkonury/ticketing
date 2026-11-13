@@ -73,7 +73,23 @@ vt_max=$(range_stats 'jvm_threads_virtual_pinned_seconds_max')
 vt_failed=$(range_stats 'jvm_threads_virtual_submit_failed_total')
 redis=$(range_stats 'rate(redis_commands_processed_total[1m])')
 pg=$(range_stats 'sum(pg_stat_database_numbackends{datname!~"template.*|postgres"})')
+gateway_buckets=$(instant "last_over_time(spring_cloud_gateway_requests_seconds_bucket[${DUR}s])")
+hikari_buckets=$(instant "last_over_time(hikaricp_connections_acquire_seconds_bucket[${DUR}s])")
+pool_active=$(range_stats 'reactor_netty_connection_provider_active_connections')
+pool_idle=$(range_stats 'reactor_netty_connection_provider_idle_connections')
+pool_pending=$(range_stats 'reactor_netty_connection_provider_pending_connections')
+pool_wait=$(instant "last_over_time(reactor_netty_connection_provider_pending_connections_time_seconds_bucket[${DUR}s])")
+queue_metrics=$(instant "{__name__=~\"queue_(registration|departure|admission|presence).*\"}")
 
+snapshot_tmp=$(mktemp -d)
+trap 'rm -rf "$snapshot_tmp"' EXIT
+printf '%s' "$gateway_buckets" > "$snapshot_tmp/gateway.json"
+printf '%s' "$hikari_buckets" > "$snapshot_tmp/hikari.json"
+printf '%s' "$pool_active" > "$snapshot_tmp/active.json"
+printf '%s' "$pool_idle" > "$snapshot_tmp/idle.json"
+printf '%s' "$pool_pending" > "$snapshot_tmp/pending.json"
+printf '%s' "$pool_wait" > "$snapshot_tmp/wait.json"
+printf '%s' "$queue_metrics" > "$snapshot_tmp/queue.json"
 jq -n \
   --argjson from "$FROM" --argjson to "$TO" --argjson dur "$DUR" --argjson step "$STEP" \
   --argjson p95 "$p95" --argjson p99 "$p99" --argjson count "$count" --argjson rps "$rps" \
@@ -81,13 +97,20 @@ jq -n \
   --argjson acquireSum "$acquire_sum" --argjson acquireCount "$acquire_count" --argjson acquireMax "$acquire_max" \
   --argjson timeout "$timeout" --argjson cpu "$cpu" --argjson heap "$heap" --argjson gc "$gc" \
   --argjson vtCount "$vt_count" --argjson vtMax "$vt_max" --argjson vtFailed "$vt_failed" \
-  --argjson redis "$redis" --argjson pg "$pg" '
+  --argjson redis "$redis" --argjson pg "$pg" \
+  --slurpfile gatewayBuckets "$snapshot_tmp/gateway.json" --slurpfile hikariBuckets "$snapshot_tmp/hikari.json" \
+  --slurpfile poolActive "$snapshot_tmp/active.json" --slurpfile poolIdle "$snapshot_tmp/idle.json" --slurpfile poolPending "$snapshot_tmp/pending.json" --slurpfile poolWait "$snapshot_tmp/wait.json" \
+  --slurpfile queueMetrics "$snapshot_tmp/queue.json" '
   def key: "\(.metric.application)\t\(.metric.uri)";
   def byApp(f): [.[] | {key: .metric.application, value: f}] | from_entries;
   def appMap(a): (a | map({(.metric.application): .}) | add // {});
   def at(m; k): (m[k] // null);
   {
     window: {fromEpoch: $from, toEpoch: $to, durationSeconds: $dur, stepSeconds: $step},
+    gatewayRouteBuckets: $gatewayBuckets[0],
+    hikariAcquireBuckets: $hikariBuckets[0],
+    gatewayConnectionPool: {active: $poolActive[0], idle: $poolIdle[0], pending: $poolPending[0], pendingTimeBuckets: $poolWait[0]},
+    queueMetrics: $queueMetrics[0],
     note: "p95·p99는 구간 안 마지막 누적 분포(앱이 실행마다 새로 떠서 이번 실행의 값)이고 rps는 rate[30s]의 최대값이다(짧은 급증은 5초 scrape로 놓칠 수 있어 requests로 평균을 구한다). gauge 최대값은 \($step)초 간격 표본이라 그 사이의 순간 값은 놓칠 수 있다.",
     http: (
       ($p95 | map({(key): .value}) | add // {}) as $p95m
