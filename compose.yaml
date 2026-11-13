@@ -4,15 +4,15 @@ services:
   postgres:
     image: postgres:18.3-alpine
     environment:
-      TICKETING_POSTGRES_DB: ${TICKETING_POSTGRES_DB}
-      TICKETING_POSTGRES_USER: ${TICKETING_POSTGRES_USER}
-      TICKETING_POSTGRES_PASSWORD: ${TICKETING_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TICKETING_POSTGRES_DB}
+      POSTGRES_USER: ${TICKETING_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TICKETING_POSTGRES_PASSWORD}
     ports:
       - "127.0.0.1:15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${TICKETING_POSTGRES_USER} -d $${TICKETING_POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
