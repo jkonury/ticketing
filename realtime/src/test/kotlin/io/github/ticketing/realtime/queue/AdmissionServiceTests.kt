@@ -22,18 +22,25 @@ class AdmissionServiceTests(
     private val meters: MeterRegistry,
 ) : RealtimeIntegrationTestSupport(client, redis) {
     @Test
-    fun `상태 조회 사이에 입장하면 토큰과 순번을 모두 찾지 못할 수 있다`() = runTest {
+    fun `상태 조회 사이에 입장해도 입장 토큰을 반환한다`() = runTest {
         val schedule = 206L
         prepareSchedule(schedule)
         enter(schedule, 1)
 
-        val tokenBeforeAdmission = redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingleOrNull()
-        assertThat(service.admit(schedule)).isEqualTo(1)
-        val rankAfterAdmission = redis.opsForZSet().rank(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()
+        val result = resolveQueueStatus(
+            readAdmitted = {
+                redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingleOrNull()?.let {
+                    QueueStatus.Admitted(it, clock.instant().plus(Duration.ofMinutes(10)))
+                }
+            },
+            readWaiting = {
+                assertThat(service.admit(schedule)).isEqualTo(1)
+                redis.opsForZSet().rank(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()?.let { QueueStatus.Waiting(it + 1) }
+            },
+        )
 
-        assertThat(tokenBeforeAdmission).isNull()
-        assertThat(rankAfterAdmission).isNull()
-        assertThat(redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingle()).isNotBlank()
+        val token = redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingle()
+        assertThat(result).isInstanceOfSatisfying(QueueStatus.Admitted::class.java) { assertThat(it.admissionToken).isEqualTo(token) }
     }
 
     @Test

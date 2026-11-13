@@ -51,10 +51,12 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
 
     suspend fun status(scheduleId: Long, memberId: Long, updateSeen: Boolean = true): QueueStatus {
         requireSchedule(scheduleId)
-        admitted(scheduleId, memberId)?.let { return it }
-        val waiting = waiting(scheduleId, memberId) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
-        if (updateSeen) markSeen(scheduleId, memberId)
-        return waiting
+        val status = resolveQueueStatus(
+            readAdmitted = { admitted(scheduleId, memberId) },
+            readWaiting = { waiting(scheduleId, memberId) },
+        ) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
+        if (status is QueueStatus.Waiting && updateSeen) markSeen(scheduleId, memberId)
+        return status
     }
 
     suspend fun leave(scheduleId: Long, memberId: Long) {
@@ -100,3 +102,8 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
         private val addWaiting = DefaultRedisScript("return redis.call('ZADD', KEYS[1], 'NX', ARGV[1], ARGV[2])", Long::class.java)
     }
 }
+
+internal suspend fun resolveQueueStatus(
+    readAdmitted: suspend () -> QueueStatus.Admitted?,
+    readWaiting: suspend () -> QueueStatus.Waiting?,
+): QueueStatus? = readAdmitted() ?: readWaiting() ?: readAdmitted()
