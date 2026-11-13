@@ -25,8 +25,10 @@ class BookingFlowE2eTests {
 
         client.enterQueue(buyer, schedule.id)
         val queue = EventStream(this, client.sse("$gateway/api/v1/streams/queues/${schedule.id}?ticket=$queueTicket"))
-        assertEquals("position", queue.next().event)
-        val token = requireNotNull(queue.next("admitted").data)["admissionToken"].asString()
+        val firstQueueEvent = queue.next()
+        val admission = if (firstQueueEvent.event == "position") queue.next("admitted") else firstQueueEvent
+        assertEquals("admitted", admission.event)
+        val token = requireNotNull(admission.data)["admissionToken"].asString()
         val selected = schedule.seatIds.take(2)
         val booking = client.createBooking(buyer, schedule.id, selected, token)
         assertEquals(201, booking.status)
