@@ -1,9 +1,17 @@
 export function formatSeoul(value: string) {
-  return new Intl.DateTimeFormat('ko-KR', {
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Seoul',
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value;
+  const hour = Number(part('hour'));
+  return `${part('year')}. ${part('month')}. ${part('day')}. ${hour < 12 ? '오전' : '오후'} ${hour % 12 || 12}:${part('minute')}`;
 }
 export function seoulLocalToInstant(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))

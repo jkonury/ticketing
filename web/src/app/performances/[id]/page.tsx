@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { ApiError } from '@/lib/problem';
 import { PerformanceDetail } from '@/features/performance/performance-detail';
 import { getPerformanceDetail } from '@/server/aggregate/performance-detail';
@@ -11,6 +12,7 @@ export default async function Page({
   const { id } = await params;
   const number = Number(id);
   if (!Number.isSafeInteger(number) || number < 1) notFound();
+  await connection();
   const view = await withSessionRedirect(() =>
     getPerformanceDetail(number),
   ).catch((error: unknown) => {
