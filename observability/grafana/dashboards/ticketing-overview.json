@@ -844,6 +844,227 @@
           "legendFormat": "{{application}} {{uri}}"
         }
       ]
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "대기열 입장 처리량 (명/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (rate(queue_admission_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "{{result}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(queue_registration_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "등록"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "입장 배치 소요 (평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(queue_admission_batch_seconds_sum{application=\"realtime\"}[1m]) / rate(queue_admission_batch_seconds_count{application=\"realtime\"}[1m])",
+          "legendFormat": "평균"
+        },
+        {
+          "refId": "B",
+          "expr": "queue_admission_batch_seconds_max{application=\"realtime\"}",
+          "legendFormat": "최대"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "입장 스케줄러 실행 간격 (평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(queue_admission_scheduler_interval_seconds_sum{application=\"realtime\"}[1m]) / rate(queue_admission_scheduler_interval_seconds_count{application=\"realtime\"}[1m])",
+          "legendFormat": "평균"
+        },
+        {
+          "refId": "B",
+          "expr": "queue_admission_scheduler_interval_seconds_max{application=\"realtime\"}",
+          "legendFormat": "최대"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "대기열 이탈 (명/초, 사유별)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (rate(queue_departure_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "입장 후보 검사 (건/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(queue_admission_candidates_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "검사한 후보"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "생존 신호(seen) 갱신 지연 (평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(queue_presence_update_seconds_sum{application=\"realtime\"}[1m]) / rate(queue_presence_update_seconds_count{application=\"realtime\"}[1m])",
+          "legendFormat": "평균"
+        },
+        {
+          "refId": "B",
+          "expr": "queue_presence_update_seconds_max{application=\"realtime\"}",
+          "legendFormat": "최대"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "Redis 명령 지연 (Lettuce, 앱별 평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(lettuce_seconds_sum{application=~\"$application\"}[1m])) / sum by (application) (rate(lettuce_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} 평균"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (application) (lettuce_seconds_max{application=~\"$application\"})",
+          "legendFormat": "{{application}} 최대"
+        }
+      ]
     }
   ]
 }
