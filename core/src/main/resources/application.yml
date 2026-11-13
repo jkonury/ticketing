@@ -74,3 +74,6 @@ ticketing:
   payment:
     fake-pg:
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}
+logging:
+  level:
+    org.jooq.Constants: off
