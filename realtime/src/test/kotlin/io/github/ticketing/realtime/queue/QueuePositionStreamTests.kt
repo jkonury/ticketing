@@ -41,12 +41,12 @@ class QueuePositionStreamTests(client: WebTestClient, redis: ReactiveStringRedis
                 val admitted = nextEvent(events, "admitted")
                 val token = redis.opsForValue().get(QueueKeys.admitted(schedule, 2)).awaitSingle()
                 assertThat(admitted.data()).contains(token).contains("expiresAt")
-                assertThat(withTimeout(5000) { events.receiveCatching().isClosed }).isTrue()
+                assertThat(withTimeout(5000) { events.closesAfterHeartbeats() }).isTrue()
                 clientFor(2).get().uri("/api/v1/queues/$schedule/entries/me").exchange().expectBody()
                     .jsonPath("$.admissionToken").isEqualTo(token)
                 val already = stream(schedule, 2).asFlow().produceIn(this)
                 assertThat(nextEvent(already, "admitted").data()).contains(token)
-                assertThat(withTimeout(5000) { already.receiveCatching().isClosed }).isTrue()
+                assertThat(withTimeout(5000) { already.closesAfterHeartbeats() }).isTrue()
             }
         }
     }
@@ -81,7 +81,7 @@ class QueuePositionStreamTests(client: WebTestClient, redis: ReactiveStringRedis
                 nextEvent(events, "position")
                 clientFor(1).delete().uri("/api/v1/queues/$schedule/entries/me").exchange().expectStatus().isNoContent
                 nextEvent(events, "removed")
-                assertThat(withTimeout(5000) { events.receiveCatching().isClosed }).isTrue()
+                assertThat(withTimeout(5000) { events.closesAfterHeartbeats() }).isTrue()
             }
         }
     }
@@ -104,6 +104,15 @@ class QueuePositionStreamTests(client: WebTestClient, redis: ReactiveStringRedis
 
     private fun stream(schedule: Long, member: Long) = clientFor(member).get().uri("/api/v1/streams/queues/$schedule")
         .exchange().expectStatus().isOk.returnResult(object : ParameterizedTypeReference<ServerSentEvent<String>>() {}).responseBody
+
+    // 종료 신호 앞에 버퍼에 남은 heartbeat 가 먼저 올 수 있으므로 닫힐 때까지 비운다.
+    private suspend fun ReceiveChannel<ServerSentEvent<String>>.closesAfterHeartbeats(): Boolean {
+        while (true) {
+            val result = receiveCatching()
+            if (result.isClosed) return true
+            if (result.getOrNull()?.comment() != "heartbeat") return false
+        }
+    }
 
     private suspend fun nextEvent(events: ReceiveChannel<ServerSentEvent<String>>, name: String): ServerSentEvent<String> =
         withTimeout(5000) {

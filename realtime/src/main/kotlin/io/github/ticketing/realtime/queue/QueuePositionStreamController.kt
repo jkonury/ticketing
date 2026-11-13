@@ -2,10 +2,12 @@ package io.github.ticketing.realtime.queue
 
 import io.github.ticketing.realtime.support.RealtimeException
 import io.github.ticketing.realtime.support.memberId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import org.springframework.http.MediaType
 import org.springframework.http.codec.ServerSentEvent
@@ -24,6 +26,7 @@ class QueuePositionStreamController(private val service: QueueService, private v
     ): Flow<ServerSentEvent<Any>> {
         val memberId = memberId(member)
         val initial = service.status(scheduleId, memberId)
+        // flowOn: Redis 응답 이후의 계속(continuation)이 Lettuce I/O 스레드(연결 1개당 1스레드)에서 돌지 않게 분리한다.
         return channelFlow {
             val heartbeat = launch {
                 while (true) {
@@ -61,7 +64,7 @@ class QueuePositionStreamController(private val service: QueueService, private v
                     } else {
                         delay(properties.positionPollInterval.toMillis())
                         try {
-                            service.status(scheduleId, memberId, updateSeen = false)
+                            service.status(scheduleId, memberId, updateSeen = false, verifySchedule = false)
                         } catch (exception: RealtimeException) {
                             if (exception.code != "QUEUE_ENTRY_NOT_FOUND") throw exception
                             send(ServerSentEvent.builder<Any>().event("removed").build())
@@ -72,7 +75,7 @@ class QueuePositionStreamController(private val service: QueueService, private v
             } finally {
                 heartbeat.cancelAndJoin()
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 }
 

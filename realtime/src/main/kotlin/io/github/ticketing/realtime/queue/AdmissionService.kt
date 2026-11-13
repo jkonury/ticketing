@@ -2,8 +2,13 @@ package io.github.ticketing.realtime.queue
 
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Configuration
@@ -52,20 +57,24 @@ class AdmissionService(
             meters.counter("queue.departure", "reason", "seen_missing").increment(missing.toDouble())
             meters.counter("queue.departure", "reason", "seen_expired").increment(expired.toDouble())
             meters.counter("queue.admission", "result", "lookup_created").increment((admitted.size / 2).toDouble())
-            admitted.chunked(2).forEach { pair ->
-                val memberId = pair[0].toString()
-                val token = pair[1].toString()
-                val tokenKey = "queue:admission:$token"
-                runCatching {
-                    redis.opsForHash<String, String>().putAll(
-                        tokenKey,
-                        mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString()),
-                    ).awaitSingle()
-                    redis.expire(tokenKey, properties.admissionTokenTtl).awaitSingle()
-                    meters.counter("queue.admission", "result", "gateway_ready").increment()
-                }.onFailure {
-                    meters.counter("queue.admission", "result", "gateway_write_failed").increment()
-                }.getOrThrow()
+            // 토큰마다 왕복을 기다리면 Redis 지연이 인원수만큼 곱해지므로 한꺼번에 보내 왕복을 겹친다.
+            coroutineScope {
+                admitted.chunked(2).map { pair ->
+                    async {
+                        val memberId = pair[0].toString()
+                        val tokenKey = "queue:admission:${pair[1]}"
+                        runCatching {
+                            redis.opsForHash<String, String>().putAll(
+                                tokenKey,
+                                mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString()),
+                            ).awaitSingle()
+                            redis.expire(tokenKey, properties.admissionTokenTtl).awaitSingle()
+                            meters.counter("queue.admission", "result", "gateway_ready").increment()
+                        }.onFailure {
+                            meters.counter("queue.admission", "result", "gateway_write_failed").increment()
+                        }.getOrThrow()
+                    }
+                }.awaitAll()
             }
             if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
                 redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
@@ -113,6 +122,6 @@ class AdmissionScheduler(private val service: AdmissionService, private val mete
         val now = System.nanoTime()
         val previous = previousStart.getAndSet(now)
         if (previous != 0L) meters.timer("queue.admission.scheduler.interval").record(now - previous, TimeUnit.NANOSECONDS)
-        service.admitAll()
+        withContext(Dispatchers.Default) { service.admitAll() }
     }
 }

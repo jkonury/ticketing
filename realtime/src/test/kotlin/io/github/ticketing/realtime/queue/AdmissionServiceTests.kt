@@ -22,25 +22,41 @@ class AdmissionServiceTests(
     private val meters: MeterRegistry,
 ) : RealtimeIntegrationTestSupport(client, redis) {
     @Test
-    fun `상태 조회 사이에 입장해도 입장 토큰을 반환한다`() = runTest {
+    fun `대기열에 없으면 입장 기록을 읽어 입장 토큰을 반환한다`() = runTest {
         val schedule = 206L
         prepareSchedule(schedule)
         enter(schedule, 1)
+        assertThat(service.admit(schedule)).isEqualTo(1)
 
         val result = resolveQueueStatus(
+            readWaiting = {
+                redis.opsForZSet().rank(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()?.let { QueueStatus.Waiting(it + 1) }
+            },
             readAdmitted = {
                 redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingleOrNull()?.let {
                     QueueStatus.Admitted(it, clock.instant().plus(Duration.ofMinutes(10)))
                 }
             },
-            readWaiting = {
-                assertThat(service.admit(schedule)).isEqualTo(1)
-                redis.opsForZSet().rank(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()?.let { QueueStatus.Waiting(it + 1) }
-            },
         )
 
         val token = redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingle()
         assertThat(result).isInstanceOfSatisfying(QueueStatus.Admitted::class.java) { assertThat(it.admissionToken).isEqualTo(token) }
+    }
+
+    @Test
+    fun `대기 중이면 입장 기록을 조회하지 않는다`() = runTest {
+        var admittedReads = 0
+
+        val result = resolveQueueStatus(
+            readWaiting = { QueueStatus.Waiting(3) },
+            readAdmitted = {
+                admittedReads++
+                null
+            },
+        )
+
+        assertThat(result).isEqualTo(QueueStatus.Waiting(3))
+        assertThat(admittedReads).isZero()
     }
 
     @Test

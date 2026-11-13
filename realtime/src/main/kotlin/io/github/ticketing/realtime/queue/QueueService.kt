@@ -49,11 +49,15 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
         return waiting(scheduleId, memberId) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
     }
 
-    suspend fun status(scheduleId: Long, memberId: Long, updateSeen: Boolean = true): QueueStatus {
-        requireSchedule(scheduleId)
+    /**
+     * 대기 중이면 `ZRANK` 한 번으로 끝낸다. SSE 폴링이 연결 수만큼 초당 호출하므로 명령 수가 곧 부하다.
+     * [verifySchedule]을 끄면 회차 존재 확인(`EXISTS`)도 생략한다. 진입 시점과 하트비트에서만 확인한다.
+     */
+    suspend fun status(scheduleId: Long, memberId: Long, updateSeen: Boolean = true, verifySchedule: Boolean = true): QueueStatus {
+        if (verifySchedule) requireSchedule(scheduleId)
         val status = resolveQueueStatus(
-            readAdmitted = { admitted(scheduleId, memberId) },
             readWaiting = { waiting(scheduleId, memberId) },
+            readAdmitted = { admitted(scheduleId, memberId) },
         ) ?: throw RealtimeException(HttpStatus.NOT_FOUND, "QUEUE_ENTRY_NOT_FOUND")
         if (status is QueueStatus.Waiting && updateSeen) markSeen(scheduleId, memberId)
         return status
@@ -103,7 +107,11 @@ class QueueService(private val redis: ReactiveStringRedisTemplate, private val c
     }
 }
 
+/**
+ * 대기열 확인을 먼저 하고, 없을 때만 입장 기록을 본다. 입장 스크립트가 대기열 제거와 입장 기록을 한 번에 처리하므로
+ * 대기열에 없는 사용자는 이미 입장 기록이 있거나 대기열에서 빠진 것이어서 두 번째 조회가 필요 없다.
+ */
 internal suspend fun resolveQueueStatus(
-    readAdmitted: suspend () -> QueueStatus.Admitted?,
     readWaiting: suspend () -> QueueStatus.Waiting?,
-): QueueStatus? = readAdmitted() ?: readWaiting() ?: readAdmitted()
+    readAdmitted: suspend () -> QueueStatus.Admitted?,
+): QueueStatus? = readWaiting() ?: readAdmitted()
