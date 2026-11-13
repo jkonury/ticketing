@@ -9,6 +9,8 @@ usage() {
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
 --infra: PostgreSQL, Redis, fake-pg  --observability: Prometheus, Tempo, Grafana
 앱 옵션은 조합할 수 있습니다. 의존 인프라는 별도로 선택해야 합니다.
+SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
+SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 앱은 이 터미널에서 관리하며 Ctrl+C로 종료합니다. Docker 컨테이너는 유지됩니다.
 HELP
 }
@@ -34,6 +36,9 @@ if $web; then
   command -v pnpm >/dev/null || { echo 'pnpm이 필요합니다.' >&2; exit 1; }
   [[ -f web/.env.local ]] || { echo 'web/.env.local이 필요합니다. web/.env.example을 복사해 설정하세요.' >&2; exit 1; }
   [[ -d web/node_modules ]] || { echo 'web 의존성이 없습니다. cd web && pnpm install을 실행하세요.' >&2; exit 1; }
+fi
+if { $core || $realtime || $gateway; } && [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+  [[ -f "$SCOUTER_AGENT_DIR/scouter.agent.jar" ]] || { echo "SCOUTER_AGENT_DIR에 scouter.agent.jar가 없습니다: $SCOUTER_AGENT_DIR" >&2; exit 1; }
 fi
 pids=()
 cleanup() {
@@ -62,9 +67,21 @@ start() {
   pids+=("$!")
   printf '%s 실행 중 (로그: build/dev/logs/%s.log)\n' "$name" "$name"
 }
-$core && start core java -jar core/build/libs/core.jar
-$realtime && start realtime java -jar realtime/build/libs/realtime.jar
-$gateway && start gateway java -jar gateway/build/libs/gateway.jar
+start_java() {
+  local name=$1
+  local -a jvm_args=()
+  if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+    jvm_args+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
+      "-Dscouter.config=$ROOT/deploy/scouter/ticketing.conf"
+      "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"
+      "-Dobj_name=$name" -Djdk.attach.allowAttachSelf=true)
+    printf 'Scouter agent 연결: obj_name=%s, collector=%s:6100\n' "$name" "${SCOUTER_COLLECTOR_IP:-127.0.0.1}" >&2
+  fi
+  start "$name" java "${jvm_args[@]}" -jar "$name/build/libs/$name.jar"
+}
+$core && start_java core
+$realtime && start_java realtime
+$gateway && start_java gateway
 $web && start web bash -c 'cd "$1/web" && exec pnpm dev' _ "$ROOT"
 if ((${#pids[@]})); then
   echo '앱 종료: Ctrl+C'
