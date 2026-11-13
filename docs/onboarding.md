@@ -21,6 +21,7 @@
 ```bash
 git clone <저장소> && cd ticketing
 ./scripts/setup-hooks.sh            # pre-commit(ktlint, detekt, web 검사) 활성화. 클론 후 1회
+sudo ./scripts/setup-firewall.sh      # Linux+UFW: compose 브릿지(br-ticketing)에서 호스트로의 웹훅·수집 허용. 1회
 cp .env.example .env                # 로컬 비밀 값. git 제외
 ./gradlew :fake-pg:bootJar          # fake-pg 컨테이너가 빌드된 jar를 복사하므로 먼저 만든다
 docker compose up -d --wait         # PostgreSQL 15432, Redis 16379, fake-pg 18090

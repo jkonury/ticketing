@@ -29,6 +29,8 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 
 - `down -v`는 되돌릴 수 없다. 로컬 데이터를 버려도 될 때만 쓴다. Flyway 마이그레이션은 core 기동 때 다시 적용된다.
 - Redis는 볼륨이 없어서 컨테이너를 다시 만들면 대기열·선점·세션이 사라진다.
+- Compose 기본 네트워크의 브릿지 이름은 `br-ticketing`으로 고정한다(서브넷은 Docker가 배정). 방화벽 규칙을 서브넷이 아닌 이 인터페이스에 걸어서 네트워크를 재생성해도, 다른 프로젝트와 서브넷이 겹쳐도 유지된다. 다른 프로젝트도 고유한 브릿지 이름을 쓰고 인터페이스 기준으로 허용하면 같은 문제를 피한다.
+- Linux에서 UFW를 쓰면 최초 1회 `sudo ./scripts/setup-firewall.sh`를 실행한다(멱등). 기존 네트워크에는 이름이 적용되지 않으므로 `docker compose down` 후 다시 기동한다(Redis 데이터는 사라진다).
 - 포트가 이미 사용 중이면 `ss -ltnp 'sport = :18080'`으로 점유 프로세스를 찾는다.
 
 ## 3. 장애 진단
@@ -47,6 +49,7 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 1. `docker compose logs fake-pg`에서 요청이 도착했고 웹훅을 보냈는지 본다.
 2. 웹훅이 닿지 않으면 core가 18080에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://host.docker.internal:18080/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다.
 3. 웹훅이 거절되면 core와 fake-pg의 `FAKE_PG_WEBHOOK_SECRET`이 같은지 본다. 서명 검증이 이 값을 쓴다.
+   Linux에서 연결이 시간 초과되면 `ip -br addr show br-ticketing`으로 브릿지 이름이 적용됐는지, `sudo ufw status numbered`에 `br-ticketing`의 18080 허용 규칙이 있는지 본다. 없으면 `sudo ./scripts/setup-firewall.sh`를 실행한다. 이전에 서브넷 기준으로 추가한 규칙(`from 172.19.0.0/16 …`)은 `sudo ufw delete <번호>`로 지운다.
 4. 웹훅은 중복 도착할 수 있다. 멱등 키로 걸러지므로 중복 로그 자체는 정상이다.
 5. 결제 기록과 PG 거래의 불일치는 `paymentReconciliationJob`(4절)으로 검출한다. 자동 보정은 하지 않는다.
 6. 만료된 예매에 결제 성공이 늦게 도착하면 자동 환불 경로로 처리된다. 흐름은 [flows.md §6.4](./architecture/flows.md#64-결제-이벤트-기반)를 본다.

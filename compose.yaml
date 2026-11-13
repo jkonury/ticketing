@@ -41,3 +41,10 @@ services:
 
 volumes:
   postgres-data:
+
+# 네트워크를 재생성하면 br-<id>와 서브넷이 바뀌므로 방화벽 규칙은 바뀌지 않는 브릿지 이름에 건다.
+# scripts/setup-firewall.sh가 이 이름 기준으로 UFW 규칙을 추가한다.
+networks:
+  default:
+    driver_opts:
+      com.docker.network.bridge.name: br-ticketing
