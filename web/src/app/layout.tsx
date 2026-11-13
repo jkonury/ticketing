@@ -15,7 +15,7 @@ async function UserMenu() {
   const user = await getCurrentUser();
   return user ? (
     <>
-      <span>
+      <span className="user-name">
         {user.name} ({user.role})
       </span>
       {user.role === 'USER' ? (
@@ -39,11 +39,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko">
       <body>
-        <header>
-          <Link href="/">티켓 예매</Link>
-          <Suspense fallback={null}>
-            <UserMenu />
-          </Suspense>
+        <header className="site-header">
+          <div className="header-inner">
+            <Link className="brand" href="/">
+              티켓 예매
+            </Link>
+            <nav className="user-menu" aria-label="사용자 메뉴">
+              <Suspense fallback={null}>
+                <UserMenu />
+              </Suspense>
+            </nav>
+          </div>
         </header>
         {children}
       </body>

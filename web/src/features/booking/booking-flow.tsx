@@ -100,7 +100,7 @@ export function BookingFlow({
     setQueueVersion((value) => value + 1);
   };
   return (
-    <main>
+    <main className="booking-page">
       <h1>{schedule.performanceTitle}</h1>
       <p>{formatSeoul(schedule.startsAt)}</p>
       {done && booking ? (
@@ -319,7 +319,16 @@ function Seats({
     <section>
       <h2>좌석 선택</h2>
       <p>최대 4석</p>
-      <div>
+      <p className="field-hint">
+        좌석은 선택 가능, 선점됨, 판매됨 상태로 표시됩니다. 좌석 배치는 가로로
+        스크롤할 수 있습니다.
+      </p>
+      <div
+        className="seat-map"
+        tabIndex={0}
+        role="region"
+        aria-label="좌석 배치"
+      >
         {Array.from(new Set(seats.map((seat) => seat.section))).map(
           (section) => (
             <fieldset key={section}>
@@ -354,15 +363,7 @@ function Seats({
                           type="button"
                           aria-label={`${seat.section}구역 ${seat.row}열 ${seat.number}번, ${seat.grade}석, ${label}`}
                           aria-pressed={selectedSeat}
-                          className={
-                            seat.grade === 'VIP'
-                              ? 'bg-purple-200'
-                              : seat.grade === 'R'
-                                ? 'bg-blue-200'
-                                : seat.grade === 'S'
-                                  ? 'bg-green-200'
-                                  : 'bg-amber-200'
-                          }
+                          className="seat-button"
                           disabled={status !== 'AVAILABLE' || pending}
                           onClick={() => {
                             if (!selectedSeat && selected.length >= 4) {
@@ -387,6 +388,15 @@ function Seats({
           ),
         )}
       </div>
+      <p>
+        선택한 좌석:{' '}
+        {selected.length
+          ? seats
+              .filter((seat) => selected.includes(seat.seatId))
+              .map((seat) => `${seat.section} ${seat.row}-${seat.number}`)
+              .join(', ')
+          : '없음'}
+      </p>
       {notice && <p role="alert">{notice}</p>}
       <button
         disabled={!selected.length || pending}
@@ -481,6 +491,7 @@ function Payment({
   return (
     <section>
       <h2>결제</h2>
+      <p>선택한 좌석: {booking.seats.map((seat) => seat.label).join(', ')}</p>
       <p>남은 시간: {remaining}초</p>
       <p>{booking.totalAmount.toLocaleString('ko-KR')}원</p>
       {remaining === 0 && <p>선점이 만료되었습니다.</p>}

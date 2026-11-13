@@ -16,7 +16,7 @@ export function AuthForm({
     { message: '' },
   );
   return (
-    <form action={action}>
+    <form className="stacked-form" action={action}>
       {mode === 'signup' && (
         <>
           <label>
@@ -42,11 +42,17 @@ export function AuthForm({
           required
           minLength={8}
           maxLength={64}
+          aria-describedby="password-hint"
         />
       </label>
+      <p id="password-hint" className="field-hint">
+        비밀번호는 8~64자로 입력해 주세요.
+      </p>
       {next && <input name="next" type="hidden" value={next} />}
       <FormMessage message={state.message} />
-      <button disabled={pending}>{mode === 'login' ? '로그인' : '가입'}</button>
+      <button disabled={pending}>
+        {pending ? '처리 중' : mode === 'login' ? '로그인' : '가입'}
+      </button>
     </form>
   );
 }
