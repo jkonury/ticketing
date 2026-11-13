@@ -179,6 +179,7 @@ run_once() {
   [[ -z $VUS ]] || vus_env=(VUS="$VUS")
   local k6_from k6_to
   k6_from=$(date +%s)
+  printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
   env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
     BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
     "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
@@ -186,9 +187,10 @@ run_once() {
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
   wait "$k6_pid" || k6_status=$?
+  k6_to=$(date +%s)
+  printf 'k6_end_unix_seconds: %s\nk6_exit_code: %s\n' "$k6_to" "$k6_status" >> "$dir/measurement.txt"
   wait "$SAMPLER_PID" || true
   SAMPLER_PID=
-  k6_to=$(date +%s)
   if $OBSERVABILITY; then
     sleep 6 # 마지막 scrape(5초 간격)가 Prometheus에 들어오게 한다
     "$ROOT/scripts/loadtest/prom-snapshot.sh" "$k6_from" "$k6_to" "$dir" > "$dir/prom-snapshot.log" 2>&1 \

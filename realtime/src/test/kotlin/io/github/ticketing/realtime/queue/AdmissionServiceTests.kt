@@ -69,12 +69,16 @@ class AdmissionServiceTests(
     fun `유예가 지난 회원을 제거하고 살아 있는 회원을 입장시킨다`() = runTest {
         val schedule = 202L
         prepareSchedule(schedule)
+        val expiredBefore = meters.counter("queue.departure", "reason", "seen_expired").count()
+        val missingBefore = meters.counter("queue.departure", "reason", "seen_missing").count()
         enter(schedule, 1)
         clock.advance(Duration.ofSeconds(31))
         try {
             enter(schedule, 2)
 
             assertThat(service.admit(schedule)).isEqualTo(1)
+            assertThat(meters.counter("queue.departure", "reason", "seen_expired").count() - expiredBefore).isEqualTo(1.0)
+            assertThat(meters.counter("queue.departure", "reason", "seen_missing").count() - missingBefore).isZero()
             assertThat(redis.opsForZSet().size(QueueKeys.waiting(schedule)).awaitSingle()).isZero()
             assertThat(redis.opsForZSet().size(QueueKeys.seen(schedule)).awaitSingle()).isZero()
             assertThat(redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).hasElement().awaitSingle()).isFalse()
