@@ -152,7 +152,7 @@ RESERVED_PREFIXES = {'if', 'then', 'elif', 'else', 'while', 'until', 'do', '!', 
 BOUNDARIES = {';', ';;', ';&', ';;&', '&&', '||', '|', '|&', '&', '\n', '(', ')'}
 APPROVAL_HINT = 'This changes running services or containers; confirm with the user before running.'
 MERGE_HINT = 'PR merge changes shared history; confirm with the user before running.'
-MAIN_HINT = 'This commits or pushes to main; confirm the user intends to work on main.'
+MAIN_HINT = 'This pushes to main; confirm the user intends to push to main.'
 
 
 def is_command_position(words: Sequence[str], index: int, boundaries: Collection[str]) -> bool:
@@ -335,10 +335,10 @@ def inspect(command: str, cwd: Path) -> tuple[str | None, list[str]]:
             if denied:
                 return denied, notices
             subcommand, git_args, target_cwd, _ = git_command(args, cwd)
-            if subcommand in {'commit', 'push'}:
+            if subcommand == 'push':
                 branch = git(target_cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip()
-                if branch == 'main' or (subcommand == 'push' and any(
-                        a == 'main' or a.endswith((':main', ':refs/heads/main')) for a in git_args)):
+                if branch == 'main' or any(
+                        a == 'main' or a.endswith((':main', ':refs/heads/main')) for a in git_args):
                     notices.append(MAIN_HINT)
         if name in {'docker', 'docker-compose'}:
             denied = docker_reason(name, args)
