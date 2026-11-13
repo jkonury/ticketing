@@ -61,7 +61,7 @@ server:
 
 ticketing:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${TICKETING_JWT_SECRET}
   gateway:
     cors:
       allowed-origins: http://localhost:13000

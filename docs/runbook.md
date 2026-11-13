@@ -38,7 +38,7 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 ### 3.1 앱이 뜨지 않는다
 
 1. `docker compose ps`에서 postgres, redis가 `healthy`인지 본다.
-2. `.env`가 있고 `POSTGRES_*`, `JWT_SECRET`, `FAKE_PG_WEBHOOK_SECRET`이 채워져 있는지 본다. `.env.example`과 비교한다.
+2. `.env`가 있고 `POSTGRES_*`, `TICKETING_JWT_SECRET`, `FAKE_PG_WEBHOOK_SECRET`이 채워져 있는지 본다. `.env.example`과 비교한다.
 3. 빌드가 `:core:generateJooq`에서 실패하면 Docker가 떠 있는지 확인한다. 코드 생성이 Docker를 쓴다.
 4. E2E로 띄웠다면 `build/e2e/logs/`의 앱별 로그를 본다.
 
@@ -108,7 +108,7 @@ Job은 `core-batch`에서 하나씩 실행한다. 규칙과 파라미터의 기�
 - Batch 메타데이터는 PostgreSQL `batch` 스키마에 있다. 실행 이력은 여기서 조회한다.
 
 ```bash
-docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" \
   -c 'select job_instance_id, job_name from batch.batch_job_instance order by 1 desc limit 10;'
 ```
 

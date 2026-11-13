@@ -43,7 +43,7 @@ run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [-
    - `hot-seats`면 realtime 입장 배치 크기를 1000으로 바꾼다(환경 변수 relaxed binding).
    - actuator health가 모두 UP일 때까지 기다린다(최대 90초, 실패 시 해당 로그 tail 30줄).
    - `seed.sh members`(멱등), `smoke`가 아니면 `seed.sh schedule --scenario <scenario>`.
-   - k6를 `taskset -c <k6-cpus>`로 실행한다: `loadtest/scenarios/<scenario>.ts`, 환경 변수 `BASE_URL=http://localhost:8000`, `JWT_SECRET`, `MEMBERS_FILE`, `SCHEDULE_FILE`. `--observability`면 Prometheus remote-write 출력을 켠다. `--summary-export`(또는 k6 2.x의 대응 옵션)로 요약 JSON을 남긴다.
+   - k6를 `taskset -c <k6-cpus>`로 실행한다: `loadtest/scenarios/<scenario>.ts`, 환경 변수 `BASE_URL=http://localhost:8000`, `TICKETING_JWT_SECRET`, `MEMBERS_FILE`, `SCHEDULE_FILE`. `--observability`면 Prometheus remote-write 출력을 켠다. `--summary-export`(또는 k6 2.x의 대응 옵션)로 요약 JSON을 남긴다.
    - `smoke`가 아니면 결제 웹훅이 끝나도록 10초 기다린 뒤 `verify-integrity.sh <scheduleId>`.
    - 앱을 종료한다(JFR이 파일로 남도록 SIGTERM 후 대기).
 5. 실행 디렉터리: `build/loadtest/runs/<yyyyMMdd-HHmmss>-<scenario>[-fi]/<run번호>/`에 앱 로그, k6 요약 JSON, k6 stdout, JFR, 정합성 결과, `env.txt`(커밋 해시, JDK 버전, CPU 모델·코어 수, 메모리, 옵션)를 둔다.

@@ -18,7 +18,7 @@ M5에서 대기열·좌석 선점·결제 흐름에 1만 명 규모의 부하를
 
 1. 추적은 Micrometer Tracing과 OpenTelemetry 브리지로 계측하고, OTLP(HTTP)로 Grafana Tempo에 보낸다. 지표는 Micrometer와 Prometheus registry로 `/actuator/prometheus`에 노출하고, Grafana에서 Prometheus exemplar로 trace와 연결한다.
 2. 부하는 k6가 Gateway(8000)를 직접 호출한다. web BFF는 거치지 않는다.
-3. 부하 테스트용 회원 1만 명은 SQL 시드로 만든다. k6가 로컬 `JWT_SECRET`으로 HS256 access 토큰을 직접 서명한다(클레임 `sub`, `role`, `iat`, `exp`). 로그인(bcrypt)은 부하에 넣지 않는다.
+3. 부하 테스트용 회원 1만 명은 SQL 시드로 만든다. k6가 로컬 `TICKETING_JWT_SECRET`으로 HS256 access 토큰을 직접 서명한다(클레임 `sub`, `role`, `iat`, `exp`). 로그인(bcrypt)은 부하에 넣지 않는다.
 4. SSE 부하는 xk6-sse 확장을 넣은 k6 바이너리로 한다. Docker `grafana/xk6`로 빌드하고 산출물은 `build/loadtest/k6`에 둔다.
 5. 시나리오는 두 개다. `queue-surge`는 1만 명이 대기열 등록부터 예매 결제·확정까지 전체 흐름을 밟는다. `hot-seats`는 1,000명이 같은 시각에 앞줄 100석을 놓고 선점을 시도한다. 기준 측정은 fake-pg 실패율 0%로 하고, 실패 주입은 별도 1회로 한다.
 6. 관측 스택은 `compose.observability.yaml`로 Prometheus, Tempo, Grafana를 띄운다. Prometheus는 remote-write를 받아 k6 지표도 함께 저장한다. Grafana는 3001 포트를 쓴다(3000은 web). datasource와 대시보드는 저장소에 프로비저닝한다. 로그 수집(Loki)은 하지 않는다.
@@ -32,7 +32,7 @@ M5에서 대기열·좌석 선점·결제 흐름에 1만 명 규모의 부하를
 | --- | --- | --- |
 | 추적: Micrometer Tracing + OTel 브리지 → OTLP → Tempo | Brave + Zipkin, OTel + Jaeger | Grafana 하나에서 지표(exemplar)와 trace를 연결한다. OTLP는 표준이라 M6 k8s에서도 그대로 쓴다 |
 | 부하 경로: k6 → Gateway 직접 | web BFF 경유 | BFF를 거치면 1만 개 세션 로그인과 Next 서버 비용이 측정에 섞여 원인 분석이 어려워진다. 측정 대상은 대기열·realtime·core다 |
-| 인증: k6가 테스트 전용으로 JWT를 직접 서명 | 실제 로그인 API 1만 회 | bcrypt 로그인 1만 회가 준비 시간과 부하를 차지한다. 로컬 `JWT_SECRET`은 부하 테스트 환경에서만 쓴다 |
+| 인증: k6가 테스트 전용으로 JWT를 직접 서명 | 실제 로그인 API 1만 회 | bcrypt 로그인 1만 회가 준비 시간과 부하를 차지한다. 로컬 `TICKETING_JWT_SECRET`은 부하 테스트 환경에서만 쓴다 |
 | SSE: xk6-sse 커스텀 빌드 | 상태 조회 폴링, 일부만 SSE | 1만 개 SSE 동시 연결 유지가 WebFlux realtime 검증의 핵심이다. 폴링은 rate limit(초당 20)과도 겹친다 |
 | phase 분할: M5-1(관측·기준 측정), M5-2(개선) | 한 phase | 개선 내용은 기준 측정 결과를 봐야 정할 수 있다 |
 | 실행 환경: 호스트 `java -jar` + `taskset` | 컨테이너 CPU 제한 | 컨테이너 이미지는 M6 범위다. CPU 분리로 k6와 앱의 경합을 줄이고 하드웨어를 문서에 남긴다 |
@@ -40,7 +40,7 @@ M5에서 대기열·좌석 선점·결제 흐름에 1만 명 규모의 부하를
 ## 결과
 
 - 얻는 것: 기준 수치와 병목 후보를 같은 방법으로 반복 측정할 수 있다. 지표와 trace를 한 화면에서 연결해 원인을 좁힐 수 있다. 부하 방식이 M6 k8s 전환 때 그대로 재사용된다.
-- 감수하는 것: 측정은 단일 머신 기준이라 절대값보다 개선 전후 비교에 의미가 있다. 테스트 전용 JWT 서명은 운영 경로가 아니며, 운영에서는 `JWT_SECRET`을 부하 테스트 용도로 쓰지 않는다. 로그 수집(Loki)과 web 계측은 하지 않으므로 web 구간의 지연은 이 측정에 잡히지 않는다. 실패 주입 1회는 기준 측정과 분리해 해석한다.
+- 감수하는 것: 측정은 단일 머신 기준이라 절대값보다 개선 전후 비교에 의미가 있다. 테스트 전용 JWT 서명은 운영 경로가 아니며, 운영에서는 `TICKETING_JWT_SECRET`을 부하 테스트 용도로 쓰지 않는다. 로그 수집(Loki)과 web 계측은 하지 않으므로 web 구간의 지연은 이 측정에 잡히지 않는다. 실패 주입 1회는 기준 측정과 분리해 해석한다.
 - 바뀌는 문서·지침: `docs/architecture.md § 11`(부하 테스트·관측 항목). `docs/roadmap.md`와 AGENTS.md § 6은 M5-1 마지막 step에서 갱신한다.
 
 ## 검증

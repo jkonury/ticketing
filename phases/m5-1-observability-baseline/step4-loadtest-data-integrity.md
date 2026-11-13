@@ -24,7 +24,7 @@ k6가 쓸 회원 1만 명과 회차를 준비하고, 측정이 끝난 뒤 중복
 
 ### 1. `scripts/loadtest/lib/jwt.sh`
 
-`sign_jwt <memberId> <role>`: `.env`의 `JWT_SECRET`으로 HS256 access 토큰을 만든다(`sub`, `role`, `iat`, `exp`=1시간 뒤, base64url). k6 쪽 서명은 step 6에서 TypeScript로 따로 만든다.
+`sign_jwt <memberId> <role>`: `.env`의 `TICKETING_JWT_SECRET`으로 HS256 access 토큰을 만든다(`sub`, `role`, `iat`, `exp`=1시간 뒤, base64url). k6 쪽 서명은 step 6에서 TypeScript로 따로 만든다.
 
 ### 2. `scripts/loadtest/seed.sh`
 

@@ -3,7 +3,7 @@ package io.github.ticketing.member.security
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
 
-/** secret은 HS256 기준 32바이트 이상이어야 한다. 저장소에 넣지 않고 환경 변수(`JWT_SECRET`)로 받는다. */
+/** secret은 HS256 기준 32바이트 이상이어야 한다. 저장소에 넣지 않고 환경 변수(`TICKETING_JWT_SECRET`)로 받는다. */
 @ConfigurationProperties("ticketing.jwt")
 data class JwtProperties(
     val secret: String,

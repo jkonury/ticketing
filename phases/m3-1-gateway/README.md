@@ -9,7 +9,7 @@
 
 | 주제 | 결정 |
 |---|---|
-| JWT | Gateway도 코어와 같은 HS256 비밀(`JWT_SECRET`)로 서명을 검증한다. `Authorization: Bearer`가 있으면 모든 경로에서 검증하고, 실패하면 401 `UNAUTHORIZED`로 응답한다. 코어는 자체 검증을 그대로 유지한다(Gateway를 신뢰하지 않음) |
+| JWT | Gateway도 코어와 같은 HS256 비밀(`TICKETING_JWT_SECRET`)로 서명을 검증한다. `Authorization: Bearer`가 있으면 모든 경로에서 검증하고, 실패하면 401 `UNAUTHORIZED`로 응답한다. 코어는 자체 검증을 그대로 유지한다(Gateway를 신뢰하지 않음) |
 | 회원 전달 | 클라이언트가 보낸 `X-Member-Id`는 모든 요청에서 지운다. realtime 경로에만 검증된 회원 ID를 `X-Member-Id`로 붙인다 |
 | 라우팅 | `/api/v1/queues/**`, `/api/v1/streams/**`는 realtime, 그 밖의 `/api/v1/**`는 core로 보낸다 |
 | 입장 토큰 | 불투명 난수. 헤더 `X-Admission-Token`. Redis `queue:admission:<token>` Hash(`memberId`, `scheduleId`)에 TTL과 함께 저장된다(발급·TTL은 M3-2 realtime, 기본 10분). TTL 동안 여러 번 쓸 수 있다 |

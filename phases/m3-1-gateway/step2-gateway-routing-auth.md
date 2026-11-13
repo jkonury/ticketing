@@ -27,7 +27,7 @@ Gateway의 빌드, 라우팅, JWT 검증, 오류 응답, 테스트 기반을 만
 
 ### 2. 설정
 
-- `application.yml`: 코어와 같은 방식으로 `.env`를 import한다. `ticketing.jwt.secret`을 `JWT_SECRET`에서 받는다. 코어가 이 값을 어떻게 바인딩하는지 먼저 확인하고(`rg -n 'JWT_SECRET|ticketing.jwt' core/src/main`), 같은 `.env` 값이 두 앱에 들어가게 한다.
+- `application.yml`: 코어와 같은 방식으로 `.env`를 import한다. `ticketing.jwt.secret`을 `TICKETING_JWT_SECRET`에서 받는다. 코어가 이 값을 어떻게 바인딩하는지 먼저 확인하고(`rg -n 'TICKETING_JWT_SECRET|ticketing.jwt' core/src/main`), 같은 `.env` 값이 두 앱에 들어가게 한다.
 - `ticketing.gateway.core-uri`(기본 `http://localhost:8080`), `ticketing.gateway.realtime-uri`(기본 `http://localhost:8081`).
 - 설정은 `@ConfigurationProperties` 클래스로 받는다. secret은 32바이트 이상인지 `init`에서 검사한다(코어 `JwtProperties`와 같은 규칙).
 

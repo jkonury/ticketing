@@ -26,7 +26,7 @@ M5 관측·부하 테스트 방식을 ADR로 남기고 아키텍처 문서에 �
 |---|---|---|
 | 추적: Micrometer Tracing + OTel 브리지 → OTLP → Tempo | Brave + Zipkin, OTel + Jaeger | Grafana 하나에서 지표(exemplar)와 trace를 연결한다. OTLP 표준이라 M6 k8s에서도 그대로 쓴다 |
 | 부하 경로: k6 → Gateway 직접 | web BFF 경유 | BFF를 거치면 1만 개 세션 로그인과 Next 서버가 측정에 섞여 원인 분석이 어려워진다. 측정 대상은 대기열·realtime·core다 |
-| 인증: k6가 테스트 전용으로 JWT를 직접 서명 | 실제 로그인 API 1만 회 | bcrypt 로그인 1만 회가 준비 시간과 부하를 차지한다. 로컬 `JWT_SECRET`은 부하 테스트 환경에서만 쓴다 |
+| 인증: k6가 테스트 전용으로 JWT를 직접 서명 | 실제 로그인 API 1만 회 | bcrypt 로그인 1만 회가 준비 시간과 부하를 차지한다. 로컬 `TICKETING_JWT_SECRET`은 부하 테스트 환경에서만 쓴다 |
 | SSE: xk6-sse 커스텀 빌드 | 상태 조회 폴링, 일부만 SSE | 1만 개 SSE 동시 연결 유지가 WebFlux realtime 검증의 핵심이다. 폴링은 rate limit(초당 20)과도 겹친다 |
 | phase 분할: M5-1(관측·기준 측정), M5-2(개선) | 한 phase | 개선 내용은 기준 측정 결과를 봐야 정할 수 있다 |
 | 실행 환경: 호스트 `java -jar` + `taskset` | 컨테이너 CPU 제한 | 컨테이너 이미지는 M6 범위다. CPU 분리로 k6와 앱의 경합을 줄이고 하드웨어를 문서에 남긴다 |

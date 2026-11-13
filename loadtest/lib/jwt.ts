@@ -9,9 +9,9 @@ function base64Url(value: string | ArrayBuffer): string {
 }
 
 export function signAccessToken(memberId: number, role: string): string {
-  const secret = __ENV.JWT_SECRET;
+  const secret = __ENV.TICKETING_JWT_SECRET;
   if (!secret) {
-    throw new Error('JWT_SECRET 환경 변수가 필요합니다.');
+    throw new Error('TICKETING_JWT_SECRET 환경 변수가 필요합니다.');
   }
   const now = Math.floor(Date.now() / 1000);
   const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));

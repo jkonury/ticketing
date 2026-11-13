@@ -12,7 +12,7 @@
 |---|---|
 | 순서 | M5를 먼저 한다. `docs/plans/backend-guideline-adoption.md`는 M5 뒤로 미룬다. 측정 전후 비교에 다른 리팩터링이 섞이지 않게 하기 위해서다 |
 | 부하 경로 | k6가 Gateway(8000)를 직접 호출한다. web BFF는 측정 범위 밖이다 |
-| 인증 | 부하 테스트용 회원 1만 명은 SQL 시드로 만든다. k6가 로컬 `.env`의 `JWT_SECRET`으로 HS256 access 토큰을 직접 서명한다(클레임 `sub`=회원 ID, `role`, `iat`, `exp`). 로그인(bcrypt)은 부하에 넣지 않는다 |
+| 인증 | 부하 테스트용 회원 1만 명은 SQL 시드로 만든다. k6가 로컬 `.env`의 `TICKETING_JWT_SECRET`으로 HS256 access 토큰을 직접 서명한다(클레임 `sub`=회원 ID, `role`, `iat`, `exp`). 로그인(bcrypt)은 부하에 넣지 않는다 |
 | SSE | k6에 SSE가 없으므로 xk6-sse 확장을 넣은 k6 바이너리를 Docker `grafana/xk6`로 빌드한다. 산출물은 `build/loadtest/k6` |
 | 지표 | Micrometer + Prometheus registry. 모든 Spring 앱이 `/actuator/prometheus`를 노출한다 |
 | 추적 | Micrometer Tracing + OpenTelemetry 브리지 → OTLP(HTTP) → Grafana Tempo. Grafana에서 Prometheus exemplar로 trace와 연결한다. web(Next) 계측은 범위 밖 |

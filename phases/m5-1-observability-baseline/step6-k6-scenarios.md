@@ -6,7 +6,7 @@
 
 작업에 필요한 정보는 이 파일에 담겨 있다. 아래 파일은 작업 중 필요한 부분만 참조하라:
 
-- `loadtest/scenarios/smoke.ts`, `scripts/loadtest/run.sh` (step 5 결과. 환경 변수 `BASE_URL`, `JWT_SECRET`, `MEMBERS_FILE`, `SCHEDULE_FILE`과 실행 방식)
+- `loadtest/scenarios/smoke.ts`, `scripts/loadtest/run.sh` (step 5 결과. 환경 변수 `BASE_URL`, `TICKETING_JWT_SECRET`, `MEMBERS_FILE`, `SCHEDULE_FILE`과 실행 방식)
 - `build/loadtest/members.json`, `build/loadtest/schedule-<scenario>.json` 형식은 `scripts/loadtest/seed.sh`(step 4)에서 확인한다
 - `docs/architecture/flows.md § 6.1 대기열과 입장` (대기열 API, SSE 이벤트 이름·본문, rate limit, 입장 토큰 헤더 `X-Admission-Token`)
 - `core/src/main/kotlin/io/github/ticketing/booking/adapter/provided/web/BookingController.kt` (예매 생성: `Idempotency-Key` 헤더, 본문 `{scheduleId, seatIds(1~4)}`, 201/200. 결제: `POST /{id}/payments` 202. 상세: `GET /{id}`)
@@ -16,7 +16,7 @@
 
 ## 배경
 
-합의된 두 시나리오를 구현한다(ADR 0024). k6는 Gateway(8000)를 직접 호출하고, access 토큰은 k6가 `JWT_SECRET`으로 직접 서명한다(HS256, 클레임 `sub`=회원 ID 문자열, `role`=`USER`, `iat`, `exp`). SSE 티켓은 1회용이므로 스트림을 열 때마다 새로 발급한다.
+합의된 두 시나리오를 구현한다(ADR 0024). k6는 Gateway(8000)를 직접 호출하고, access 토큰은 k6가 `TICKETING_JWT_SECRET`으로 직접 서명한다(HS256, 클레임 `sub`=회원 ID 문자열, `role`=`USER`, `iat`, `exp`). SSE 티켓은 1회용이므로 스트림을 열 때마다 새로 발급한다.
 
 ## 작업
 
@@ -96,4 +96,4 @@ rg -q 'unexpected_errors' loadtest/lib/metrics.ts
 - 회원 한 명을 여러 VU가 공유하지 마라. 이유: 회원별 rate limit과 대기열 항목이 겹쳐 결과가 왜곡된다.
 - URL 원문을 지표 태그로 남기지 마라. 이유: 회차·예매 ID마다 시계열이 생겨 Prometheus remote-write가 폭증한다.
 - 서버 코드나 설정(rate limit, 입장 속도 기본값)을 고치지 마라. 이유: 기준 측정 전이다. 개선은 M5-2에서 한다.
-- `JWT_SECRET`을 콘솔·요약 JSON에 출력하지 마라.
+- `TICKETING_JWT_SECRET`을 콘솔·요약 JSON에 출력하지 마라.

@@ -14,9 +14,9 @@ spring:
       # @ApplicationModuleListener(비동기)로 넘어간 처리도 같은 trace에 이어 붙인다
       propagate-context: true
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:15432/${POSTGRES_DB:ticketing}
-    username: ${POSTGRES_USER:ticketing}
-    password: ${POSTGRES_PASSWORD}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:15432/${TICKETING_POSTGRES_DB:ticketing}
+    username: ${TICKETING_POSTGRES_USER:ticketing}
+    password: ${TICKETING_POSTGRES_PASSWORD}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -70,7 +70,7 @@ server:
 
 ticketing:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${TICKETING_JWT_SECRET}
   payment:
     fake-pg:
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}
