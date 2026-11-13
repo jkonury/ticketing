@@ -82,6 +82,7 @@
 - [x] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
 - [ ] 기준 수치 측정 후 병목 개선, 전후 수치 기록
   - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
+  - M5-2 계획: [병목 개선과 전후 비교](./plans/m5-2-improvements.md)
 - [ ] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)
   - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
 - [ ] 결과를 `docs/`에 문서화
