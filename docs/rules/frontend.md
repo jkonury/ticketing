@@ -74,6 +74,7 @@ web/src
 
 ## TypeScript와 스타일
 
+- 화면 구성과 시각 규칙은 [UI 가이드](../ui-guide.md)를 따른다.
 - `strict` 모드. `any` 금지, `as` 단언은 사유 주석과 함께 최소화한다.
 - 컴포넌트는 함수 선언과 named export. 기본 export는 Next.js가 요구하는 파일(`page`, `layout` 등)에만 쓴다.
 - 파일명은 kebab-case, 컴포넌트 이름은 PascalCase.
