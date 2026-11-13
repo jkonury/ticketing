@@ -64,6 +64,8 @@ flowchart LR
 
 전체 절차는 [온보딩](docs/onboarding.md)을 따른다.
 
+개발 스택은 `./scripts/dev/run.sh`로 기동한다. `--infra`, `--core`, `--realtime`, `--gateway`, `--web`, `--observability`를 조합해 선택할 수 있으며, 자세한 사용법은 `--help`를 참고한다. 앱은 Ctrl+C로 종료하고 Docker 컨테이너는 유지한다.
+
 fake-pg 컨테이너는 빌드된 jar를 복사하므로 먼저 bootJar를 만든 뒤 Compose를 올린다.
 
 ```bash
