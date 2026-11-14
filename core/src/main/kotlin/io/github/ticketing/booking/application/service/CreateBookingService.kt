@@ -80,7 +80,8 @@ class CreateBookingService(
         return copies
     }
 
-    // 같은 요청이 동시에 두 번 들어오면 한쪽은 선점에 실패한다. 먼저 끝난 쪽의 예매를 돌려준다
+    // 같은 요청이 동시에 두 번 들어오면 한쪽은 선점에 실패한다. 먼저 끝난 쪽의 예매를 돌려준다.
+    // 이 조회가 선점 패자의 유일한 DB 연결 획득이다. `existing` 단계는 hold 단계 안에 포함된다
     private fun holdOrExisting(
         memberId: MemberId,
         key: String,
@@ -89,7 +90,10 @@ class CreateBookingService(
         holdToken: HoldToken,
         now: Instant,
     ): CreateBookingResult? = when (val held = seatHold.hold(scheduleId, requested, holdToken, Booking.HOLD_DURATION, now)) {
-        is HoldResult.Unavailable -> existing(memberId, key) ?: throw SeatAlreadyHeldException(held.seatIds.map { it.value })
+        is HoldResult.Unavailable -> {
+            stage("existing") { existing(memberId, key) } ?: throw SeatAlreadyHeldException(held.seatIds.map { it.value })
+        }
+
         HoldResult.Held -> null
     }
 
@@ -120,6 +124,6 @@ class CreateBookingService(
     }
 
     private companion object {
-        val STAGES = listOf("find-copies", "hold", "persist")
+        val STAGES = listOf("find-copies", "hold", "existing", "persist")
     }
 }
