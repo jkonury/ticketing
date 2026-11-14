@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2·M3·M4 완료, M5-1(관측·기준 측정) 완료, M5-2(개선) 대기 (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
+- 상태: M0·M1·M2·M3·M4 완료, M5 완료 기준(중복 판매 0건, 전후 수치 문서화) 충족, 단 B 예매 p95 300ms 잠정 기준 미달 잔존([최종 보고서](./performance/m5-improvements.md#step-8-최종-측정과-m5-결과-보고서-2026-11-14)) (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -81,14 +81,17 @@
 - [x] Micrometer + Prometheus + Grafana, 분산 추적
   - [x] Scouter Gateway·realtime 설정 분리, SSE 계측 비용 축소 및 개발·부하 테스트 설정 선택 통일 (효과 재측정 전)
 - [x] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
-- [ ] 기준 수치 측정 후 병목 개선, 전후 수치 기록
+- [x] 기준 수치 측정 후 병목 개선, 전후 수치 기록
   - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
+  - 개선 확인: 대기열·입장 경합 수정으로 A 예상 밖 오류 7.65% → 0%·입장 약 7,000 → 10,000명, B 정시 준비 1,000/1,000 (Step 2 전후 3회 등, [최종 보고서](./performance/m5-improvements.md#step-8-최종-측정과-m5-결과-보고서-2026-11-14))
+  - **미해결**: B 예매 생성 p95 잠정 기준 300ms 미달(최종 콜드 1,385ms, 워밍업 383ms). 원인 미확정, 후속 과제
   - [x] booking 불변 좌석 사본 캐시 구현·회귀 검증 ([ADR 0025](./adr/0025-booking-seat-copy-cache.md))
   - M5-2 계획: [병목 개선과 전후 비교](./plans/m5-2-improvements.md)
-- [ ] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)
+- [x] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)
   - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
-- [ ] 결과를 `docs/`에 문서화
-  - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)
+  - 최종 JFR·풀 결론: 정상 상태 pinning 0건(첫 폭주 구간의 클래스 로딩만), 풀 크기 10 유지(풀 20 기각)
+- [x] 결과를 `docs/`에 문서화
+  - 기준 측정: [m5-baseline.md](./performance/m5-baseline.md), 개선·최종 보고서: [m5-improvements.md](./performance/m5-improvements.md)
 
 **완료 기준**: 부하 상황에서 좌석 중복 판매 0건, 개선 전후 수치가 문서로 남아 있다.
 
