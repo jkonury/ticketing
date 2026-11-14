@@ -52,6 +52,7 @@ M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 �
 docker compose up -d                 # PostgreSQL, Redis, fake-pg
 docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 스택 (Prometheus, Tempo, Grafana 13001)
 ./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats>  # 부하 테스트 (k6, Gateway 18000 호출)
+./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.<Simulation>  # Gatling 부하 시나리오 (loadtest/gatling/README.md)
 ./gradlew build                      # 전체 빌드 + 테스트
 ./gradlew :core:bootRun
 ./gradlew :realtime:bootRun

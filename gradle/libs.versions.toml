@@ -12,6 +12,8 @@ ktlint = "1.8.0"
 ktlint-gradle = "14.2.0"
 # Kotlin 2.3.21·JDK 25 지원. 1.23.8은 Kotlin 2.0.21·JDK 21 기준이다.
 detekt = "2.0.0-alpha.3"
+# 부하 테스트(loadtest/gatling). Gradle 플러그인 버전이 곧 Gatling 버전이다.
+gatling = "3.16.0"
 
 [libraries]
 # convention plugin이 쓰는 Gradle 플러그인 아티팩트
@@ -25,3 +27,6 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 
 gradle-ktlint = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlint-gradle" }
 gradle-detekt = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
+
+[plugins]
+gatling = { id = "io.gatling.gradle", version.ref = "gatling" }

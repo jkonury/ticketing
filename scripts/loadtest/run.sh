@@ -11,6 +11,7 @@ usage() {
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
+            [--tool k6|gatling] [--gatling-heap 2g]
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
 --warmup-rounds는 워밍업 횟수입니다(기본 5, 고정). 회차별 결과는 warmup-k6-summary-<n>.json, warmup-settle-<n>.json에 남깁니다.
@@ -21,6 +22,9 @@ SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
 --warmup·--failure-inject와 함께 쓰지 않습니다.
+--tool gatling은 k6 대신 Gatling(loadtest/gatling)으로 같은 시나리오를 실행합니다. 부하 도구 메모리 비교용이라 queue-surge·hot-seats만 지원하며
+--warmup·--aot-cache와 함께 쓰지 않습니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
+JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 리포트는 만들지 않고(-nr) simulation.log와 GC 로그만 남깁니다.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 USAGE
   exit 1
@@ -45,6 +49,9 @@ METRIC_TARGETS=(core=18080 realtime=18081 gateway=18000 fake-pg=18090)
 AOT_CACHE=false
 AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
+TOOL=k6
+GATLING_HEAP=2g
+GATLING_DIST="$ROOT/loadtest/gatling/build/gatling-dist"
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
   case "$1" in
@@ -61,6 +68,8 @@ while (($#)); do
     --warmup) WARMUP=true; shift ;;
     --warmup-rounds) need_value "$@"; WARMUP_ROUNDS=$2; shift 2 ;;
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
+    --tool) need_value "$@"; TOOL=$2; shift 2 ;;
+    --gatling-heap) need_value "$@"; GATLING_HEAP=$2; shift 2 ;;
     --aot-cache) AOT_CACHE=true; shift ;;
     --aot-train-rounds) need_value "$@"; AOT_TRAIN_ROUNDS=$2; shift 2 ;;
     -h|--help) usage ;;
@@ -70,6 +79,12 @@ done
 case "$SCENARIO" in smoke|queue-surge|hot-seats|seat-conflict-refund) ;; *) usage ;; esac
 if [[ $SCENARIO == seat-conflict-refund ]] && { $WARMUP || $FAILURE_INJECT || $AOT_CACHE; }; then
   echo 'seat-conflict-refund는 --warmup, --failure-inject, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
+fi
+case "$TOOL" in k6|gatling) ;; *) echo '--tool에는 k6 또는 gatling이 필요합니다.' >&2; exit 1 ;; esac
+[[ $GATLING_HEAP =~ ^[1-9][0-9]*[mMgG]$ ]] || { echo '--gatling-heap에는 512m, 4g 같은 값이 필요합니다.' >&2; exit 1; }
+if [[ $TOOL == gatling ]]; then
+  [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats ]] || { echo '--tool gatling은 queue-surge, hot-seats만 지원합니다.' >&2; exit 1; }
+  { $WARMUP || $AOT_CACHE; } && { echo '--tool gatling은 --warmup, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1; }
 fi
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
@@ -132,13 +147,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if [[ $SCENARIO != smoke ]]; then
+build_tasks=(:core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar)
+if [[ $TOOL == gatling ]]; then
+  build_tasks+=(:loadtest-gatling:gatlingDist)
+elif [[ $SCENARIO != smoke ]]; then
   "$ROOT/scripts/loadtest/build-k6.sh"
 elif [[ ! -x $OUT/k6 ]]; then
   "$ROOT/scripts/loadtest/build-k6.sh"
 fi
 
-if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar > "$RUN_ROOT/build.log" 2>&1; then
+if ! ./gradlew -q "${build_tasks[@]}" > "$RUN_ROOT/build.log" 2>&1; then
   echo "빌드 실패: $RUN_ROOT/build.log" >&2
   tail -n 30 "$RUN_ROOT/build.log" >&2
   exit 1
@@ -203,7 +221,12 @@ write_env() {
     printf 'jdk: %s\n' "$(java -version 2>&1 | head -n 1)"
     printf 'cpu: %s (논리 코어 %s)\n' "$(LC_ALL=C lscpu | awk -F: '/Model name/ {gsub(/^ +/, "", $2); print $2}')" "$(nproc)"
     printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
-    printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
+    printf 'tool: %s\n' "$TOOL"
+    if [[ $TOOL == gatling ]]; then
+      printf 'gatling: %s, 힙 -Xmx%s(고정), 리포트 생략(-nr)\n' "$(ls "$GATLING_DIST/lib" | rg -o 'gatling-core-[0-9.]+' | head -n 1)" "$GATLING_HEAP"
+    else
+      printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
+    fi
     printf 'scenario: %s\nruns: %s\nfailure-inject: %s\njfr: %s\nobservability: %s\n' "$SCENARIO" "$RUNS" "$FAILURE_INJECT" "$JFR" "$OBSERVABILITY"
     if [[ $SCENARIO == seat-conflict-refund ]]; then
       printf 'conflict-scale: 100쌍(회원 200명), 첫 예매 2석·둘째 예매 2석(1석 겹침), 선점 키 유실은 첫 예매의 겹치는 좌석 1개 키만\n'
@@ -423,14 +446,27 @@ run_once() {
   if $OBSERVABILITY; then k6_args+=(-o experimental-prometheus-rw); fi
   local k6_status=0 vus_env=()
   [[ -z $VUS ]] || vus_env=(VUS="$VUS")
+  # 부하 도구별 로그·요약 파일. gatling은 k6 요약과 같은 형태의 JSON을 SUMMARY_FILE로 남긴다
+  local load_log="$dir/$TOOL.log" load_summary="$dir/$TOOL-summary.json"
   local k6_from k6_to
   # 본 부하 직전 직접 수집(서버 지표 사전값). 워밍업이 있으면 워밍업과 시드 요청은 여기까지의 값에 들어간다
   collect_metrics "$dir/server-metrics-pre.json" || { echo "본 측정 전 지표 수집 실패: $dir/server-metrics-pre.json" >&2; return 1; }
   k6_from=$(date +%s)
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
-  env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
-    BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-    READINESS_FILE="$dir/readiness.json" "${vus_env[@]}" "${scenario_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
+  if [[ $TOOL == gatling ]]; then
+    local simulation=QueueSurgeSimulation
+    [[ $SCENARIO != hot-seats ]] || simulation=HotSeatsSimulation
+    # taskset이 java를 exec하므로 $!가 곧 Gatling JVM이다(RSS 샘플링 대상)
+    env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+      READINESS_FILE="$dir/readiness.json" SUMMARY_FILE="$load_summary" "${vus_env[@]}" "${scenario_env[@]}" \
+      taskset -c "$K6_CPUS" java -Xmx"$GATLING_HEAP" "-Xlog:gc*:file=$dir/gatling-gc.log" -XX:+HeapDumpOnOutOfMemoryError "-XX:HeapDumpPath=$dir/gatling.hprof" \
+      --add-opens java.base/java.lang=ALL-UNNAMED -cp "$GATLING_DIST/lib/*" io.gatling.app.Gatling \
+      -s "io.github.ticketing.loadtest.$simulation" -rf "$dir/gatling-results" -nr > "$load_log" 2>&1 &
+  else
+    env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
+      BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+      READINESS_FILE="$dir/readiness.json" "${vus_env[@]}" "${scenario_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$load_log" 2>&1 &
+  fi
   local k6_pid=$!
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
@@ -449,7 +485,7 @@ run_once() {
   local delta_status=0
   if $server_delta_ok; then
     python3 "$ROOT/scripts/loadtest/metrics-delta.py" diff "$dir/server-metrics-pre.json" "$dir/server-metrics-post.json" "$dir/server-delta.json" \
-      --scenario "$SCENARIO" --k6-summary "$dir/k6-summary.json" --label measurement > "$dir/server-delta.log" 2>&1 || delta_status=$?
+      --scenario "$SCENARIO" --k6-summary "$load_summary" --label measurement > "$dir/server-delta.log" 2>&1 || delta_status=$?
     ((delta_status != 2)) || { server_delta_ok=false; echo "서버 지표 차분 오류(reset·누락): $dir/server-delta.log" >&2; }
     if ((delta_status == 1)); then echo "통제 입력 불일치: $dir/server-delta.log" >&2; fi
   fi
@@ -523,25 +559,43 @@ run_once() {
 
   cleanup # SIGTERM으로 종료해 JFR이 파일로 남게 한다
 
-  # k6 종료 코드 99는 threshold 미달이다. 기준 측정은 미달 항목을 그대로 기록하므로 스크립트 실패로 보지 않는다.
+  # k6 종료 코드 99, gatling 종료 코드 2는 threshold(assertion) 미달이다. 기준 측정은 미달 항목을 그대로 기록하므로 스크립트 실패로 보지 않는다.
   # smoke의 99는 checks 실패(연결 이상)라서 실패로 본다
-  local thresholds='통과' script_ok=true reqs failed p95
-  if ((k6_status == 99)) && [[ $SCENARIO != smoke ]]; then
-    thresholds='미달(k6 종료 코드 99, 기록용이며 실패 아님)'
+  local thresholds='통과' script_ok=true reqs failed p95 tool_rss_mb host_mem_peak
+  local threshold_code=99
+  [[ $TOOL != gatling ]] || threshold_code=2
+  if ((k6_status == threshold_code)) && [[ $SCENARIO != smoke ]]; then
+    thresholds="미달($TOOL 종료 코드 $threshold_code, 기록용이며 실패 아님)"
   elif ((k6_status != 0)); then
-    thresholds="스크립트 오류(k6 종료 코드 $k6_status, k6.log 참고)"
+    thresholds="스크립트 오류($TOOL 종료 코드 $k6_status, $TOOL.log 참고)"
     script_ok=false
   fi
-  # 반복 중 던져진 스크립트 예외는 k6 종료 코드에 드러나지 않으므로 로그에서 찾는다
-  if rg -q 'source=stacktrace|script exception' "$dir/k6.log"; then
-    thresholds="$thresholds, 스크립트 예외 발생(k6.log의 source=stacktrace 참고)"
-    script_ok=false
+  if [[ $TOOL == gatling ]]; then
+    # 시뮬레이션 안의 예외는 종료 코드에 드러나지 않을 수 있어 로그에서 찾는다
+    if rg -q 'Exception in thread|OutOfMemoryError' "$load_log"; then
+      thresholds="$thresholds, 스크립트 예외 발생(gatling.log 참고)"
+      script_ok=false
+    fi
+    reqs='n/a(리포트 생략)'
+    failed=$(rg -o 'Global: percentage of failed events.*actual : [0-9.]+' "$load_log" | head -n 1 || true)
+    p95=$(rg -o 'booking_create: 95th percentile.*actual : [0-9.]+' "$load_log" | rg -o 'actual : [0-9.]+' | head -n 1 || true)
+    : "${failed:=n/a}" "${p95:=n/a}"
+  else
+    # 반복 중 던져진 스크립트 예외는 k6 종료 코드에 드러나지 않으므로 로그에서 찾는다
+    if rg -q 'source=stacktrace|script exception' "$load_log"; then
+      thresholds="$thresholds, 스크립트 예외 발생(k6.log의 source=stacktrace 참고)"
+      script_ok=false
+    fi
+    reqs=$(jq -r '.metrics.http_reqs.count // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
+    failed=$(jq -r '.metrics.http_req_failed | (.value // .rate) // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
+    p95=$(jq -r '.metrics["http_req_duration{name:booking_create}"]["p(95)"] // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
   fi
   if $WARMUP && ! $server_delta_ok; then script_ok=false; fi
-  reqs=$(jq -r '.metrics.http_reqs.count // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
-  failed=$(jq -r '.metrics.http_req_failed | (.value // .rate) // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
-  p95=$(jq -r '.metrics["http_req_duration{name:booking_create}"]["p(95)"] // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
-  SUMMARY+=("run $n: thresholds $thresholds, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 워밍업 $($WARMUP && echo "$WARMUP_ROUNDS회, $isolation" || echo 없음), 서버 차분 $($server_delta_ok && echo 유효 || echo 오류), B 준비 $readiness, 보상 $compensation, 디렉터리 $dir")
+  # 앱·인프라·부하 도구가 한 호스트에서 돌므로 호스트 전체 메모리 사용률 최대값도 남긴다(총량 대비 MemAvailable 최소값)
+  host_mem_peak=$(awk -F, 'NR > 1 && $5 + 0 > 0 {used = 1 - ($6 + 0) / ($5 + 0); if (used > max) max = used} END {if (max > 0) printf "%.1f%%", max * 100; else print "n/a"}' "$dir/resources.csv" 2>/dev/null || echo n/a)
+  # 부하 도구 프로세스의 최대 RSS(MB). k6와 gatling을 같은 방식으로 비교하는 지표다
+  tool_rss_mb=$(awk -F, 'NR > 1 && $3 + 0 > max {max = $3 + 0} END {if (max > 0) printf "%.0f", max / 1048576; else print "n/a"}' "$dir/resources.csv" 2>/dev/null || echo n/a)
+  SUMMARY+=("run $n: 도구 $TOOL, thresholds $thresholds, 부하 도구 최대 RSS ${tool_rss_mb}MB, 호스트 메모리 최대 사용률 ${host_mem_peak}, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 워밍업 $($WARMUP && echo "$WARMUP_ROUNDS회, $isolation" || echo 없음), 서버 차분 $($server_delta_ok && echo 유효 || echo 오류), B 준비 $readiness, 보상 $compensation, 디렉터리 $dir")
   $script_ok && $integrity_ok && $isolation_ok && $compensation_ok
 }
 
