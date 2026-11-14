@@ -16,7 +16,7 @@ M3-2에서 realtime은 대기열 API와 입장 스케줄러, 순번·좌석 SSE�
 
 ## 결정
 
-1. 대기 순서는 `INCR queue:seq:{<scheduleId>}`가 반환한 일련번호를 Sorted Set score로 사용해 정한다. 등록은 `ZADD NX`로 수행하므로 재등록은 기존 순번을 유지한다.
+1. 대기 순서는 `INCR queue:seq:{<scheduleId>}`가 반환한 일련번호를 Sorted Set score로 사용해 정한다. 등록은 회차 해시 태그 안의 Lua 한 스크립트(`register.lua`)로 입장 기록 확인·대기 여부 확인·순번 발급·`waiting`·`seen` 기록을 원자적으로 수행하므로 재등록은 순번을 소모하지 않고 기존 순번을 유지한다.
 2. 입장은 주기마다 회차별 고정 인원으로 처리하며, 회차별 락을 획득한 인스턴스 하나만 처리한다. 같은 해시 태그를 가진 키만 Lua에서 원자적으로 처리한다. 해시 태그가 없는 `queue:admission:<token>`은 Lua 실행 밖에서 기록한다.
 3. 끊긴 대기자는 마지막 신호 시각과 유예 시간으로 정리한다. SSE heartbeat와 상태 조회가 `queue:seen:{<scheduleId>}`를 갱신하고, 스케줄러는 입장 직전에 기본 30초 유예를 넘긴 회원을 대기열에서 제거한다.
 4. 좌석 SSE는 인스턴스별·회차별 Redis Stream 리더를 공유하고 스냅샷 ID를 기준으로 재생한다. 스냅샷 이벤트 `id`는 스냅샷 직전 Stream 마지막 ID이며 변경 이벤트 `id`는 Stream entry ID다. `Last-Event-ID`가 Stream에 남아 있으면 그 다음부터 재생하고, 그렇지 않으면 스냅샷부터 보낸다.

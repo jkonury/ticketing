@@ -51,11 +51,16 @@ class QueueApiTests(client: WebTestClient, redis: ReactiveStringRedisTemplate) :
         clientFor(1).get().uri("$path/me").exchange().expectStatus().isOk.expectBody()
             .jsonPath("$.status").isEqualTo("ADMITTED").jsonPath("$.admissionToken").isEqualTo("token")
         redis.delete(QueueKeys.admission("token")).awaitSingle()
+        // 준비 유예(기본 5초)를 지난 조회 키만 기록 실패로 보고 정리한다. 방금 만든 키는 QueueRaceTests가 다룬다.
+        redis.opsForValue().set(QueueKeys.admitted(schedule, 1), "token", Duration.ofMinutes(9)).awaitSingle()
         clientFor(
             1,
         ).get().uri("$path/me").exchange().expectStatus().isNotFound.expectBody().jsonPath("$.code").isEqualTo("QUEUE_ENTRY_NOT_FOUND")
-        redis.opsForValue().set(QueueKeys.admitted(schedule, 1), "token", Duration.ofMinutes(10)).awaitSingle()
-        clientFor(1).post().uri(path).exchange().expectStatus().isOk.expectBody().jsonPath("$.status").isEqualTo("WAITING")
+        redis.opsForValue().set(QueueKeys.admitted(schedule, 1), "token", Duration.ofMinutes(9)).awaitSingle()
+        clientFor(1).post().uri(path).exchange().expectStatus().isOk.expectBody()
+            .jsonPath("$.status").isEqualTo("WAITING").jsonPath("$.position").isEqualTo(1)
+        assertThat(redis.hasKey(QueueKeys.admitted(schedule, 1)).awaitSingle()).isFalse()
+        assertThat(redis.opsForZSet().rank(QueueKeys.waiting(schedule), "1").awaitSingle()).isZero()
     }
 
     @Test

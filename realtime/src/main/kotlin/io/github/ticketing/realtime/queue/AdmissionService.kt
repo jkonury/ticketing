@@ -78,6 +78,12 @@ class AdmissionService(
             }
             if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
                 redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
+                // 크기 확인과 제거 사이에 들어온 등록은 활성 회차를 이미 추가했더라도 방금 제거됐을 수 있다.
+                // 등록은 대기열 추가 뒤 활성 회차를 추가하므로 제거 뒤 다시 확인하면 어느 순서든 놓치지 않는다.
+                if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() > 0L) {
+                    redis.opsForSet().add(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
+                    meters.counter("queue.active", "result", "restored").increment()
+                }
             }
             return admitted.size / 2
         } finally {

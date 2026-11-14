@@ -113,6 +113,59 @@ class MultiInstanceConsistencyTests(
     }
 
     @Test
+    fun `다른 인스턴스에서 입장한 회원의 재등록은 순번을 만들지 않고 같은 토큰을 돌려준다`() = runTest {
+        val schedule = 506L
+        prepareSchedule(schedule)
+        enter(client, schedule, 1)
+        enter(client, schedule, 2)
+        assertThat(admission.admit(schedule)).isEqualTo(2)
+        val token = redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingle()
+
+        memberClient(second.client, 1).post().uri(queuePath(schedule)).exchange().expectStatus().isOk.expectBody()
+            .jsonPath("$.status").isEqualTo("ADMITTED").jsonPath("$.admissionToken").isEqualTo(token)
+        memberClient(second.client, 1).get().uri(queuePath(schedule) + "/me").exchange().expectStatus().isOk.expectBody()
+            .jsonPath("$.admissionToken").isEqualTo(token)
+
+        assertThat(redis.opsForZSet().size(QueueKeys.waiting(schedule)).awaitSingle()).isZero()
+        assertThat(redis.opsForValue().get(QueueKeys.sequence(schedule)).awaitSingle()).isEqualTo("2")
+    }
+
+    @Test
+    fun `두 인스턴스에서 같은 회원이 동시에 등록해도 대기열에는 한 번만 들어가고 순번을 한 번만 쓴다`() = runTest {
+        val schedule = 507L
+        prepareSchedule(schedule)
+
+        withContext(Dispatchers.Default) {
+            coroutineScope {
+                List(8) { index -> async { enter(if (index % 2 == 0) client else second.client, schedule, 1) } }.forEach { it.await() }
+            }
+        }
+        enter(second.client, schedule, 2)
+
+        assertThat(redis.opsForZSet().size(QueueKeys.waiting(schedule)).awaitSingle()).isEqualTo(2)
+        assertThat(redis.opsForValue().get(QueueKeys.sequence(schedule)).awaitSingle()).isEqualTo("2")
+        memberClient(client, 2).get().uri(queuePath(schedule) + "/me").exchange().expectStatus().isOk.expectBody()
+            .jsonPath("$.position").isEqualTo(2)
+    }
+
+    @Test
+    fun `한쪽에서 마지막 대기자를 입장시킨 뒤 다른 쪽 등록은 활성 회차를 되살려 입장시킨다`() = runTest {
+        val schedule = 508L
+        prepareSchedule(schedule)
+        enter(client, schedule, 1)
+        assertThat(admission.admit(schedule)).isEqualTo(1)
+        assertThat(redis.opsForSet().isMember(QueueKeys.ACTIVE, schedule.toString()).awaitSingle()).isFalse()
+
+        enter(second.client, schedule, 2)
+        assertThat(redis.opsForSet().isMember(QueueKeys.ACTIVE, schedule.toString()).awaitSingle()).isTrue()
+        redis.delete("queue:admit-lock:{$schedule}").awaitSingle()
+
+        assertThat(second.admission.admit(schedule)).isEqualTo(1)
+        memberClient(client, 2).get().uri(queuePath(schedule) + "/me").exchange().expectStatus().isOk.expectBody()
+            .jsonPath("$.status").isEqualTo("ADMITTED")
+    }
+
+    @Test
     fun `좌석 변경은 양쪽에 같은 순서로 전달되고 다른 인스턴스에서 재생된다`() = runTest {
         withContext(Dispatchers.Default) {
             val schedule = 504L
