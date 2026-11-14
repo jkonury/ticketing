@@ -456,10 +456,13 @@ run_once() {
   if [[ $TOOL == gatling ]]; then
     local simulation=QueueSurgeSimulation
     [[ $SCENARIO != hot-seats ]] || simulation=HotSeatsSimulation
+    # 기본 사용자 홈이 읽기 전용이어도 Preferences의 잠금·저장이 가능하도록 회차별로 격리한다.
+    mkdir -p "$dir/gatling-prefs/.java/.userPrefs"
     # taskset이 java를 exec하므로 $!가 곧 Gatling JVM이다(RSS 샘플링 대상)
     env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
       READINESS_FILE="$dir/readiness.json" SUMMARY_FILE="$load_summary" "${vus_env[@]}" "${scenario_env[@]}" \
       taskset -c "$K6_CPUS" java -Xmx"$GATLING_HEAP" "-Xlog:gc*:file=$dir/gatling-gc.log" -XX:+HeapDumpOnOutOfMemoryError "-XX:HeapDumpPath=$dir/gatling.hprof" \
+      --enable-native-access=ALL-UNNAMED "-Djava.util.prefs.userRoot=$dir/gatling-prefs" \
       --add-opens java.base/java.lang=ALL-UNNAMED -cp "$GATLING_DIST/lib/*" io.gatling.app.Gatling \
       -s "io.github.ticketing.loadtest.$simulation" -rf "$dir/gatling-results" -nr > "$load_log" 2>&1 &
   else

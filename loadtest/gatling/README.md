@@ -41,8 +41,11 @@ MEMBERS_FILE=build/loadtest/members.json SCHEDULE_FILE=<schedule.json> VUS=1000 
 
 ```bash
 ./gradlew :loadtest-gatling:gatlingDist     # build/gatling-dist/lib 에 jar 모음 생성
+mkdir -p build/loadtest/gatling-prefs/.java/.userPrefs
 env BASE_URL=... TICKETING_JWT_SECRET=... MEMBERS_FILE=... SCHEDULE_FILE=... VUS=10000 \
-  taskset -c 0-3 java -Xmx2g --add-opens java.base/java.lang=ALL-UNNAMED \
+  taskset -c 0-3 java -Xmx2g --enable-native-access=ALL-UNNAMED \
+  -Djava.util.prefs.userRoot="$PWD/build/loadtest/gatling-prefs" \
+  --add-opens java.base/java.lang=ALL-UNNAMED \
   -cp 'loadtest/gatling/build/gatling-dist/lib/*' io.gatling.app.Gatling \
   -s io.github.ticketing.loadtest.QueueSurgeSimulation -rf build/loadtest/gatling-results -nr
 ```
@@ -50,6 +53,7 @@ env BASE_URL=... TICKETING_JWT_SECRET=... MEMBERS_FILE=... SCHEDULE_FILE=... VUS
 - `-Xmx`를 고정해야 RSS 비교가 의미 있다. 힙을 바꿔 가며 완주하는 최소 힙도 같이 본다.
 - `-nr`은 종료 시 리포트 생성(로그 파싱 메모리)을 생략한다. 리포트는 나중에 `-ro <결과 디렉터리>`로 만든다. assertion은 `-nr`에서도 평가된다.
 - `--add-opens`는 Gatling이 필요로 하며 `gatlingRun`은 플러그인이 대신 넣어 준다.
+- `--enable-native-access`는 Netty의 네이티브 라이브러리 로드를 허용한다. `java.util.prefs.userRoot`는 쓰기 가능한 경로로 지정해 사용자 홈이 읽기 전용인 환경에서도 Preferences 잠금·저장 경고를 방지한다. `run.sh`는 회차별 `gatling-prefs/`를 사용한다.
 
 ## k6와 다른 점
 
