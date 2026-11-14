@@ -212,7 +212,7 @@ def diff(pre_path, post_path, out, scenario, k6_summary, label):
                                 route_count(summary, "core", "http_server_requests_seconds", uri="/api/v1/performances", method="GET")))
         else:
             attempts = value("flow_booking_attempt")
-            op = "eq" if scenario == "hot-seats" else "ge"  # A는 409 재시도가 있어 서버 요청이 시도 수 이상
+            op = "eq" if scenario in ("hot-seats", "seat-conflict-refund") else "ge"  # A는 409 재시도가 있어 서버 요청이 시도 수 이상
             checks.append(check("k6 예매 시도 = Gateway core-bookings-create POST", attempts,
                                 route_count(summary, "gateway", "spring_cloud_gateway_requests_seconds", routeId="core-bookings-create", httpMethod="POST"), op))
             checks.append(check("k6 예매 시도 = core POST /api/v1/bookings", attempts,

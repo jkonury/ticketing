@@ -8,7 +8,7 @@ source "$ROOT/scripts/lib/scouter.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
+사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
@@ -19,6 +19,8 @@ usage() {
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
+seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
+--warmup·--failure-inject와 함께 쓰지 않습니다.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 USAGE
   exit 1
@@ -65,12 +67,16 @@ while (($#)); do
     *) printf '알 수 없는 옵션: %s\n' "$1" >&2; usage ;;
   esac
 done
-case "$SCENARIO" in smoke|queue-surge|hot-seats) ;; *) usage ;; esac
+case "$SCENARIO" in smoke|queue-surge|hot-seats|seat-conflict-refund) ;; *) usage ;; esac
+if [[ $SCENARIO == seat-conflict-refund ]] && { $WARMUP || $FAILURE_INJECT || $AOT_CACHE; }; then
+  echo 'seat-conflict-refund는 --warmup, --failure-inject, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
+fi
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $AOT_TRAIN_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--aot-train-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 $AOT_CACHE && $WARMUP && { echo '--aot-cache와 --warmup은 함께 쓰지 않습니다(콜드 + AOT 조건).' >&2; exit 1; }
 [[ -z $VUS || $VUS =~ ^[1-9][0-9]*$ ]] || { echo '--vus에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+[[ $SCENARIO != seat-conflict-refund || -z $VUS ]] || { echo 'seat-conflict-refund는 규모(100쌍)를 고정하므로 --vus를 쓰지 않습니다.' >&2; exit 1; }
 
 for command in docker curl java jq taskset; do
   command -v "$command" >/dev/null || { printf '필요한 도구가 없습니다: %s\n' "$command" >&2; exit 1; }
@@ -199,6 +205,11 @@ write_env() {
     printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
     printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
     printf 'scenario: %s\nruns: %s\nfailure-inject: %s\njfr: %s\nobservability: %s\n' "$SCENARIO" "$RUNS" "$FAILURE_INJECT" "$JFR" "$OBSERVABILITY"
+    if [[ $SCENARIO == seat-conflict-refund ]]; then
+      printf 'conflict-scale: 100쌍(회원 200명), 첫 예매 2석·둘째 예매 2석(1석 겹침), 선점 키 유실은 첫 예매의 겹치는 좌석 1개 키만\n'
+      printf 'conflict-fake-pg: 결제 실패율 0, 웹훅 중복률 0.3(복사본 중복 2)\n'
+      printf 'conflict-measurement: 서버 지표·k6 요약·resources.csv는 둘째 단계(결제·확정·환불) 구간만. 첫 단계는 k6-first.log·k6-first-summary.json\n'
+    fi
     printf 'k6-cpus: %s\napp-cpus: %s\n' "$K6_CPUS" "$APP_CPUS"
     printf 'vus: %s\nwarmup: %s\nwarmup-rounds: %s\nrate-limit: %s\n' "${VUS:-기본}" "$WARMUP" "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)" "$($NO_RATE_LIMIT && echo 비활성 || echo 활성)"
     if $WARMUP; then
@@ -222,7 +233,7 @@ write_env() {
 
 start_apps() {
   local dir=$1 failure=$2 duplicate=$3 batch=() obs=()
-  [[ $SCENARIO != hot-seats ]] || batch=(TICKETING_REALTIME_QUEUE_ADMISSION_BATCH_SIZE=1000)
+  [[ $SCENARIO != hot-seats && $SCENARIO != seat-conflict-refund ]] || batch=(TICKETING_REALTIME_QUEUE_ADMISSION_BATCH_SIZE=1000)
   if $OBSERVABILITY; then obs=(TRACING_EXPORT_ENABLED=true TRACING_SAMPLING_PROBABILITY=0.1); fi
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
     FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
@@ -293,6 +304,67 @@ check_isolation() {
   [[ $(jq -r .isolated "$dir/isolation.json") == true ]]
 }
 
+# 보상 시나리오(seat-conflict-refund)의 규모. loadtest/lib/conflict.ts의 PAIR_COUNT, seed.sh의 conflictPairs와 같아야 한다
+CONFLICT_PAIRS=100
+
+# conflict_first_phase <dir> <schedule_file>: 첫 단계(A 회원 100명이 PENDING 예매)를 실행하고, 그 예매의 겹치는 좌석 선점 키만 지운다.
+# 지우는 키는 부하 전용 회차의 키 중 값(소유자)이 방금 만든 예매의 hold_token인 것뿐이다. DB 제약·판매 행은 건드리지 않는다.
+conflict_first_phase() {
+  local dir=$1 schedule_file=$2 schedule_id members_min first_status=0 created
+  schedule_id=$(jq -r .scheduleId "$schedule_file")
+  members_min=$(jq -r .userIdMin "$OUT/members.json")
+  env PHASE=first BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+    READINESS_FILE="$dir/conflict-first-readiness.json" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/k6-first-summary.json" \
+    loadtest/scenarios/seat-conflict-refund.ts > "$dir/k6-first.log" 2>&1 || first_status=$?
+  if ((first_status != 0 && first_status != 99)) || rg -q 'source=stacktrace|script exception' "$dir/k6-first.log"; then
+    echo "첫 단계 k6 오류(종료 코드 $first_status): $dir/k6-first.log" >&2
+    return 1
+  fi
+  psql_q "SELECT coalesce(jsonb_agg(jsonb_build_object('pair', member_id - $members_min + 1, 'memberId', member_id, 'bookingId', id, 'holdToken', hold_token) ORDER BY member_id), '[]'::jsonb)
+    FROM booking.booking WHERE schedule_id = $schedule_id AND status = 'PENDING' AND member_id BETWEEN $members_min AND $((members_min + CONFLICT_PAIRS - 1))" > "$dir/conflict-first.json"
+  created=$(jq length "$dir/conflict-first.json")
+  if ((created != CONFLICT_PAIRS)); then
+    echo "첫 단계 PENDING 예매가 $created건입니다(기대 $CONFLICT_PAIRS). $dir/conflict-first.json, $dir/k6-first.log 참고" >&2
+    return 1
+  fi
+  # 그룹마다 겹치는 좌석의 선점 키를 읽어 소유자가 첫 예매의 hold_token일 때만 지운다
+  local keys_file="$dir/conflict-injection-keys.tsv"
+  jq -r --slurpfile first "$dir/conflict-first.json" --argjson sid "$schedule_id" \
+    '.conflictPairs[] | . as $p | ($first[0][] | select(.pair == $p.pair)) as $f | [$p.pair, "booking:hold:{\($sid)}:\($p.overlapSeatId)", $f.holdToken] | @tsv' "$schedule_file" > "$keys_file"
+  local owners deleted=0 mismatched=0 pair key token owner index=0
+  mapfile -t owners < <(cut -f2 "$keys_file" | sed 's/^/GET /' | docker compose exec -T redis redis-cli --raw | tr -d '\r')
+  local del_cmds=()
+  while IFS=$'\t' read -r pair key token; do
+    owner=${owners[$index]:-}
+    index=$((index + 1))
+    if [[ $owner == "$token" ]]; then del_cmds+=("DEL $key"); else mismatched=$((mismatched + 1)); fi
+  done < "$keys_file"
+  if ((${#del_cmds[@]})); then
+    deleted=$(printf '%s\n' "${del_cmds[@]}" | docker compose exec -T redis redis-cli --raw | tr -d '\r' | awk '{n += $1} END {print n + 0}')
+  fi
+  jq -n --argjson scheduleId "$schedule_id" --argjson targets "$CONFLICT_PAIRS" --argjson deleted "$deleted" --argjson ownerMismatch "$mismatched" \
+    '{scheduleId: $scheduleId, targetKeys: $targets, deletedHoldKeys: $deleted, ownerMismatch: $ownerMismatch,
+      note: "첫 예매의 겹치는 좌석 선점 키만 삭제(소유자=hold_token 확인). DB sold_seat·유니크 제약은 조작하지 않음"}' > "$dir/conflict-injection.json"
+  ((deleted == CONFLICT_PAIRS)) || { echo "선점 키 유실 주입이 $deleted/$CONFLICT_PAIRS건입니다: $dir/conflict-injection.json" >&2; return 1; }
+}
+
+# conflict_manifest <dir> <schedule_file>: 둘째 단계 뒤 예매 ID를 회원으로 대응시켜 실행 manifest를 만든다. 짝이 빠진 그룹이 있으면 1을 반환한다
+conflict_manifest() {
+  local dir=$1 schedule_file=$2 schedule_id members_min bookings
+  schedule_id=$(jq -r .scheduleId "$schedule_file")
+  members_min=$(jq -r .userIdMin "$OUT/members.json")
+  bookings=$(psql_q "SELECT coalesce(jsonb_agg(jsonb_build_object('memberId', member_id, 'id', id)), '[]'::jsonb) FROM booking.booking WHERE schedule_id = $schedule_id")
+  jq -n --argjson bookings "$bookings" --argjson min "$members_min" --argjson n "$CONFLICT_PAIRS" --argjson sid "$schedule_id" --slurpfile sched "$schedule_file" '
+    ($bookings | map({key: (.memberId | tostring), value: .id}) | from_entries) as $byMember
+    | [$sched[0].conflictPairs[] | . as $p
+       | {pair: $p.pair, memberA: ($min + $p.pair - 1), memberB: ($min + $n + $p.pair - 1), seatsA: $p.seatsA, seatsB: $p.seatsB, overlapSeatId: $p.overlapSeatId}
+       | . + {bookingA: $byMember[(.memberA | tostring)], bookingB: $byMember[(.memberB | tostring)]}] as $all
+    | {scheduleId: $sid, scale: {pairs: $n, members: ($n * 2), seatsPerBooking: 2, overlappingSeatsPerPair: 1},
+       expectedPairs: $n, completePairs: ($all | map(select(.bookingA != null and .bookingB != null)) | length),
+       pairs: ($all | map(select(.bookingA != null and .bookingB != null)))}' > "$dir/conflict-manifest.json"
+  [[ $(jq '.completePairs == .expectedPairs' "$dir/conflict-manifest.json") == true ]]
+}
+
 SUMMARY=()
 run_once() {
   local n=$1 dir="$RUN_ROOT/$1"
@@ -300,6 +372,8 @@ run_once() {
   write_env "$dir"
   local failure=0 duplicate=0
   if $FAILURE_INJECT; then failure=0.1; duplicate=0.3; fi
+  # 보상 검증은 결제 실패와 좌석 충돌 환불을 구분하려고 실패율 0, 웹훅 중복 30%로 고정한다
+  if [[ $SCENARIO == seat-conflict-refund ]]; then failure=0; duplicate=0.3; fi
 
   start_apps "$dir" "$failure" "$duplicate" || return 1
 
@@ -340,6 +414,11 @@ run_once() {
     $warm_ok || return 1
   fi
 
+  local scenario_env=()
+  if [[ $SCENARIO == seat-conflict-refund ]]; then
+    conflict_first_phase "$dir" "$schedule_file" || return 1
+    scenario_env=(PHASE=second FIRST_FILE="$dir/conflict-first.json")
+  fi
   local k6_args=(run --summary-export "$dir/k6-summary.json")
   if $OBSERVABILITY; then k6_args+=(-o experimental-prometheus-rw); fi
   local k6_status=0 vus_env=()
@@ -351,7 +430,7 @@ run_once() {
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
   env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
     BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-    READINESS_FILE="$dir/readiness.json" "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
+    READINESS_FILE="$dir/readiness.json" "${vus_env[@]}" "${scenario_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
   local k6_pid=$!
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
@@ -401,6 +480,17 @@ run_once() {
     fi
   fi
 
+  local compensation='해당 없음' compensation_ok=true
+  if [[ $SCENARIO == seat-conflict-refund ]]; then
+    # 환불은 비동기라 완료 조건과 상한(COMPENSATION_TIMEOUT, 기본 120초)을 두고 기다린다. 원장은 실패해도 보존한다
+    if conflict_manifest "$dir" "$schedule_file" && "$ROOT/scripts/loadtest/verify-compensation.sh" "$(jq -r .scheduleId "$schedule_file")" "$dir/conflict-manifest.json" "$dir" "$dir/fake-pg.log" > "$dir/compensation.log" 2>&1; then
+      compensation='통과'
+    else
+      compensation='위반·미완료(compensation.log, compensation.json 참고)'
+      compensation_ok=false
+      [[ -f $dir/compensation.json ]] || "$ROOT/scripts/loadtest/verify-compensation.sh" "$(jq -r .scheduleId "$schedule_file")" "$dir/conflict-manifest.json" "$dir" "$dir/fake-pg.log" >> "$dir/compensation.log" 2>&1 || true
+    fi
+  fi
   local integrity='해당 없음' integrity_ok=true
   if [[ $SCENARIO != smoke ]]; then
     sleep 10
@@ -426,6 +516,11 @@ run_once() {
     printf 'b_readiness: %s\n' "$readiness" >> "$dir/measurement.txt"
   fi
 
+  if [[ $SCENARIO == seat-conflict-refund && -f $dir/readiness.json ]]; then
+    readiness=$(jq -r '"B 회원 정시 준비 \(.readyOnTime // "기록 없음")/\(.vus), 지각 \(.readyLate // "기록 없음"), 예매 시도 \(.bookingAttempt // "기록 없음")"' "$dir/readiness.json")
+    printf 'conflict_readiness: %s\n' "$readiness" >> "$dir/measurement.txt"
+  fi
+
   cleanup # SIGTERM으로 종료해 JFR이 파일로 남게 한다
 
   # k6 종료 코드 99는 threshold 미달이다. 기준 측정은 미달 항목을 그대로 기록하므로 스크립트 실패로 보지 않는다.
@@ -446,8 +541,8 @@ run_once() {
   reqs=$(jq -r '.metrics.http_reqs.count // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
   failed=$(jq -r '.metrics.http_req_failed | (.value // .rate) // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
   p95=$(jq -r '.metrics["http_req_duration{name:booking_create}"]["p(95)"] // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
-  SUMMARY+=("run $n: thresholds $thresholds, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 워밍업 $($WARMUP && echo "$WARMUP_ROUNDS회, $isolation" || echo 없음), 서버 차분 $($server_delta_ok && echo 유효 || echo 오류), B 준비 $readiness, 디렉터리 $dir")
-  $script_ok && $integrity_ok && $isolation_ok
+  SUMMARY+=("run $n: thresholds $thresholds, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 워밍업 $($WARMUP && echo "$WARMUP_ROUNDS회, $isolation" || echo 없음), 서버 차분 $($server_delta_ok && echo 유효 || echo 오류), B 준비 $readiness, 보상 $compensation, 디렉터리 $dir")
+  $script_ok && $integrity_ok && $isolation_ok && $compensation_ok
 }
 
 AOT_DIR="$RUN_ROOT/aot"

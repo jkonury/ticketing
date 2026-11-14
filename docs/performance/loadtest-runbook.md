@@ -80,6 +80,18 @@ A는 모든 VU가 끝나면 즉시 종료하지만 최대 15분과 종료 유예
 
 jar를 풀고 학습 기동(hot-seats 부하 N회)으로 캐시를 만든 뒤, 측정 기동마다 `-XX:AOTMode=on`으로 새 프로세스를 띄운다. 캐시를 못 쓰면 기동이 실패한다. 학습은 실행당 1회이며 `aot/train/`에 로그가 남는다. `env.txt`에 사용 여부·학습 횟수·캐시 크기가 기록되고 `<앱>-aot.log`로 캐시 사용을 확인한다. `--warmup`과 함께 쓰지 않는다. 결정 배경은 [ADR 0026](../adr/0026-aot-cache-startup.md)이다.
 
+### 보상 정합성 검증 (`seat-conflict-refund`)
+
+```bash
+./scripts/loadtest/run.sh --scenario seat-conflict-refund --runs 3 --observability --no-scouter
+```
+
+선점 키 유실을 **인위적으로 주입**해 DB `(회차, 좌석)` 유니크 제약과 환불 완료·멱등성을 검증하는 시나리오다. 정상 A·B 성능 비교와 별도로 해석한다. `--warmup`·`--failure-inject`·`--aot-cache`·`--vus`와 함께 쓰지 않는다. fake-pg는 결제 실패율 0·웹훅 중복률 30%로 뜬다.
+
+- 규모는 100쌍(회원 200명)으로 고정한다(`env.txt`의 `conflict-scale`, `conflict-manifest.json`). 시드(`seed.sh`)가 3석 묶음마다 A는 앞 2석, B는 뒤 2석(가운데 1석 겹침)을 정한다.
+- 첫 단계(k6 `PHASE=first`, 100 VU): A 회원이 대기열 → 입장 → PENDING 예매를 만든다. runner가 그 예매의 **겹치는 좌석 선점 키 하나**만 지운다(키 값이 해당 예매의 `hold_token`일 때만, `conflict-injection.json`). 이후 둘째 단계(`PHASE=second`, 200 VU): B 회원이 대기열 → 입장 → 겹치는 좌석을 예매하고, 시작 시각에 A·B가 동시에 결제를 요청한다(같은 멱등 키로 한 번 더 보낸다). 서버 지표·`k6-summary.json`·`resources.csv`는 둘째 단계 구간만이고 첫 단계는 `k6-first.log`·`k6-first-summary.json`이다. 어느 예매가 이길지는 고정하지 않는다.
+- `verify-compensation.sh`가 booking·payment를 각 스키마에서 따로 조회해 예매 ID(주문 ID)로 대조하고 PG는 `GET /v1/transactions`로 확인한다. 쌍마다 확정 1·`SEAT_ALREADY_SOLD` 취소 1·패자 `sold_seat` 0·승자 SOLD 유지·패자 전용 좌석 AVAILABLE·패자 결제 `REFUNDED`(PG `REFUNDED`와 금액 일치)·승자 PG 환불 없음을 본다. 환불은 `COMPENSATION_TIMEOUT`초(기본 120)까지 기다리며 미완료는 실패다. 원장은 `ledger-*.json`, 결과는 `compensation.json`에 남는다. 실제 전달 건수는 `fake-pg.log`에서 센다(`pgApprovedDeliveries`·`pgDuplicateApprovedDeliveries` 등).
+
 ### 워밍업 실행 (`--warmup`)
 
 ```bash

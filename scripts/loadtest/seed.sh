@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 사용: seed.sh members [--count 10000] | seed.sh schedule --scenario queue-surge|hot-seats
+# 사용: seed.sh members [--count 10000] | seed.sh schedule --scenario queue-surge|hot-seats|seat-conflict-refund
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -22,7 +22,7 @@ psql_run() {
 }
 
 usage() {
-  echo '사용: seed.sh members [--count N] | seed.sh schedule --scenario queue-surge|hot-seats' >&2
+  echo '사용: seed.sh members [--count N] | seed.sh schedule --scenario queue-surge|hot-seats|seat-conflict-refund' >&2
   exit 1
 }
 
@@ -95,7 +95,8 @@ seed_schedule() {
       *) printf '알 수 없는 옵션: %s\n' "$1" >&2; exit 1 ;;
     esac
   done
-  [[ $scenario == queue-surge || $scenario == hot-seats ]] || { echo '--scenario는 queue-surge 또는 hot-seats여야 합니다.' >&2; exit 1; }
+  [[ $scenario == queue-surge || $scenario == hot-seats || $scenario == seat-conflict-refund ]] \
+    || { echo '--scenario는 queue-surge, hot-seats, seat-conflict-refund 중 하나여야 합니다.' >&2; exit 1; }
   [[ -f $OUT/members.json ]] || { echo 'build/loadtest/members.json이 없습니다. 먼저 seed.sh members를 실행하세요.' >&2; exit 1; }
 
   local organizer token venue_file="$OUT/venue.json" venue_id title response status
@@ -146,7 +147,11 @@ seed_schedule() {
     | ($seats | map(.seatId)) as $all
     | ([$seats[] | select(.section == "A" and (.row == "1" or .row == "2")) | .seatId]
        + [$seats | map(select(.section == "B" and .row == "1")) | sort_by(.number) | .[:20][] | .seatId]) as $hot
-    | {scheduleId: $scheduleId, performanceId: $performanceId, seatIds: $all, hotSeatIds: $hot}' \
+    | ($all | sort) as $sorted
+    # seat-conflict-refund: 서로 겹치지 않는 3석 묶음마다 A는 앞 2석, B는 뒤 2석(가운데 1석이 겹침)을 예매한다. 규모는 100쌍으로 고정한다
+    | {scheduleId: $scheduleId, performanceId: $performanceId, seatIds: $all, hotSeatIds: $hot,
+       conflictPairs: [range(0; 100) | . as $p | ($p * 3) as $i
+         | {pair: ($p + 1), seatsA: [$sorted[$i], $sorted[$i + 1]], seatsB: [$sorted[$i + 1], $sorted[$i + 2]], overlapSeatId: $sorted[$i + 1]}]}' \
     > "$OUT/schedule-$scenario.json"
   printf '회차 등록 완료: scheduleId=%s, 좌석 %s석, hot %s석 -> build/loadtest/schedule-%s.json\n' \
     "$schedule_id" "$seat_count" "$(jq '.hotSeatIds | length' "$OUT/schedule-$scenario.json")" "$scenario"
