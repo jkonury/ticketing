@@ -79,6 +79,7 @@
 ## M5. 부하 테스트와 관측
 
 - [x] Micrometer + Prometheus + Grafana, 분산 추적
+  - [x] Scouter Gateway·realtime 설정 분리, SSE 계측 비용 축소 및 개발·부하 테스트 설정 선택 통일 (효과 재측정 전)
 - [x] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
 - [ ] 기준 수치 측정 후 병목 개선, 전후 수치 기록
   - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)

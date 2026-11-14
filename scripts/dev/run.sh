@@ -3,13 +3,14 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
+source "$ROOT/scripts/lib/scouter.sh"
 usage() {
   cat <<'HELP'
 사용법: ./scripts/dev/run.sh [--all] [--infra] [--observability] [--core] [--realtime] [--gateway] [--web]
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
 --infra: PostgreSQL, Redis, fake-pg  --observability: Prometheus, Tempo, Grafana
 앱 옵션은 조합할 수 있습니다. 의존 인프라는 별도로 선택해야 합니다.
-SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
+Java 앱은 Scouter를 기본으로 연결합니다. .env 또는 환경 변수에 SCOUTER_AGENT_DIR을 지정하세요.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 앱은 이 터미널에서 관리하며 Ctrl+C로 종료합니다. Docker 컨테이너는 유지됩니다.
 HELP
@@ -31,13 +32,17 @@ for arg in "$@"; do
 done
 if $infra || $observability || $core || $gateway || $realtime; then
   [[ -f .env ]] || { echo '.env가 필요합니다. cp .env.example .env 후 값을 설정하세요.' >&2; exit 1; }
+  set -a
+  source .env
+  set +a
 fi
 if $web; then
   command -v pnpm >/dev/null || { echo 'pnpm이 필요합니다.' >&2; exit 1; }
   [[ -f web/.env.local ]] || { echo 'web/.env.local이 필요합니다. web/.env.example을 복사해 설정하세요.' >&2; exit 1; }
   [[ -d web/node_modules ]] || { echo 'web 의존성이 없습니다. cd web && pnpm install을 실행하세요.' >&2; exit 1; }
 fi
-if { $core || $realtime || $gateway; } && [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+if $core || $realtime || $gateway; then
+  [[ -n "${SCOUTER_AGENT_DIR:-}" ]] || { echo '개발 Java 앱은 Scouter를 사용합니다. .env 또는 환경 변수에 SCOUTER_AGENT_DIR을 지정하세요.' >&2; exit 1; }
   [[ -f "$SCOUTER_AGENT_DIR/scouter.agent.jar" ]] || { echo "SCOUTER_AGENT_DIR에 scouter.agent.jar가 없습니다: $SCOUTER_AGENT_DIR" >&2; exit 1; }
 fi
 pids=()
@@ -71,8 +76,8 @@ start_java() {
   local name=$1
   local -a jvm_args=("-XX:+HeapDumpOnOutOfMemoryError" "-XX:HeapDumpPath=$ROOT/build/dev/logs/$name.hprof")
   if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
-    local scouter_conf=ticketing.conf
-    [[ "$name" == realtime ]] && scouter_conf=ticketing-realtime.conf
+    local scouter_conf
+    scouter_conf=$(scouter_config_file "$name")
     jvm_args+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
       "-Dscouter.config=$ROOT/deploy/scouter/$scouter_conf"
       "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"

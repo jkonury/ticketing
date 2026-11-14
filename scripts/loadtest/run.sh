@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
+source "$ROOT/scripts/lib/scouter.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -156,9 +157,8 @@ start() {
     opts+=("-XX:StartFlightRecording=filename=$dir/$name.jfr,dumponexit=true,settings=profile,jdk.VirtualThreadPinned#threshold=0ms")
   fi
   if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
-    local scouter_conf=ticketing.conf
-    [[ "$name" == realtime ]] && scouter_conf=ticketing-realtime.conf
-    [[ "$name" == gateway ]] && scouter_conf=ticketing-realtime.conf
+    local scouter_conf
+    scouter_conf=$(scouter_config_file "$name")
     opts+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
       "-Dscouter.config=$ROOT/deploy/scouter/$scouter_conf"
       "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"

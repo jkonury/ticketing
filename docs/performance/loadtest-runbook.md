@@ -170,6 +170,10 @@ GUI로 볼 때는 `$MAT/MemoryAnalyzer`에서 hprof를 열고 Dominator Tree(보
 - 덤프: `TraceContext` 9,850개(연결당 약 55KB)가 `ThreadCallPossibleStep` 222만 개, `MethodStep` 95만 개, `ParameterizedMessageStep` 55만 개를 들고 있었다.
 - 조치: realtime은 별도 설정 파일 `deploy/scouter/ticketing-realtime.conf`를 쓰고, 여기서 `hook_async_*` 세 항목을 끄고 `*Service.*`를 메서드 추적에서 뺐다(공통 항목을 고치면 `ticketing.conf`와 같이 고친다). 1차 조치(async 훅 off, `*Service.*` 추적 제외) 후 재측정한 덤프에서도 `TraceContext` 약 9,900개가 힙의 51.5%였다. `ThreadCallPossibleStep`은 사라지고 `MethodStep`은 연결당 3개로 줄었지만 `ParameterizedMessageStep` 96만 개(보존 391MB)가 남았다. 리액터 체크포인트(`profile_reactor_checkpoint_enabled`)를 꺼도 줄지 않았다. MAT OQL로 스텝 내용을 뽑아 보니 `EXISTS key<booking:seats:{30}>` 같은 Redis 명령이었다. 2차 조치로 realtime 설정에서 `_hook_redis_enabled=false`를 두었으며 효과는 재측정 전이다.
 
+현재 설정은 Gateway도 `deploy/scouter/ticketing-gateway.conf`로 분리해 개발·부하 테스트에서 동일하게 선택한다. 두 WebFlux 앱 모두 async·Redis·Reactor·코루틴 훅과 Reactor 체크포인트, 스레드별 CPU·할당량 수집을 끈다. Reactor 훅 비활성화는 WebFlux HTTP XLog·요청 TPS·응답시간 수집도 중단하므로 HTTP 관측은 Micrometer를 사용한다. 이 설정 조합의 OOM·성능 개선 효과는 재측정 전이다.
+
+`profile_step_max_count=256`은 전송 묶음 크기다. 연결별 메모리 버퍼는 `profile_step_max_keep_in_memory_count=256`으로 별도 지정하며, 버퍼가 차면 전송 후 교체한다. 전체 스텝 생성량이나 전체 메모리의 상한은 아니다. 훅 변경은 JVM을 재시작한 뒤 확인한다.
+
 MAT로 스텝 내용 보기(인덱스가 있으면 빠르다):
 
 ```bash
