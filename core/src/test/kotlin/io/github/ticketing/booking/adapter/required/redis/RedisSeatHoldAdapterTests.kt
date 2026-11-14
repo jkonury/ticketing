@@ -79,6 +79,22 @@ class RedisSeatHoldAdapterTests(private val port: SeatHoldPort, private val redi
     }
 
     @Test
+    fun `선점 키가 유실돼 두 예매가 같은 좌석을 선점했을 때 진 쪽의 해제는 이긴 쪽의 SOLD를 AVAILABLE로 덮어쓰지 않는다`() {
+        port.hold(schedule, seats(1, 2), alice, ttl, now)
+        redis.delete(holdKey(schedule, SeatId(2)))
+        assertThat(port.hold(schedule, seats(2, 3), bob, ttl, now)).isEqualTo(HoldResult.Held)
+
+        port.markSold(schedule, seats(1, 2), alice, now)
+        port.release(schedule, seats(2, 3), bob, now)
+
+        val snapshot = redis.opsForHash<String, String>()
+        assertThat(snapshot.get(snapshotKey(schedule), "2")).isEqualTo("SOLD")
+        assertThat(snapshot.get(snapshotKey(schedule), "3")).isEqualTo("AVAILABLE")
+        assertThat(redis.hasKey(holdKey(schedule, SeatId(2)))).isFalse()
+        assertThat(redis.hasKey(holdKey(schedule, SeatId(3)))).isFalse()
+    }
+
+    @Test
     fun `판매 후에는 선점 키가 사라져도 재선점할 수 없고 판매 해제 후에는 가능하다`() {
         port.hold(schedule, seats(1), alice, ttl, now)
         port.markSold(schedule, seats(1), alice, now)
