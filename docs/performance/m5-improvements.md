@@ -131,3 +131,118 @@ Scouter 비활성에서도 지연이 남으며, 기본 풀 10의 연결 대기�
 첫 실행은 실행 중 runner 파일을 수정해 셸의 후처리가 구문 오류로 중단됐다. k6 summary·measurement·JFR은 보존됐고 회차 51의 정합성을 별도 실행으로 확인했다(로그 `/tmp/ticketing-command.JtV0yZUD`, 결과 `build/loadtest/integrity-51.json`). 나머지 세 실행의 정합성 검사도 중복 판매·DB/Redis 불일치 0건이다. 후속 실행은 runner가 `source.patch`와 풀 크기를 기록하며 `--no-scouter`로 .env를 수정하지 않고 계측 대조가 가능하다.
 
 전체 테스트와 `ktlintCheck detekt`는 통과했다. 최초 컴파일에서 jOOQ 생성 이름·타입을 잘못 사용한 오류를 수정한 후 재실행했다. E2E 최초 시도는 Docker buildx의 홈 쓰기 제한으로 실패했고 임시 Docker 설정 디렉터리로 재실행해 통과했다(로그 `/tmp/ticketing-command.kxElBnFq`, 상세 `build/e2e/logs/`). 기존 fake-pg 컨테이너도 실행 상태로 복구됐다. 문서 검사·셸 구문 검사·diff 공백 검사도 통과했다. M5 및 Step 1의 체크박스는 미완료로 유지한다.
+
+
+### 불변 좌석 사본 캐시 (2026-11-14)
+
+[ADR 0025](../adr/0025-booking-seat-copy-cache.md)에 따라 booking DB의 불변 좌석 사본을 Redis Hash로 캐시했다.
+회차 전체 JSON 대신 요청 좌석만 HMGET하고 누락된 필드만 jOOQ로 읽는다. 등록·조회 결과는 커밋 이후에만
+쓰기와 TTL 6시간을 Lua로 적용한다. 중복 등록은 캐시를 덮어쓰지 않고, 없는 좌석은 저장하지 않는다.
+판매 상태·Redis 선점·DB 판매 유니크 제약·결제 멱등성은 기존 계약을 유지한다.
+
+좌석 단위 hit/miss는 `ticketing.booking.seat.copy.cache`의 `result` 태그로 집계하고 실행별
+`prometheus.json`의 `seatCopyCache`에 보존한다. runner의 `source.patch`에는 git에 아직 추가하지 않은
+백엔드 신규 소스도 포함한다. 기존 Scouter 설정과 Gateway 설정 선택 줄은 보존했고 이번 측정은
+`--no-scouter`로 계측을 비활성화했다.
+
+검증: 전체 테스트 통과(캐시 통합 테스트 7건 포함). hit 시 DB 무접근, 부분 miss·손상·JSON null·만료,
+등록·조회 롤백, 중복 등록, Redis 명령 오류 시 DB fallback을 확인했다. 최초 정적 검사는
+`findSeats has 3 return statements which exceeds the limit of 2. [ReturnCount]`로 실패했다.
+DB 조회를 함수로 분리한 뒤 `ktlintCheck detekt`가 통과했고 E2E도 통과했다.
+E2E 로그는 `/tmp/ticketing-command.JQg3SZeM`과 `build/e2e/logs/`, 테스트 로그는
+`build/run-tests/gradle-test-out.txt`, 최종 정적 검사 로그는 `build/check-summary/gradle-out.txt`다.
+
+#### 캐시 적용 후 재측정 (`build/loadtest/runs/20261114-052543-hot-seats`)
+
+조건: hot-seats, 관측 활성·추적 0.1, `--no-scouter`, 풀 10, JFR 비활성, k6 CPU 0–3 / 앱 4–15, 3회. 기준 커밋 `4ef268f` + 미커밋 변경.
+
+| 실행 | 정시 준비 | 예매 p95 ms | SSE 성공률 | 오류율(`http_req_failed`) | 캐시 hit / miss | 중복 판매·DB/Redis 불일치 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 963 | 1,768.25 | 96.3% | 0% | 2,378 / 0 | 0 |
+| 2 | 913 | 1,426.63 | 91.3% | 0% | 2,292 / 0 | 0 |
+| 3 | 1,000 | 1,352.93 | 100% | 0% | 2,448 / 0 | 0 |
+
+**목표 미달.** 예매 p95 300ms 미만을 모든 실행에서 만족하지 못했고, 1·2회는 SSE 성공률(99.9% 초과)과 도달 인원(1,000명)도 미달이다. k6 종료 코드는 모두 99다. 좌석 사본 조회는 100% 캐시 hit(DB 조회 제거)였는데도 p95가 1.3–1.8초로 남았으므로 **좌석 사본 DB 조회는 주원인이 아니다.** 이전 진단의 남은 후보(멱등 키 조회, 연결 대기, Gateway·콜드 초기화, SSE 입장 경합)를 같은 조건에서 하나씩 분리해야 한다. 도달 인원이 다른 실행이므로 이전 단일 실행과 개선율을 계산하지 않는다. M5 체크박스는 미완료로 유지한다.
+
+#### 단계별 계측 진단 (`build/loadtest/runs/20261114-054726-hot-seats/1`)
+
+Gateway 필터 단계(`ticketing.gateway.stage`)와 core 예매 생성 단계(`ticketing.booking.create.stage`) 타이머, `pg_stat_activity` 샘플러(`pg-activity.log`)를 추가해 1회 측정했다(`--no-scouter`, 풀 10, 캐시 적용, 정시 준비 1,000명, k6 예매 p95 2,017ms, 단일 실행이라 개선율은 계산하지 않는다). 같은 날 앞선 측정(`20261114-054455`)은 계측 코드의 `!!` 때문에 신규 예매가 NPE로 실패해 무효이며 사용하지 않는다.
+
+| 구간 | p50 ms | p95 ms | 비고 |
+| --- | ---: | ---: | --- |
+| Gateway 라우트 `core-bookings-create` | 1,433 | 2,045 | k6 p95와 일치 |
+| core `/api/v1/bookings` 서버 | - | 1,187 | Gateway와의 차이가 core 앞뒤 구간 |
+| Gateway 입장 토큰 Redis 조회 | 56 | 409 | 1,000건 |
+| Gateway 본문 읽기 | 14 | 36 | |
+| Gateway rate limiter Redis | 261 | 1,226 | 모든 라우트 4,147건 |
+| core 멱등 키 조회(`existing`) | 29 | 656 | |
+| core 좌석 사본(`find-copies`) | 22 | 98 | 캐시 hit, 병목 아님 |
+| core Redis 선점(`hold`) | 79 | 631 | |
+| core 저장(`persist`) | 218 | 713 | 62건 |
+
+- DB는 한가하다: 61초 샘플링에서 연결 11개가 거의 항상 `idle`, `idle in transaction`은 insert 중 순간뿐이다. Hikari `pendingMax` 0이라 풀 포화가 아니다.
+- Redis 호출(입장 토큰·rate limiter·선점)과 DB 호출 단계가 모두 중앙값은 작고 p95만 수백 ms~1초대다. 호출 자체의 부하가 아니라 요청이 한꺼번에 몰리는 시점의 호출 전후 대기로 보인다(Redis 초당 명령 최대 약 890건). 호스트 CPU는 시작 후 첫 6초에 61~89%까지 올랐다.
+- 원인 확정 못 함. 같은 계측으로 Gateway·core의 동시 요청 수와 이벤트 루프·가상 스레드 스케줄링 지연을 직접 재야 한다.
+- 이 실행도 p95 300ms 미달이며 M5 체크박스는 미완료로 유지한다.
+
+#### 동시성 곡선·워밍업·rate limiter 대조 (2026-11-14, 각 1회)
+
+공통 조건: hot-seats(핫 좌석 100석), 관측 활성, `--no-scouter`, 풀 10, 좌석 사본 캐시 적용. `--vus`만 바꿨고 앱은 실행마다 새로 띄웠다(콜드). 모든 실행에서 중복 판매·DB/Redis 불일치 0건.
+
+| 조건 | 정시 준비 | 예매 생성 p50 ms | p95 ms | SSE 성공률 | 디렉터리(`build/loadtest/runs/`) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 콜드 50 | 50 | 270 | 283 | 100% | `20261114-055322-hot-seats` |
+| 콜드 100 | 100 | 301 | 379 | 100% | `20261114-055506-hot-seats` |
+| 콜드 200 | 177 | 419 | 507 | 88.5% | `20261114-055650-hot-seats` |
+| 콜드 500 | 430 | 790 | 1,012 | 86.0% | `20261114-055833-hot-seats` |
+| 워밍업 후 1,000 | 1,000 | 611 | 1,480 | 100% | `20261114-060017-hot-seats` |
+| 콜드 1,000, rate limiter 끔 | 491 | 571 | 1,140 | 49.1% | `20261114-060306-hot-seats` |
+
+- 동시 인원이 늘수록 p50·p95가 거의 비례해 커진다. 300ms 미만은 50명뿐이다. 50명에서도 p50이 270ms라, 폭주가 없어도 요청당 비용이 작지 않다.
+- 워밍업 후 1,000명 p95 1,480ms는 콜드 1,000명 3회(1,353~1,768ms)와 다르지 않다. **콜드 스타트는 주원인이 아니다.** 워밍업 실행은 `http_req_failed` 1.7%였고 원인은 확인하지 않았다.
+- rate limiter 끄기는 정시 준비가 491명뿐이라 다른 실행과 p95를 비교할 수 없다. rate limiter의 몫은 **판단 불가**다.
+- 200명 이상에서 정시 준비가 줄고(SSE 연결 실패) 인원이 다른 실행끼리 p95를 비교하면 안 된다. 이 SSE 실패는 별도로 조사해야 한다.
+- 워밍업 실행의 서버 누적 지표에는 워밍업 요청이 섞여 있어 단계별 분해에 쓰지 않는다. 모든 값이 1회 측정이다.
+
+#### 50명 단계별 분해 (`build/loadtest/runs/20261114-061150-hot-seats/1`, 1회)
+
+콜드, `--vus 50`, 핫 좌석 100석, 캐시 적용. 정시 준비 49명, k6 예매 생성 p50 228ms·p95 253ms, Hikari `pendingMax` 15·획득 평균 17.6ms·최대 89ms.
+
+| 단계 | p50 ms | p95 ms | 건수 |
+| --- | ---: | ---: | ---: |
+| Gateway 라우트 `core-bookings-create` 전체 | 216 | 244 | |
+| Gateway 입장 토큰 Redis 조회 | 16.5 | 22.2 | 49 |
+| Gateway 본문 읽기 | 7.3 | 13.9 | 49 |
+| Gateway rate limiter Redis(모든 라우트) | 38.9 | 148.3 | 256 |
+| Gateway 프록시(모든 라우트, core 포함) | 111 | 324 | 256 |
+| core `existing` (jOOQ EXISTS) | 16.1 | 27.3 | 49 |
+| core `find-copies` (캐시 hit) | 17.9 | 25.7 | 49 |
+| core `hold` (Redis Lua 선점) | 9.6 | 46.9 | 49 |
+| core `persist` | 32.4 | 39.0 | 26 |
+
+- 라우트 p50 216ms 중 측정된 구간은 Gateway 입장 검증 약 24ms, rate limiter 약 39ms(모든 라우트 혼합), core 단계 합 약 76ms(persist까지 가는 요청 기준)이다. 약 75ms는 측정되지 않았다(Gateway JWT 검증, Gateway→core 연결·전송, core의 Tomcat·보안 필터·직렬화).
+- 단순 조회·Redis 호출 하나가 10~18ms 걸린다. 50명 동시 도착에서도 호출당 비용이 크다. 원인은 이번 계측으로 가르지 못했다. 프록시·rate limiter는 라우트별로 나뉘어 있지 않아 booking 경로만의 값이 아니다.
+
+#### 50명 p50 분해(계측 확장)와 워밍업·JFR 확인 (2026-11-14, 각 1회)
+
+Gateway JWT 검증 단계, rate limiter·프록시 단계의 라우트 태그, core 서버 p50을 추가했다. 콜드 50명 JFR 실행은 `build/loadtest/runs/20261114-061753-hot-seats/1`(예매 p50 271ms·p95 294ms, JFR 오버헤드 포함), 워밍업 후 50명은 `20261114-062010-hot-seats/1`이다.
+
+| 구간(`core-bookings-create`, 콜드 50명 p50) | ms |
+| --- | ---: |
+| Gateway JWT 검증 | 1.3 |
+| 입장 토큰 Redis 조회 + 본문 읽기 | 24.8 |
+| rate limiter Redis | 39.1 |
+| Gateway→core 구간(프록시 192.4 − core 서버 149.5) | 약 43 |
+| core 서버 중 계측 단계 밖(149.5 − 단계 합 81) | 약 69 |
+| core 계측 단계 합(`existing` 16.1, `find-copies` 24.8, `hold` 12.6, `persist` 27.0) | 약 81 |
+| 합계 | 약 258 (라우트 p50 257) |
+
+| 50명 조건 | 예매 p50 ms | p95 ms |
+| --- | ---: | ---: |
+| 콜드(`20261114-055322`·`061150`·`061753`) | 270 · 228 · 271 | 283 · 253 · 294 |
+| 워밍업 후(`20261114-062010`) | 105 | 134 |
+
+- **50명에서는 콜드 스타트가 p50의 절반 이상을 차지한다.** 같은 앱에 한 번 먼저 부하를 보내면 p50이 약 105ms, p95가 약 134ms로 내려간다. 1,000명 폭주(워밍업 후에도 p95 1,480ms)와는 별개의 현상이다. 1회씩이라 효과 크기는 방향만 확정한다.
+- JFR(콜드 50명, core): 가상 스레드 pinned 1,061건·합 882ms·최장 13.4ms 중 405건이 `ClassLoader.loadClass`(fat jar `LaunchedClassLoader`)이고, 실행 샘플 상위가 `URL.<init>`(jar URL 열기, 클래스 찾기)다. Postgres 소켓 읽기는 p50 1.8ms·p95 6.9ms·최대 17.7ms라 단계당 10~18ms는 DB 응답 시간이 아니다. fake-pg 소켓 읽기 p50 307ms는 결제 지연 설정에 의한 것이다.
+- 약 43ms(Gateway→core)와 약 69ms(core 계측 밖)는 위 계측으로 더 쪼개지 못했다. 원인은 미확정이다.
+- 콜드 JFR 실행은 JFR 오버헤드가 있어 다른 콜드 실행과 수치를 섞지 않는다.
