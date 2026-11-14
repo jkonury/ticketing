@@ -141,6 +141,7 @@ start() {
   if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
     local scouter_conf=ticketing.conf
     [[ "$name" == realtime ]] && scouter_conf=ticketing-realtime.conf
+    [[ "$name" == gateway ]] && scouter_conf=ticketing-realtime.conf
     opts+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
       "-Dscouter.config=$ROOT/deploy/scouter/$scouter_conf"
       "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"
