@@ -86,8 +86,14 @@ class CreateBookingServiceTests {
     private val seatCopies = (1L..5L).map { ScheduleSeatCopy(scheduleId, SeatId(it), "R", "A$it", BigDecimal(100000)) }
     private val scheduleSeats = FakeScheduleSeats(setOf(scheduleId), seatCopies)
 
-    private fun service(bookings: BookingCommandPort, hold: SeatHoldPort) =
-        CreateBookingService(bookings, scheduleSeats, hold, TransactionTemplate(FakeTransactionManager()), clock)
+    private fun service(bookings: BookingCommandPort, hold: SeatHoldPort) = CreateBookingService(
+        bookings,
+        scheduleSeats,
+        hold,
+        TransactionTemplate(FakeTransactionManager()),
+        clock,
+        io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+    )
 
     private fun command(vararg seatIds: Long, key: String = "key-1", schedule: Long = 1) =
         CreateBookingCommand(7, key, schedule, seatIds.toList())

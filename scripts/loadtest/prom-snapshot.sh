@@ -55,6 +55,7 @@ bucket_q() { # <분위수> : 구간 전체의 앱·URI별 분위수(초)
   instant "histogram_quantile($1, sum by (le, application, uri) (last_over_time(http_server_requests_seconds_bucket[${DUR}s])))"
 }
 
+p50=$(bucket_q 0.5)
 p95=$(bucket_q 0.95)
 p99=$(bucket_q 0.99)
 count=$(instant "sum by (application, uri) (last_over_time(http_server_requests_seconds_count[${DUR}s]))")
@@ -81,6 +82,19 @@ pool_pending=$(range_stats 'reactor_netty_connection_provider_pending_connection
 pool_wait=$(instant "last_over_time(reactor_netty_connection_provider_pending_connections_time_seconds_bucket[${DUR}s])")
 queue_metrics=$(instant "{__name__=~\"queue_(registration|departure|admission|presence).*\"}")
 
+stage_q() { # <메트릭> <분위수> : 단계별 분위수(초)
+  instant "histogram_quantile($2, sum by (le, application, stage, route) (last_over_time($1_bucket[${DUR}s])))"
+}
+gw_stage_p50=$(stage_q ticketing_gateway_stage_seconds 0.5)
+gw_stage_p95=$(stage_q ticketing_gateway_stage_seconds 0.95)
+gw_stage_count=$(instant "sum by (application, stage, route) (last_over_time(ticketing_gateway_stage_seconds_count[${DUR}s]))")
+bk_stage_p50=$(stage_q ticketing_booking_create_stage_seconds 0.5)
+bk_stage_p95=$(stage_q ticketing_booking_create_stage_seconds 0.95)
+bk_stage_count=$(instant "sum by (application, stage) (last_over_time(ticketing_booking_create_stage_seconds_count[${DUR}s]))")
+gw_route_p95=$(instant "histogram_quantile(0.95, sum by (le, routeId) (last_over_time(spring_cloud_gateway_requests_seconds_bucket{httpMethod=\"POST\"}[${DUR}s])))")
+gw_route_p50=$(instant "histogram_quantile(0.5, sum by (le, routeId) (last_over_time(spring_cloud_gateway_requests_seconds_bucket{httpMethod=\"POST\"}[${DUR}s])))")
+seat_cache_metrics=$(instant "last_over_time(ticketing_booking_seat_copy_cache_total[${DUR}s])")
+
 snapshot_tmp=$(mktemp -d)
 trap 'rm -rf "$snapshot_tmp"' EXIT
 printf '%s' "$gateway_buckets" > "$snapshot_tmp/gateway.json"
@@ -92,11 +106,15 @@ printf '%s' "$pool_wait" > "$snapshot_tmp/wait.json"
 printf '%s' "$queue_metrics" > "$snapshot_tmp/queue.json"
 jq -n \
   --argjson from "$FROM" --argjson to "$TO" --argjson dur "$DUR" --argjson step "$STEP" \
-  --argjson p95 "$p95" --argjson p99 "$p99" --argjson count "$count" --argjson rps "$rps" \
+  --argjson p50 "$p50" --argjson p95 "$p95" --argjson p99 "$p99" --argjson count "$count" --argjson rps "$rps" \
   --argjson pending "$pending" --argjson active "$active" \
   --argjson acquireSum "$acquire_sum" --argjson acquireCount "$acquire_count" --argjson acquireMax "$acquire_max" \
   --argjson timeout "$timeout" --argjson cpu "$cpu" --argjson heap "$heap" --argjson gc "$gc" \
   --argjson vtCount "$vt_count" --argjson vtMax "$vt_max" --argjson vtFailed "$vt_failed" \
+  --argjson seatCache "$seat_cache_metrics" \
+  --argjson gwStageP50 "$gw_stage_p50" --argjson gwStageP95 "$gw_stage_p95" --argjson gwStageCount "$gw_stage_count" \
+  --argjson bkStageP50 "$bk_stage_p50" --argjson bkStageP95 "$bk_stage_p95" --argjson bkStageCount "$bk_stage_count" \
+  --argjson gwRouteP50 "$gw_route_p50" --argjson gwRouteP95 "$gw_route_p95" \
   --argjson redis "$redis" --argjson pg "$pg" \
   --slurpfile gatewayBuckets "$snapshot_tmp/gateway.json" --slurpfile hikariBuckets "$snapshot_tmp/hikari.json" \
   --slurpfile poolActive "$snapshot_tmp/active.json" --slurpfile poolIdle "$snapshot_tmp/idle.json" --slurpfile poolPending "$snapshot_tmp/pending.json" --slurpfile poolWait "$snapshot_tmp/wait.json" \
@@ -111,16 +129,21 @@ jq -n \
     hikariAcquireBuckets: $hikariBuckets[0],
     gatewayConnectionPool: {active: $poolActive[0], idle: $poolIdle[0], pending: $poolPending[0], pendingTimeBuckets: $poolWait[0]},
     queueMetrics: $queueMetrics[0],
+    seatCopyCache: $seatCache,
+    gatewayStages: {p50: $gwStageP50, p95: $gwStageP95, count: $gwStageCount},
+    bookingCreateStages: {p50: $bkStageP50, p95: $bkStageP95, count: $bkStageCount},
+    gatewayRoutePost: {p50: $gwRouteP50, p95: $gwRouteP95},
     note: "p95·p99는 구간 안 마지막 누적 분포(앱이 실행마다 새로 떠서 이번 실행의 값)이고 rps는 rate[30s]의 최대값이다(짧은 급증은 5초 scrape로 놓칠 수 있어 requests로 평균을 구한다). gauge 최대값은 \($step)초 간격 표본이라 그 사이의 순간 값은 놓칠 수 있다.",
     http: (
-      ($p95 | map({(key): .value}) | add // {}) as $p95m
+      ($p50 | map({(key): .value}) | add // {}) as $p50m
+      | ($p95 | map({(key): .value}) | add // {}) as $p95m
       | ($p99 | map({(key): .value}) | add // {}) as $p99m
       | ($count | map({(key): .value}) | add // {}) as $cm
       | ($rps | map({(key): .max}) | add // {}) as $rm
       | [($p95 + $p99 + $count | .[] | {application: .metric.application, uri: .metric.uri}), ($rps[] | {application: .metric.application, uri: .metric.uri})]
       | unique
       | map(. as $u | "\($u.application)\t\($u.uri)" as $k | $u + {
-          requests: ($cm[$k] // 0 | round), p95Seconds: $p95m[$k], p99Seconds: $p99m[$k], rpsMax: $rm[$k]
+          requests: ($cm[$k] // 0 | round), p50Seconds: $p50m[$k], p95Seconds: $p95m[$k], p99Seconds: $p99m[$k], rpsMax: $rm[$k]
         })
       | map(select(.requests > 0 or .rpsMax != null))
     ),

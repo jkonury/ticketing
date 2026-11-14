@@ -9,6 +9,9 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
+            [--warmup] [--no-rate-limit]
+--warmup은 같은 앱에서 별도 회차로 한 번 먼저 같은 부하를 보낸 뒤 새 회차로 측정합니다(k6 수치만 측정 구간이며 서버 누적 지표에는 워밍업이 섞입니다).
+--no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
@@ -26,6 +29,8 @@ VUS=
 K6_CPUS=0-3
 APP_CPUS=4-15
 NO_SCOUTER=false
+WARMUP=false
+NO_RATE_LIMIT=false
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
   case "$1" in
@@ -39,6 +44,8 @@ while (($#)); do
     --observability) OBSERVABILITY=true; shift ;;
     --keep) KEEP=true; shift ;;
     --no-scouter) NO_SCOUTER=true; shift ;;
+    --warmup) WARMUP=true; shift ;;
+    --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
     -h|--help) usage ;;
     *) printf '알 수 없는 옵션: %s\n' "$1" >&2; usage ;;
   esac
@@ -78,6 +85,12 @@ if $FAILURE_INJECT; then SUFFIX=-fi; fi
 RUN_ROOT="$OUT/runs/$STAMP-$SCENARIO$SUFFIX"
 mkdir -p "$RUN_ROOT"
 git diff --binary HEAD > "$RUN_ROOT/source.patch"
+# 미커밋 신규 소스도 측정 당시 코드를 재구성할 수 있게 남긴다.
+while IFS= read -r -d '' source_file; do
+  diff_status=0
+  git diff --no-index --binary -- /dev/null "$source_file" >> "$RUN_ROOT/source.patch" || diff_status=$?
+  ((diff_status <= 1)) || exit "$diff_status"
+done < <(git ls-files --others --exclude-standard -z -- core/src core-batch/src realtime/src gateway/src fake-pg/src)
 
 PIDS=()
 SAMPLER_PID=
@@ -160,6 +173,7 @@ write_env() {
     printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
     printf 'scenario: %s\nruns: %s\nfailure-inject: %s\njfr: %s\nobservability: %s\n' "$SCENARIO" "$RUNS" "$FAILURE_INJECT" "$JFR" "$OBSERVABILITY"
     printf 'k6-cpus: %s\napp-cpus: %s\n' "$K6_CPUS" "$APP_CPUS"
+    printf 'vus: %s\nwarmup: %s\nrate-limit: %s\n' "${VUS:-기본}" "$WARMUP" "$($NO_RATE_LIMIT && echo 비활성 || echo 활성)"
     printf 'os: %s\n' "$(uname -srm)"
     printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
     printf 'scouter: %s\n' "$([[ -n ${SCOUTER_AGENT_DIR:-} ]] && echo 활성 || echo 비활성)"
@@ -183,7 +197,9 @@ run_once() {
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
   start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar "${obs[@]}"
   start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"
-  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar "${obs[@]}"
+  local gw_env=()
+  if $NO_RATE_LIMIT; then gw_env=(TICKETING_GATEWAY_RATE_LIMIT_ENABLED=false); fi
+  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar "${gw_env[@]}" "${obs[@]}"
   health fake-pg 18090 "${PIDS[0]}" "$dir" || return 1
   health core 18080 "${PIDS[1]}" "$dir" || return 1
   health realtime 18081 "${PIDS[2]}" "$dir" || return 1
@@ -194,6 +210,16 @@ run_once() {
   if [[ $SCENARIO != smoke ]]; then
     "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
       || { echo "회차 시드 실패: $dir/seed.log" >&2; return 1; }
+  fi
+
+  if $WARMUP && [[ $SCENARIO != smoke ]]; then
+    # 콜드 스타트(클래스 로딩·JIT·연결 생성)를 걷어내려고 같은 앱에 별도 회차로 한 번 먼저 부하를 보낸다
+    local warm_vus=()
+    [[ -z $VUS ]] || warm_vus=(VUS="$VUS")
+    env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+      "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6.log" 2>&1 || true
+    "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
+      || { echo "측정 회차 시드 실패: $dir/seed.log" >&2; return 1; }
   fi
 
   local k6_args=(run --summary-export "$dir/k6-summary.json")
@@ -209,10 +235,13 @@ run_once() {
   local k6_pid=$!
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
+  "$ROOT/scripts/loadtest/sample-pg.sh" "$k6_pid" "$dir/pg-activity.log" &
+  PG_SAMPLER_PID=$!
   wait "$k6_pid" || k6_status=$?
   k6_to=$(date +%s)
   printf 'k6_end_unix_seconds: %s\nk6_exit_code: %s\n' "$k6_to" "$k6_status" >> "$dir/measurement.txt"
   wait "$SAMPLER_PID" || true
+  wait "$PG_SAMPLER_PID" || true
   SAMPLER_PID=
   if $OBSERVABILITY; then
     sleep 6 # 마지막 scrape(5초 간격)가 Prometheus에 들어오게 한다

@@ -14,6 +14,7 @@ import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -33,18 +34,29 @@ class CreateBookingService(
     private val seatHold: SeatHoldPort,
     private val tx: TransactionTemplate,
     private val clock: Clock,
+    private val registry: MeterRegistry,
 ) : CreateBookingUseCase {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    private fun <T> stage(name: String, block: () -> T): T {
+        val start = System.nanoTime()
+        try {
+            return block()
+        } finally {
+            io.micrometer.core.instrument.Timer.builder("ticketing.booking.create.stage").tag("stage", name).publishPercentileHistogram()
+                .register(registry).record(System.nanoTime() - start, java.util.concurrent.TimeUnit.NANOSECONDS)
+        }
+    }
+
     override fun create(command: CreateBookingCommand): CreateBookingResult {
         val memberId = MemberId(command.memberId)
-        return existing(memberId, command.idempotencyKey) ?: createNew(memberId, command)
+        return stage("existing") { existing(memberId, command.idempotencyKey) } ?: createNew(memberId, command)
     }
 
     private fun createNew(memberId: MemberId, command: CreateBookingCommand): CreateBookingResult {
         val scheduleId = ScheduleId(command.scheduleId)
         val requested = command.seatIds.map { SeatId(it) }
-        val copies = findCopies(scheduleId, requested)
+        val copies = stage("find-copies") { findCopies(scheduleId, requested) }
         val seats = requested.map { id -> BookedSeat(id, copies.getValue(id).price) }
 
         val now = clock.instant()
@@ -54,8 +66,8 @@ class CreateBookingService(
             Booking.create(memberId, scheduleId, seats, holdToken, now, command.idempotencyKey)
         }
 
-        holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now)?.let { return it }
-        return persist(booking, copies.mapValues { it.value.label }, requested)
+        stage("hold") { holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now) }?.let { return it }
+        return stage("persist") { persist(booking, copies.mapValues { it.value.label }, requested) }
     }
 
     private fun findCopies(scheduleId: ScheduleId, requested: List<SeatId>): Map<SeatId, ScheduleSeatCopy> {

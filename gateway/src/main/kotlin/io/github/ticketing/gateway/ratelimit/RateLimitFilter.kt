@@ -1,7 +1,9 @@
 package io.github.ticketing.gateway.ratelimit
 
 import io.github.ticketing.gateway.auth.GatewayAttributes
+import io.github.ticketing.gateway.support.timedStage
 import io.github.ticketing.gateway.support.writeProblem
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.gateway.filter.GatewayFilter
@@ -27,6 +29,8 @@ data class RateLimitProperties(
     val bookingCreate: Limit = Limit(2, BOOKING_BURST_CAPACITY),
     val streams: Limit = Limit(STREAM_REPLENISH_RATE, STREAM_BURST_CAPACITY),
     val trustedProxies: Int = 1,
+    // 부하 테스트에서 rate limiter Redis 호출의 몫을 가르는 대조용이다. 운영 기본값은 켜짐
+    val enabled: Boolean = true,
 ) {
     data class Limit(val replenishRate: Int, val burstCapacity: Long)
 }
@@ -52,7 +56,10 @@ class RateLimitFilter(
     private val limiter: RedisRateLimiter,
     private val keyResolver: RateLimitKeyResolver,
     properties: RateLimitProperties,
+    private val registry: MeterRegistry,
 ) : GatewayFilter {
+    private val enabled = properties.enabled
+
     init {
         mapOf(
             "core-api" to properties.default,
@@ -66,12 +73,19 @@ class RateLimitFilter(
     }
 
     override fun filter(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> =
+        if (!enabled) {
+            chain.filter(exchange)
+        } else {
+            filterLimited(exchange, chain)
+        }
+
+    private fun filterLimited(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> =
         keyResolver.resolve(exchange).flatMap { key ->
             val route = exchange.getRequiredAttribute<org.springframework.cloud.gateway.route.Route>(GATEWAY_ROUTE_ATTR)
-            limiter.isAllowed(route.id, key).flatMap { result ->
+            limiter.isAllowed(route.id, key).timedStage(registry, "ratelimit-redis", route.id).flatMap { result ->
                 result.headers.forEach { (name, value) -> exchange.response.headers.add(name, value) }
                 if (result.isAllowed) {
-                    chain.filter(exchange)
+                    Mono.defer { chain.filter(exchange) }.thenReturn(true).timedStage(registry, "proxy", route.id).then()
                 } else {
                     exchange.writeProblem(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "요청 한도를 초과했습니다.")
                 }

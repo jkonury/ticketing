@@ -1,6 +1,8 @@
 package io.github.ticketing.gateway.auth
 
+import io.github.ticketing.gateway.support.timedStage
 import io.github.ticketing.gateway.support.writeProblem
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.cloud.gateway.filter.GatewayFilterChain
 import org.springframework.cloud.gateway.filter.GlobalFilter
 import org.springframework.core.Ordered
@@ -18,7 +20,7 @@ object GatewayAttributes {
 const val MEMBER_HEADER = "X-Member-Id"
 
 @Component
-class JwtAuthenticationFilter(private val decoder: ReactiveJwtDecoder) :
+class JwtAuthenticationFilter(private val decoder: ReactiveJwtDecoder, private val registry: MeterRegistry) :
     GlobalFilter,
     Ordered {
     override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE
@@ -39,7 +41,7 @@ class JwtAuthenticationFilter(private val decoder: ReactiveJwtDecoder) :
         if (token.isEmpty()) {
             return sanitized.writeProblem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다.")
         }
-        return decoder.decode(token)
+        return decoder.decode(token).timedStage(registry, "jwt-decode")
             .map { jwt -> jwt.subject?.toLongOrNull() ?: throw IllegalArgumentException("유효하지 않은 회원 ID") }
             .onErrorResume { Mono.empty() }
             .flatMap { memberId ->
