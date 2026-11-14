@@ -29,11 +29,14 @@ MEMBERS_FILE=build/loadtest/members.json SCHEDULE_FILE=<schedule.json> VUS=1000 
 
 ```bash
 ./scripts/loadtest/run.sh --scenario queue-surge --tool gatling --gatling-heap 2g   # 기본 힙 2g
+./scripts/loadtest/run.sh --scenario hot-seats --tool gatling --gatling-report    # HTML 리포트 생성
 ./scripts/loadtest/run.sh --scenario queue-surge                                      # k6 기준선
 ```
 
 - 결과 디렉터리에 `gatling.log`, `gatling-summary.json`(k6 요약과 같은 형태), `gatling-gc.log`, `resources.csv`가 남는다. `resources.csv`의 3번째 열(부하 도구 RSS)과 실행 요약의 `부하 도구 최대 RSS`와 `호스트 메모리 최대 사용률`로 k6와 비교한다. 앱과 부하 도구를 한 PC에서 돌리므로 호스트 사용률이 실질 지표다(k6에서 90%에 도달한 원인). Gatling은 힙 2g 기준으로 측정하며, RSS는 힙 외 영역(메타스페이스, Netty direct 버퍼)만큼 힙보다 크다.
 - 비교는 같은 `--k6-cpus`, 같은 `--vus`, 같은 시드에서 도구를 번갈아 가며 여러 번 돌린다.
+- 기본은 HTML 리포트를 생략한다. `--gatling-report`는 `--tool gatling` 전용이며, 실행 종료 후 회차별 `gatling-results/<실행 디렉터리>/index.html`을 생성하고 요약에 경로를 출력한다. 리포트가 생성되지 않으면 실행 실패로 처리한다. 사용 여부는 `env.txt`에 남는다.
+- 리포트를 켜면 로그 파싱·HTML 생성 시간과 메모리도 측정에 포함되므로, 리포트를 생략한 기존 메모리 기준선과 비교할 때 이 차이를 고려한다.
 
 ## Gradle 없이 실행 (측정용)
 

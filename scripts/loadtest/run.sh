@@ -11,7 +11,7 @@ usage() {
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
-            [--tool k6|gatling] [--gatling-heap 2g]
+            [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report]
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
 --warmup-rounds는 워밍업 횟수입니다(기본 5, 고정). 회차별 결과는 warmup-k6-summary-<n>.json, warmup-settle-<n>.json에 남깁니다.
@@ -24,7 +24,8 @@ seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증�
 --warmup·--failure-inject와 함께 쓰지 않습니다.
 --tool gatling은 k6 대신 Gatling(loadtest/gatling)으로 같은 시나리오를 실행합니다. 부하 도구 메모리 비교용이라 queue-surge·hot-seats만 지원하며
 --warmup·--aot-cache와 함께 쓰지 않습니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
-JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 리포트는 만들지 않고(-nr) simulation.log와 GC 로그만 남깁니다.
+JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 기본은 리포트를 생략하며(-nr), --gatling-report로 HTML 리포트를 생성합니다.
+리포트는 회차별 gatling-results/<실행 디렉터리>/index.html에 저장됩니다. 리포트 생성 시간·메모리도 측정에 포함됩니다.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 USAGE
   exit 1
@@ -51,6 +52,7 @@ AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
 TOOL=k6
 GATLING_HEAP=2g
+GATLING_REPORT=false
 GATLING_DIST="$ROOT/loadtest/gatling/build/gatling-dist"
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
@@ -70,6 +72,7 @@ while (($#)); do
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
     --tool) need_value "$@"; TOOL=$2; shift 2 ;;
     --gatling-heap) need_value "$@"; GATLING_HEAP=$2; shift 2 ;;
+    --gatling-report) GATLING_REPORT=true; shift ;;
     --aot-cache) AOT_CACHE=true; shift ;;
     --aot-train-rounds) need_value "$@"; AOT_TRAIN_ROUNDS=$2; shift 2 ;;
     -h|--help) usage ;;
@@ -81,6 +84,9 @@ if [[ $SCENARIO == seat-conflict-refund ]] && { $WARMUP || $FAILURE_INJECT || $A
   echo 'seat-conflict-refund는 --warmup, --failure-inject, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
 fi
 case "$TOOL" in k6|gatling) ;; *) echo '--tool에는 k6 또는 gatling이 필요합니다.' >&2; exit 1 ;; esac
+if $GATLING_REPORT && [[ $TOOL != gatling ]]; then
+  echo '--gatling-report는 --tool gatling과 함께 사용해야 합니다.' >&2; exit 1
+fi
 [[ $GATLING_HEAP =~ ^[1-9][0-9]*[mMgG]$ ]] || { echo '--gatling-heap에는 512m, 4g 같은 값이 필요합니다.' >&2; exit 1; }
 if [[ $TOOL == gatling ]]; then
   [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats ]] || { echo '--tool gatling은 queue-surge, hot-seats만 지원합니다.' >&2; exit 1; }
@@ -225,7 +231,8 @@ write_env() {
     printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
     printf 'tool: %s\n' "$TOOL"
     if [[ $TOOL == gatling ]]; then
-      printf 'gatling: %s, 힙 -Xmx%s(고정), 리포트 생략(-nr)\n' "$(ls "$GATLING_DIST/lib" | rg -o 'gatling-core-[0-9.]+' | head -n 1)" "$GATLING_HEAP"
+      printf 'gatling: %s, 힙 -Xmx%s(고정)\n' "$(ls "$GATLING_DIST/lib" | rg -o 'gatling-core-[0-9.]+' | head -n 1)" "$GATLING_HEAP"
+      printf 'gatling-report: %s\n' "$GATLING_REPORT"
     else
       printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
     fi
@@ -457,6 +464,8 @@ run_once() {
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
   if [[ $TOOL == gatling ]]; then
     local simulation=QueueSurgeSimulation
+    local report_args=()
+    $GATLING_REPORT || report_args=(-nr)
     [[ $SCENARIO != hot-seats ]] || simulation=HotSeatsSimulation
     # 기본 사용자 홈이 읽기 전용이어도 Preferences의 잠금·저장이 가능하도록 회차별로 격리한다.
     mkdir -p "$dir/gatling-prefs/.java/.userPrefs"
@@ -466,7 +475,7 @@ run_once() {
       taskset -c "$K6_CPUS" java -Xmx"$GATLING_HEAP" "-Xlog:gc*:file=$dir/gatling-gc.log" -XX:+HeapDumpOnOutOfMemoryError "-XX:HeapDumpPath=$dir/gatling.hprof" \
       --enable-native-access=ALL-UNNAMED "-Djava.util.prefs.userRoot=$dir/gatling-prefs" \
       --add-opens java.base/java.lang=ALL-UNNAMED -cp "$GATLING_DIST/lib/*" io.gatling.app.Gatling \
-      -s "io.github.ticketing.loadtest.$simulation" -rf "$dir/gatling-results" -nr > "$load_log" 2>&1 &
+      -s "io.github.ticketing.loadtest.$simulation" -rf "$dir/gatling-results" "${report_args[@]}" > "$load_log" 2>&1 &
   else
     env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
       BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
@@ -582,6 +591,20 @@ run_once() {
       script_ok=false
     fi
     reqs='n/a(리포트 생략)'
+    if $GATLING_REPORT; then
+      reqs='n/a(HTML 리포트 참고)'
+      local report_file report_found=false
+      for report_file in "$dir"/gatling-results/*/index.html; do
+        if [[ -s $report_file ]]; then
+          SUMMARY+=("run $n: Gatling HTML 리포트 $report_file")
+          report_found=true
+        fi
+      done
+      if ! $report_found; then
+        thresholds="$thresholds, HTML 리포트 생성 실패(gatling.log 참고)"
+        script_ok=false
+      fi
+    fi
     failed=$(rg -o 'Global: percentage of failed events.*actual : [0-9.]+' "$load_log" | head -n 1 || true)
     p95=$(rg -o 'booking_create: 95th percentile.*actual : [0-9.]+' "$load_log" | rg -o 'actual : [0-9.]+' | head -n 1 || true)
     : "${failed:=n/a}" "${p95:=n/a}"
