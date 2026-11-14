@@ -79,6 +79,8 @@ start_java() {
     local scouter_conf
     scouter_conf=$(scouter_config_file "$name")
     jvm_args+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
+      "--add-opens=java.base/java.lang=ALL-UNNAMED"
+      "--add-exports=java.base/sun.net=ALL-UNNAMED"
       "-Dscouter.config=$ROOT/deploy/scouter/$scouter_conf"
       "-Dnet_collector_ip=${SCOUTER_COLLECTOR_IP:-127.0.0.1}"
       "-Dobj_name=$name" -Djdk.attach.allowAttachSelf=true)
