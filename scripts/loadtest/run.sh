@@ -9,8 +9,9 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
-            [--warmup] [--no-rate-limit]
---warmup은 같은 앱에서 별도 회차로 한 번 먼저 같은 부하를 보낸 뒤 새 회차로 측정합니다(k6 수치만 측정 구간이며 서버 누적 지표에는 워밍업이 섞입니다).
+            [--warmup [--warmup-rounds N]] [--no-rate-limit]
+--warmup은 같은 앱에서 별도 회차로 먼저 같은 부하를 보낸 뒤 새 회차로 측정합니다(k6 수치만 측정 구간이며 서버 누적 지표에는 워밍업이 섞입니다).
+--warmup-rounds는 워밍업 횟수입니다(기본 1). 회차별 결과는 warmup-k6-summary-<n>.json에 남깁니다.
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
@@ -30,6 +31,7 @@ K6_CPUS=0-3
 APP_CPUS=4-15
 NO_SCOUTER=false
 WARMUP=false
+WARMUP_ROUNDS=1
 NO_RATE_LIMIT=false
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
@@ -45,6 +47,7 @@ while (($#)); do
     --keep) KEEP=true; shift ;;
     --no-scouter) NO_SCOUTER=true; shift ;;
     --warmup) WARMUP=true; shift ;;
+    --warmup-rounds) need_value "$@"; WARMUP_ROUNDS=$2; shift 2 ;;
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
     -h|--help) usage ;;
     *) printf '알 수 없는 옵션: %s\n' "$1" >&2; usage ;;
@@ -52,6 +55,7 @@ while (($#)); do
 done
 case "$SCENARIO" in smoke|queue-surge|hot-seats) ;; *) usage ;; esac
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+[[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ -z $VUS || $VUS =~ ^[1-9][0-9]*$ ]] || { echo '--vus에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 
 for command in docker curl java jq taskset; do
@@ -174,7 +178,7 @@ write_env() {
     printf 'k6: %s\n' "$("$OUT/k6" version 2>&1 | head -n 1)"
     printf 'scenario: %s\nruns: %s\nfailure-inject: %s\njfr: %s\nobservability: %s\n' "$SCENARIO" "$RUNS" "$FAILURE_INJECT" "$JFR" "$OBSERVABILITY"
     printf 'k6-cpus: %s\napp-cpus: %s\n' "$K6_CPUS" "$APP_CPUS"
-    printf 'vus: %s\nwarmup: %s\nrate-limit: %s\n' "${VUS:-기본}" "$WARMUP" "$($NO_RATE_LIMIT && echo 비활성 || echo 활성)"
+    printf 'vus: %s\nwarmup: %s\nwarmup-rounds: %s\nrate-limit: %s\n' "${VUS:-기본}" "$WARMUP" "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)" "$($NO_RATE_LIMIT && echo 비활성 || echo 활성)"
     printf 'os: %s\n' "$(uname -srm)"
     printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
     printf 'scouter: %s\n' "$([[ -n ${SCOUTER_AGENT_DIR:-} ]] && echo 활성 || echo 비활성)"
@@ -215,12 +219,14 @@ run_once() {
 
   if $WARMUP && [[ $SCENARIO != smoke ]]; then
     # 콜드 스타트(클래스 로딩·JIT·연결 생성)를 걷어내려고 같은 앱에 별도 회차로 한 번 먼저 부하를 보낸다
-    local warm_vus=()
+    local warm_vus=() round
     [[ -z $VUS ]] || warm_vus=(VUS="$VUS")
-    env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-      "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6.log" 2>&1 || true
-    "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
-      || { echo "측정 회차 시드 실패: $dir/seed.log" >&2; return 1; }
+    for ((round = 1; round <= WARMUP_ROUNDS; round++)); do
+      env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+        "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6-$round.log" 2>&1 || true
+      "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
+        || { echo "워밍업 $round회 뒤 회차 시드 실패: $dir/seed.log" >&2; return 1; }
+    done
   fi
 
   local k6_args=(run --summary-export "$dir/k6-summary.json")
