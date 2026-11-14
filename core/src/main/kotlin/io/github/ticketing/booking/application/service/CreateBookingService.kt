@@ -15,6 +15,7 @@ import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -22,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * Redis 선점은 DB 트랜잭션 밖에서 하고, 저장만 짧은 트랜잭션으로 감싼다.
@@ -38,22 +40,23 @@ class CreateBookingService(
 ) : CreateBookingUseCase {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    private val stageTimers: Map<String, Timer> = STAGES.associateWith { name ->
+        Timer.builder("ticketing.booking.create.stage").tag("stage", name).publishPercentileHistogram().register(registry)
+    }
+
     private fun <T> stage(name: String, block: () -> T): T {
         val start = System.nanoTime()
         try {
             return block()
         } finally {
-            io.micrometer.core.instrument.Timer.builder("ticketing.booking.create.stage").tag("stage", name).publishPercentileHistogram()
-                .register(registry).record(System.nanoTime() - start, java.util.concurrent.TimeUnit.NANOSECONDS)
+            stageTimers.getValue(name).record(System.nanoTime() - start, TimeUnit.NANOSECONDS)
         }
     }
 
+    // 멱등 재호출은 조회 없이 진행한다. 자기 좌석이 선점·판매 상태면 holdOrExisting이,
+    // 좌석이 풀린 뒤면 persist의 (member_id, idempotency_key) 유니크 위반이 기존 예매를 돌려준다
     override fun create(command: CreateBookingCommand): CreateBookingResult {
         val memberId = MemberId(command.memberId)
-        return stage("existing") { existing(memberId, command.idempotencyKey) } ?: createNew(memberId, command)
-    }
-
-    private fun createNew(memberId: MemberId, command: CreateBookingCommand): CreateBookingResult {
         val scheduleId = ScheduleId(command.scheduleId)
         val requested = command.seatIds.map { SeatId(it) }
         val copies = stage("find-copies") { findCopies(scheduleId, requested) }
@@ -114,5 +117,9 @@ class CreateBookingService(
         val booking = bookings.findByMemberAndIdempotencyKey(memberId, key) ?: return null
         val labels = scheduleSeats.findSeats(booking.scheduleId, booking.seats.map { it.seatId }).associate { it.seatId to it.label }
         return CreateBookingResult(booking.toResult(labels), created = false)
+    }
+
+    private companion object {
+        val STAGES = listOf("find-copies", "hold", "persist")
     }
 }

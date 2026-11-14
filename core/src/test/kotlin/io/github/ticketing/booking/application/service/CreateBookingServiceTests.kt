@@ -16,6 +16,7 @@ import io.github.ticketing.booking.domain.SeatId
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.AbstractPlatformTransactionManager
@@ -43,6 +44,9 @@ class CreateBookingServiceTests {
         val stored = mutableListOf<Booking>()
         override fun save(booking: Booking): Booking {
             failOnSave?.let { throw it }
+            if (findByMemberAndIdempotencyKey(booking.memberId, booking.idempotencyKey) != null) {
+                throw DataIntegrityViolationException("uk_booking_member_idempotency_key")
+            }
             val saved = Booking.restore(
                 BookingId(stored.size + 1L), booking.memberId, booking.scheduleId, booking.seats, booking.holdToken,
                 booking.idempotencyKey, 0, booking.createdAt, booking.expiresAt, booking.status, null, null, null, null,
@@ -124,7 +128,23 @@ class CreateBookingServiceTests {
     }
 
     @Test
-    fun `같은 멱등 키로 다시 요청하면 기존 예매를 돌려주고 선점하지 않는다`() {
+    fun `자기 좌석이 아직 선점 중일 때 같은 멱등 키로 다시 요청하면 기존 예매를 돌려준다`() {
+        val bookings = FakeBookings()
+        val hold = FakeSeatHold()
+        val service = service(bookings, hold)
+        val first = service.create(command(1))
+        hold.result = HoldResult.Unavailable(listOf(SeatId(1)))
+
+        val second = service.create(command(1))
+
+        assertThat(second.created).isFalse()
+        assertThat(second.booking.bookingId).isEqualTo(first.booking.bookingId)
+        assertThat(hold.held).hasSize(1)
+        assertThat(bookings.stored).hasSize(1)
+    }
+
+    @Test
+    fun `좌석이 풀린 뒤 같은 멱등 키로 다시 요청하면 선점을 해제하고 기존 예매를 돌려준다`() {
         val bookings = FakeBookings()
         val hold = FakeSeatHold()
         val service = service(bookings, hold)
@@ -134,7 +154,8 @@ class CreateBookingServiceTests {
 
         assertThat(second.created).isFalse()
         assertThat(second.booking.bookingId).isEqualTo(first.booking.bookingId)
-        assertThat(hold.held).hasSize(1)
+        assertThat(hold.held).hasSize(2)
+        assertThat(hold.released).containsExactly(hold.held[1])
         assertThat(bookings.stored).hasSize(1)
     }
 
@@ -150,6 +171,20 @@ class CreateBookingServiceTests {
             }
 
         assertThat(bookings.stored).isEmpty()
+    }
+
+    @Test
+    fun `다른 요청이 좌석을 먼저 선점했으면 409이고 승자의 예매는 그대로다`() {
+        val bookings = FakeBookings()
+        val hold = FakeSeatHold()
+        val winner = service(bookings, hold).create(command(1, key = "winner"))
+        hold.result = HoldResult.Unavailable(listOf(SeatId(1)))
+
+        assertThatThrownBy { service(bookings, hold).create(command(1, key = "loser")) }
+            .isInstanceOf(SeatAlreadyHeldException::class.java)
+
+        assertThat(bookings.stored.map { it.idempotencyKey }).containsExactly("winner")
+        assertThat(winner.created).isTrue()
     }
 
     @Test
