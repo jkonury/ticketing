@@ -10,8 +10,10 @@ usage() {
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
---warmup은 같은 앱에서 별도 회차로 먼저 같은 부하를 보낸 뒤 새 회차로 측정합니다(k6 수치만 측정 구간이며 서버 누적 지표에는 워밍업이 섞입니다).
---warmup-rounds는 워밍업 횟수입니다(기본 1). 회차별 결과는 warmup-k6-summary-<n>.json에 남깁니다.
+--warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
+끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
+--warmup-rounds는 워밍업 횟수입니다(기본 5, 고정). 회차별 결과는 warmup-k6-summary-<n>.json, warmup-settle-<n>.json에 남깁니다.
+서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
@@ -32,7 +34,11 @@ K6_CPUS=0-3
 APP_CPUS=4-15
 NO_SCOUTER=false
 WARMUP=false
-WARMUP_ROUNDS=1
+WARMUP_ROUNDS=5
+# 워밍업 한 회차의 비동기 처리 완료 대기 상한(초)과 대기열 정리 대기 상한(초). 넘으면 그 실행은 실패로 둔다
+WARMUP_SETTLE_TIMEOUT=120
+WARMUP_QUEUE_TIMEOUT=30
+METRIC_TARGETS=(core=18080 realtime=18081 gateway=18000 fake-pg=18090)
 AOT_CACHE=false
 AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
@@ -195,6 +201,11 @@ write_env() {
     printf 'scenario: %s\nruns: %s\nfailure-inject: %s\njfr: %s\nobservability: %s\n' "$SCENARIO" "$RUNS" "$FAILURE_INJECT" "$JFR" "$OBSERVABILITY"
     printf 'k6-cpus: %s\napp-cpus: %s\n' "$K6_CPUS" "$APP_CPUS"
     printf 'vus: %s\nwarmup: %s\nwarmup-rounds: %s\nrate-limit: %s\n' "${VUS:-기본}" "$WARMUP" "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)" "$($NO_RATE_LIMIT && echo 비활성 || echo 활성)"
+    if $WARMUP; then
+      printf 'warmup-fixed-load: 시나리오 기본 부하(VU %s)를 %s회, 회차마다 새 회차·좌석, 별도 멱등 키\n' "${VUS:-시나리오 기본}" "$WARMUP_ROUNDS"
+      printf 'warmup-completion: 회차마다 결제 요청 뒤 PENDING 예매 0건(상한 %s초), 대기열 waiting 0·queue:active 제외(상한 %s초). 미달이면 실행 실패\n' "$WARMUP_SETTLE_TIMEOUT" "$WARMUP_QUEUE_TIMEOUT"
+      printf 'warmup-jvm-restart: 없음\n'
+    fi
     printf 'os: %s\n' "$(uname -srm)"
     printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
     printf 'scouter: %s\n' "$([[ -n ${SCOUTER_AGENT_DIR:-} ]] && echo 활성 || echo 비활성)"
@@ -227,6 +238,61 @@ start_apps() {
   health gateway 18000 "${PIDS[3]}" "$dir" || return 1
 }
 
+psql_q() { # booking 스키마 조회용. 스키마를 넘는 조인은 하지 않는다
+  docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt -c "$1"' sh "$1"
+}
+redis_q() { docker compose exec -T redis redis-cli --raw "$@" | tr -d '\r'; }
+
+# collect_metrics <출력 파일>: 앱 지표(누적 카운터)를 직접 읽는다. 관측 스택이 있으면 Prometheus 마지막 scrape 시각도 남긴다
+collect_metrics() {
+  local prom=()
+  if $OBSERVABILITY; then prom=(--prometheus http://localhost:19090); fi
+  python3 "$ROOT/scripts/loadtest/metrics-delta.py" collect "$1" "${prom[@]}" "${METRIC_TARGETS[@]}"
+}
+
+# warmup_settle <dir> <round> <schedule_id> <k6 종료 코드>: 워밍업 회차의 비동기 처리가 끝났는지 확인하고 warmup-settle-<round>.json을 남긴다.
+# 결제 요청이 나간 예매가 모두 확정·취소되고, 대기열 waiting이 비며 queue:active에서 빠질 때까지 기다린다. 삭제·flush는 하지 않는다.
+warmup_settle() {
+  local dir=$1 round=$2 schedule_id=$3 k6_code=$4
+  local started=$SECONDS pending statuses waiting active admitted_keys settled=false queue_settled=false
+  while :; do
+    pending=$(psql_q "SELECT count(*) FROM booking.booking WHERE schedule_id = $schedule_id AND status = 'PENDING' AND payment_requested_at IS NOT NULL")
+    ((pending == 0)) && { settled=true; break; }
+    ((SECONDS - started >= WARMUP_SETTLE_TIMEOUT)) && break
+    sleep 1
+  done
+  local queue_started=$SECONDS
+  while :; do
+    waiting=$(redis_q ZCARD "queue:waiting:{$schedule_id}")
+    active=$(redis_q SISMEMBER queue:active "$schedule_id")
+    if ((waiting == 0 && active == 0)); then queue_settled=true; break; fi
+    ((SECONDS - queue_started >= WARMUP_QUEUE_TIMEOUT)) && break
+    sleep 1
+  done
+  statuses=$(psql_q "SELECT coalesce(jsonb_object_agg(status, n), '{}'::jsonb) FROM (SELECT status, count(*) AS n FROM booking.booking WHERE schedule_id = $schedule_id GROUP BY status) t")
+  admitted_keys=$(redis_q --scan --pattern "queue:admitted:{$schedule_id}:*" | grep -c . || true)
+  jq -n --argjson round "$round" --argjson scheduleId "$schedule_id" --argjson k6ExitCode "$k6_code" \
+    --argjson pending "$pending" --argjson settled "$settled" --argjson waiting "$waiting" --argjson active "$active" \
+    --argjson queueSettled "$queue_settled" --argjson statuses "$statuses" --argjson admittedKeys "$admitted_keys" \
+    --argjson waitedSeconds "$((SECONDS - started))" --argjson settleLimit "$WARMUP_SETTLE_TIMEOUT" --argjson queueLimit "$WARMUP_QUEUE_TIMEOUT" '
+    {round: $round, warmupScheduleId: $scheduleId, k6ExitCode: $k6ExitCode, bookingsByStatus: $statuses,
+     paymentRequestedPending: $pending, paymentSettled: $settled, waitedSeconds: $waitedSeconds, settleLimitSeconds: $settleLimit,
+     queueWaiting: $waiting, queueActiveMember: ($active == 1), queueSettled: $queueSettled, queueLimitSeconds: $queueLimit,
+     leftoverAdmittedKeys: $admittedKeys,
+     note: "leftoverAdmittedKeys는 TTL로 만료되며 키에 회차 ID가 들어 있어 본 회차와 겹치지 않는다(삭제하지 않음)."}' > "$dir/warmup-settle-$round.json"
+  $settled && $queue_settled
+}
+
+# 워밍업 회차와 본 측정 회차의 격리를 확인한다(회차 ID·멱등 키가 겹치지 않음). 결과: isolation.json
+check_isolation() {
+  local dir=$1 measure_id=$2 warm_ids=$3 overlap
+  overlap=$(psql_q "SELECT count(*) FROM (SELECT idempotency_key FROM booking.booking WHERE schedule_id = $measure_id INTERSECT SELECT idempotency_key FROM booking.booking WHERE schedule_id IN ($warm_ids)) t")
+  jq -n --argjson measure "$measure_id" --argjson warm "[$warm_ids]" --argjson overlap "$overlap" '
+    {measurementScheduleId: $measure, warmupScheduleIds: $warm, scheduleIdsDistinct: ($warm | index($measure) == null),
+     bookingIdempotencyKeyOverlap: $overlap, isolated: (($warm | index($measure) == null) and $overlap == 0)}' > "$dir/isolation.json"
+  [[ $(jq -r .isolated "$dir/isolation.json") == true ]]
+}
+
 SUMMARY=()
 run_once() {
   local n=$1 dir="$RUN_ROOT/$1"
@@ -244,16 +310,34 @@ run_once() {
       || { echo "회차 시드 실패: $dir/seed.log" >&2; return 1; }
   fi
 
-  if $WARMUP && [[ $SCENARIO != smoke ]]; then
-    # 콜드 스타트(클래스 로딩·JIT·연결 생성)를 걷어내려고 같은 앱에 별도 회차로 한 번 먼저 부하를 보낸다
-    local warm_vus=() round
+  local warm_ok=true warm_ids= server_delta_ok=true
+  if $WARMUP; then
+    # 콜드 스타트(클래스 로딩·JIT·연결 생성)를 걷어내려고 같은 앱(재시작 없음)에 별도 회차로 먼저 같은 부하를 N회 보낸다.
+    # 회차마다 새 공연 회차·좌석을 시드하고 멱등 키는 요청마다 새로 만든다. 서버 지표 사전값은 워밍업 직전에 직접 수집한다.
+    collect_metrics "$dir/server-metrics-pre-warmup.json" || { echo "워밍업 전 지표 수집 실패: $dir/server-metrics-pre-warmup.json" >&2; return 1; }
+    local warm_vus=() round warm_schedule warm_status
     [[ -z $VUS ]] || warm_vus=(VUS="$VUS")
     for ((round = 1; round <= WARMUP_ROUNDS; round++)); do
+      warm_schedule=
+      [[ $SCENARIO == smoke ]] || warm_schedule=$(jq -r .scheduleId "$schedule_file")
+      warm_status=0
       env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-        "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6-$round.log" 2>&1 || true
-      "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
-        || { echo "워밍업 $round회 뒤 회차 시드 실패: $dir/seed.log" >&2; return 1; }
+        READINESS_FILE="$dir/warmup-readiness-$round.json" \
+        "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6-$round.log" 2>&1 || warm_status=$?
+      if [[ $SCENARIO != smoke ]]; then
+        warm_ids="${warm_ids:+$warm_ids,}$warm_schedule"
+        if ! warmup_settle "$dir" "$round" "$warm_schedule" "$warm_status"; then
+          warm_ok=false
+          echo "워밍업 $round회 비동기 처리가 상한 안에 끝나지 않았습니다: $dir/warmup-settle-$round.json" >&2
+        fi
+        "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
+          || { echo "워밍업 $round회 뒤 회차 시드 실패: $dir/seed.log" >&2; return 1; }
+      elif ((warm_status != 0)); then
+        warm_ok=false
+        echo "smoke 워밍업 $round회 실패(종료 코드 $warm_status): $dir/warmup-k6-$round.log" >&2
+      fi
     done
+    $warm_ok || return 1
   fi
 
   local k6_args=(run --summary-export "$dir/k6-summary.json")
@@ -261,11 +345,13 @@ run_once() {
   local k6_status=0 vus_env=()
   [[ -z $VUS ]] || vus_env=(VUS="$VUS")
   local k6_from k6_to
+  # 본 부하 직전 직접 수집(서버 지표 사전값). 워밍업이 있으면 워밍업과 시드 요청은 여기까지의 값에 들어간다
+  collect_metrics "$dir/server-metrics-pre.json" || { echo "본 측정 전 지표 수집 실패: $dir/server-metrics-pre.json" >&2; return 1; }
   k6_from=$(date +%s)
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
   env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
     BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-    "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
+    READINESS_FILE="$dir/readiness.json" "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6.log" 2>&1 &
   local k6_pid=$!
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
@@ -274,13 +360,45 @@ run_once() {
   wait "$k6_pid" || k6_status=$?
   k6_to=$(date +%s)
   printf 'k6_end_unix_seconds: %s\nk6_exit_code: %s\n' "$k6_to" "$k6_status" >> "$dir/measurement.txt"
+  # 본 부하 직후 직접 수집(서버 지표 사후값)
+  collect_metrics "$dir/server-metrics-post.json" || { server_delta_ok=false; echo "본 측정 후 지표 수집 실패: $dir/server-metrics-post.json" >&2; }
   wait "$SAMPLER_PID" || true
   wait "$PG_SAMPLER_PID" || true
   SAMPLER_PID=
+
+  # 서버 지표 차분: 본 부하 직전·직후 직접 수집값의 차이만 쓴다(워밍업·시드 요청 제외)
+  local delta_status=0
+  if $server_delta_ok; then
+    python3 "$ROOT/scripts/loadtest/metrics-delta.py" diff "$dir/server-metrics-pre.json" "$dir/server-metrics-post.json" "$dir/server-delta.json" \
+      --scenario "$SCENARIO" --k6-summary "$dir/k6-summary.json" --label measurement > "$dir/server-delta.log" 2>&1 || delta_status=$?
+    ((delta_status != 2)) || { server_delta_ok=false; echo "서버 지표 차분 오류(reset·누락): $dir/server-delta.log" >&2; }
+    if ((delta_status == 1)); then echo "통제 입력 불일치: $dir/server-delta.log" >&2; fi
+  fi
+  printf 'server_delta_valid: %s\nserver_delta_controlled_inputs: %s\n' "$($server_delta_ok && echo yes || echo no)" "$( ((delta_status == 1)) && echo 불일치 || echo 일치·판정불가)" >> "$dir/measurement.txt"
+  if $WARMUP; then
+    # 워밍업 구간(워밍업 직전~본 부하 직전) 차분은 워밍업 요청이 이 구간에만 들어갔음을 확인하는 통제 입력이다
+    if [[ $SCENARIO != smoke ]]; then
+      jq -s '{metrics: {flow_booking_attempt: {count: (map(.metrics.flow_booking_attempt.count // 0) | add)}, http_reqs: {count: (map(.metrics.http_reqs.count // 0) | add)}}}' \
+        "$dir"/warmup-k6-summary-*.json > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
+    else
+      jq -s '{metrics: {http_reqs: {count: (map(.metrics.http_reqs.count // 0) | add)}}}' "$dir"/warmup-k6-summary-*.json > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
+    fi
+    python3 "$ROOT/scripts/loadtest/metrics-delta.py" diff "$dir/server-metrics-pre-warmup.json" "$dir/server-metrics-pre.json" "$dir/server-delta-warmup.json" \
+      --scenario "$SCENARIO" --k6-summary "$dir/warmup-k6-summary-total.json" --label warmup > "$dir/server-delta-warmup.log" 2>&1 || true
+  fi
   if $OBSERVABILITY; then
     sleep 6 # 마지막 scrape(5초 간격)가 Prometheus에 들어오게 한다
-    "$ROOT/scripts/loadtest/prom-snapshot.sh" "$k6_from" "$k6_to" "$dir" > "$dir/prom-snapshot.log" 2>&1 \
+    local snapshot_to=$k6_to
+    ((snapshot_to > k6_from)) || snapshot_to=$((k6_from + 1)) # 1초 미만 실행(smoke)도 구간이 비지 않게 한다
+    "$ROOT/scripts/loadtest/prom-snapshot.sh" "$k6_from" "$snapshot_to" "$dir" > "$dir/prom-snapshot.log" 2>&1 \
       || echo "Prometheus 지표 추출 실패: $dir/prom-snapshot.log" >&2
+    if $WARMUP && [[ -f $dir/prometheus.json ]]; then
+      # 구간 안 마지막 누적값(last_over_time)에는 워밍업 요청이 섞이므로 워밍업 계열에서는 제거한다. 차분은 server-delta.json을 쓴다
+      jq '.http |= map({application, uri, rpsMax}) | del(.gatewayRouteBuckets, .hikariAcquireBuckets, .queueMetrics, .seatCopyCache, .gatewayStages, .bookingCreateStages, .gatewayRoutePost, .gcPauseSeconds)
+        | .gatewayConnectionPool |= del(.pendingTimeBuckets) | .hikari |= map_values(del(.acquireCount, .acquireAvgSeconds, .timeouts)) | .virtualThreads |= map_values(del(.pinnedEvents))
+        | .warmupSeries = "워밍업 계열: 누적 히스토그램·카운터 항목은 server-delta.json의 직접 수집 차분을 쓴다. 남은 값(rps·게이지 최대·cpu·heap)은 측정 구간 5초 표본이다."' \
+        "$dir/prometheus.json" > "$dir/prometheus.json.tmp" && mv "$dir/prometheus.json.tmp" "$dir/prometheus.json"
+    fi
   fi
 
   local integrity='해당 없음' integrity_ok=true
@@ -295,6 +413,17 @@ run_once() {
       integrity_ok=false
     fi
     cp "$OUT/integrity-$schedule_id.json" "$dir/integrity.json" 2>/dev/null || true
+  fi
+
+  local isolation='해당 없음' isolation_ok=true
+  if $WARMUP && [[ $SCENARIO != smoke ]]; then
+    if check_isolation "$dir" "$(jq -r .scheduleId "$schedule_file")" "$warm_ids"; then isolation='격리 확인'; else isolation='격리 위반(isolation.json 참고)'; isolation_ok=false; fi
+  fi
+  # 시나리오 B: 1,000명 동시 경합 도달 여부. 미달·지각은 실패 근거로 남기며 합격 근거로 쓰지 않는다
+  local readiness='해당 없음'
+  if [[ $SCENARIO == hot-seats && -f $dir/readiness.json ]]; then
+    readiness=$(jq -r '"정시 준비 \(.readyOnTime // "기록 없음")/\(.vus), 지각 \(.readyLate // "기록 없음"), 예매 시도 \(.bookingAttempt // "기록 없음"), 동시 경합 \(if .fullContention then "충족" else "미충족(합격 근거 아님)" end)"' "$dir/readiness.json")
+    printf 'b_readiness: %s\n' "$readiness" >> "$dir/measurement.txt"
   fi
 
   cleanup # SIGTERM으로 종료해 JFR이 파일로 남게 한다
@@ -313,11 +442,12 @@ run_once() {
     thresholds="$thresholds, 스크립트 예외 발생(k6.log의 source=stacktrace 참고)"
     script_ok=false
   fi
+  if $WARMUP && ! $server_delta_ok; then script_ok=false; fi
   reqs=$(jq -r '.metrics.http_reqs.count // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
   failed=$(jq -r '.metrics.http_req_failed | (.value // .rate) // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
   p95=$(jq -r '.metrics["http_req_duration{name:booking_create}"]["p(95)"] // "n/a"' "$dir/k6-summary.json" 2>/dev/null || echo n/a)
-  SUMMARY+=("run $n: thresholds $thresholds, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 디렉터리 $dir")
-  $script_ok && $integrity_ok
+  SUMMARY+=("run $n: thresholds $thresholds, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 워밍업 $($WARMUP && echo "$WARMUP_ROUNDS회, $isolation" || echo 없음), 서버 차분 $($server_delta_ok && echo 유효 || echo 오류), B 준비 $readiness, 디렉터리 $dir")
+  $script_ok && $integrity_ok && $isolation_ok
 }
 
 AOT_DIR="$RUN_ROOT/aot"

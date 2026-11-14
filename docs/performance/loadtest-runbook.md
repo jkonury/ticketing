@@ -80,6 +80,20 @@ A는 모든 VU가 끝나면 즉시 종료하지만 최대 15분과 종료 유예
 
 jar를 풀고 학습 기동(hot-seats 부하 N회)으로 캐시를 만든 뒤, 측정 기동마다 `-XX:AOTMode=on`으로 새 프로세스를 띄운다. 캐시를 못 쓰면 기동이 실패한다. 학습은 실행당 1회이며 `aot/train/`에 로그가 남는다. `env.txt`에 사용 여부·학습 횟수·캐시 크기가 기록되고 `<앱>-aot.log`로 캐시 사용을 확인한다. `--warmup`과 함께 쓰지 않는다. 결정 배경은 [ADR 0026](../adr/0026-aot-cache-startup.md)이다.
 
+### 워밍업 실행 (`--warmup`)
+
+```bash
+./scripts/loadtest/run.sh --scenario hot-seats --warmup --runs 3 --observability
+```
+
+기본은 위의 콜드 실행이다. `--warmup`은 **같은 JVM을 재시작하지 않고** 같은 시나리오 부하를 `--warmup-rounds`회(기본 5, 실행 설정에 고정) 먼저 보낸 뒤 새 회차·좌석으로 본 측정을 한다. 워밍업 계열은 콜드 계열과 별도 비교 대상이며 서버 코드 개선율에 섞지 않는다. `--aot-cache`와 함께 쓰지 않는다.
+
+- 회차마다 새 공연 회차·좌석을 시드하고 멱등 키는 요청마다 새로 만든다. 한 회차가 끝나면 결제 요청이 나간 PENDING 예매가 0건이 될 때까지(상한 120초), 대기열 waiting이 비고 `queue:active`에서 빠질 때까지(상한 30초) 기다린다. 상한 안에 끝나지 않으면 실행이 실패하고 `warmup-settle-<n>.json`에 상태가 남는다. DB·Redis를 지우거나 flush하지 않는다. 남은 입장 키는 TTL로 만료되며 회차 ID가 달라 본 부하와 겹치지 않는다.
+- 산출물: `warmup-k6-summary-<n>.json`·`warmup-readiness-<n>.json`(워밍업 회차별 k6), `k6-summary.json`·`readiness.json`(본 측정), `isolation.json`(회차 ID·멱등 키 겹침 0 확인), `server-metrics-pre-warmup.json`·`server-metrics-pre.json`·`server-metrics-post.json`(직접 수집한 누적 지표), `server-delta.json`(본 측정 차분), `server-delta-warmup.json`(워밍업 구간 차분, 워밍업 요청이 이 구간에만 들어갔는지 확인).
+- 서버 지표는 `server-delta.json`이 기준이다. 본 부하 직전·직후에 앱의 `/actuator/prometheus`를 직접 읽어 누적 카운터·히스토그램 버킷의 차분으로 p50/p95/p99, Hikari 획득 평균, GC pause 합계, 대기열 카운터를 계산한다. 이후에만 있는 시계열의 사전값은 0이고, 값이 줄었거나(reset) 사라진 시계열은 오류(`valid: false`)다. `controlledInputChecks`는 k6 예매 시도 수와 서버 차분(Gateway `core-bookings-create`, core `POST /api/v1/bookings`)이 같은지 확인한다. 이 계열의 `prometheus.json`에서는 구간 마지막 누적값(`last_over_time`)을 쓰는 항목을 제거했고 rps·게이지 최대·CPU·힙만 남긴다.
+- 한계: 게이지 최대값(Hikari pending 등)과 Timer max는 두 시점 사이의 최대를 알 수 없어 차분 파일에 없고 `prometheus.json`의 5초 표본 한계를 따른다. 직접 수집과 Prometheus 마지막 scrape 시각은 `server-delta.json`의 `prometheusLastScrapePre/Post`와 수집 시각에 있다.
+- B는 `readiness.json`(등록·입장·정시 준비·지각·예매 시도 인원, 시작 시각)과 `measurement.txt`의 `b_readiness`로 1,000명 동시 경합 충족 여부를 판정한다. 정시 준비가 VU 수에 못 미치거나 지각이 있으면 합격 근거로 쓰지 않는다.
+
 B의 60초 동시 시작 대기는 워밍업이 아니다. 모든 요청이 일찍 실패하면 60초 이전에 끝날 수도 있다. 대기 중인 VU가 남으면 최대 10분과 종료 유예 30초까지 걸릴 수 있다.
 
 ## 6. 매 회차 결과 확인

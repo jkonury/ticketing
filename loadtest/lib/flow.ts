@@ -65,6 +65,12 @@ function awaitConfirmation(token: string, bookingId: number, seatCount: number):
 
 export function runBookingFlow(config: FlowConfig): void {
   const token = signAccessToken(memberIdForVu(), 'USER');
+  if (config.startAt !== undefined) {
+    // 시나리오 B 준비 현황 집계용. 0 표본을 넣어 지표가 '기록 없음'과 '0명'으로 구분되게 한다.
+    for (const stage of [flowStage.registered, flowStage.admitted, flowStage.ready_on_time, flowStage.ready_late, flowStage.booking_attempt]) {
+      stage.add(0);
+    }
+  }
 
   const enteredAt = Date.now();
   if (!ok(enterQueue(token, config.scheduleId).status)) return;
