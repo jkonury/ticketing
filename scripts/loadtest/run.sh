@@ -9,9 +9,10 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
-            [--warmup [--warmup-rounds N]] [--no-rate-limit]
+            [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
 --warmup은 같은 앱에서 별도 회차로 먼저 같은 부하를 보낸 뒤 새 회차로 측정합니다(k6 수치만 측정 구간이며 서버 누적 지표에는 워밍업이 섞입니다).
 --warmup-rounds는 워밍업 횟수입니다(기본 1). 회차별 결과는 warmup-k6-summary-<n>.json에 남깁니다.
+--aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
@@ -32,6 +33,8 @@ APP_CPUS=4-15
 NO_SCOUTER=false
 WARMUP=false
 WARMUP_ROUNDS=1
+AOT_CACHE=false
+AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
 need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
@@ -49,6 +52,8 @@ while (($#)); do
     --warmup) WARMUP=true; shift ;;
     --warmup-rounds) need_value "$@"; WARMUP_ROUNDS=$2; shift 2 ;;
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
+    --aot-cache) AOT_CACHE=true; shift ;;
+    --aot-train-rounds) need_value "$@"; AOT_TRAIN_ROUNDS=$2; shift 2 ;;
     -h|--help) usage ;;
     *) printf '알 수 없는 옵션: %s\n' "$1" >&2; usage ;;
   esac
@@ -56,6 +61,8 @@ done
 case "$SCENARIO" in smoke|queue-surge|hot-seats) ;; *) usage ;; esac
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+[[ $AOT_TRAIN_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--aot-train-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+$AOT_CACHE && $WARMUP && { echo '--aot-cache와 --warmup은 함께 쓰지 않습니다(콜드 + AOT 조건).' >&2; exit 1; }
 [[ -z $VUS || $VUS =~ ^[1-9][0-9]*$ ]] || { echo '--vus에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 
 for command in docker curl java jq taskset; do
@@ -152,6 +159,15 @@ start() {
       "-Dobj_name=$name" -Djdk.attach.allowAttachSelf=true)
     printf 'Scouter agent 연결: obj_name=%s, collector=%s:6100\n' "$name" "${SCOUTER_COLLECTOR_IP:-127.0.0.1}" >&2
   fi
+  if $AOT_CACHE && [[ $name != fake-pg ]]; then
+    jar="$AOT_DIR/$name/$name.jar"
+    if [[ $AOT_PHASE == train ]]; then
+      opts+=("-XX:AOTCacheOutput=$AOT_DIR/$name.aot")
+    else
+      # AOTMode=on은 캐시를 못 쓰면 기동을 실패시킨다(조용히 캐시 없이 뜨는 것을 막는다)
+      opts+=("-XX:AOTCache=$AOT_DIR/$name.aot" "-XX:AOTMode=on" "-Xlog:aot:file=$dir/$name-aot.log")
+    fi
+  fi
   env "$@" taskset -c "$APP_CPUS" java "${opts[@]}" -jar "$jar" > "$dir/$name.log" 2>&1 &
   PIDS+=("$!")
 }
@@ -183,20 +199,20 @@ write_env() {
     printf 'tracing-sampling: %s\n' "$($OBSERVABILITY && echo 0.1 || echo 비활성)"
     printf 'scouter: %s\n' "$([[ -n ${SCOUTER_AGENT_DIR:-} ]] && echo 활성 || echo 비활성)"
     printf 'hikari-maximum-pool-size: %s\n' "${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:-10}"
+    if $AOT_CACHE; then
+      printf 'aot-cache: 사용(학습 부하 %s회)\n' "$AOT_TRAIN_ROUNDS"
+      for name in core gateway realtime; do printf 'aot-cache-size-%s: %s\n' "$name" "$(stat -c %s "$AOT_DIR/$name.aot")"; done
+    else
+      printf 'aot-cache: 미사용\n'
+    fi
     printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
   } > "$1/env.txt"
 }
 
-SUMMARY=()
-run_once() {
-  local n=$1 dir="$RUN_ROOT/$1"
-  mkdir -p "$dir"
-  write_env "$dir"
-  local failure=0 duplicate=0 batch=() obs=()
-  if $FAILURE_INJECT; then failure=0.1; duplicate=0.3; fi
+start_apps() {
+  local dir=$1 failure=$2 duplicate=$3 batch=() obs=()
   [[ $SCENARIO != hot-seats ]] || batch=(TICKETING_REALTIME_QUEUE_ADMISSION_BATCH_SIZE=1000)
   if $OBSERVABILITY; then obs=(TRACING_EXPORT_ENABLED=true TRACING_SAMPLING_PROBABILITY=0.1); fi
-
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
     FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
@@ -209,6 +225,17 @@ run_once() {
   health core 18080 "${PIDS[1]}" "$dir" || return 1
   health realtime 18081 "${PIDS[2]}" "$dir" || return 1
   health gateway 18000 "${PIDS[3]}" "$dir" || return 1
+}
+
+SUMMARY=()
+run_once() {
+  local n=$1 dir="$RUN_ROOT/$1"
+  mkdir -p "$dir"
+  write_env "$dir"
+  local failure=0 duplicate=0
+  if $FAILURE_INJECT; then failure=0.1; duplicate=0.3; fi
+
+  start_apps "$dir" "$failure" "$duplicate" || return 1
 
   "$ROOT/scripts/loadtest/seed.sh" members > "$dir/seed.log" 2>&1 || { echo "회원 시드 실패: $dir/seed.log" >&2; return 1; }
   local schedule_file="$OUT/schedule-$SCENARIO.json"
@@ -293,7 +320,38 @@ run_once() {
   $script_ok && $integrity_ok
 }
 
+AOT_DIR="$RUN_ROOT/aot"
+AOT_PHASE=use
+# 중첩 jar는 AOT 캐시 대상이 안 되므로 jar를 풀고, 학습 기동에서 캐시를 만든 뒤 측정 기동에서 쓴다
+prepare_aot() {
+  mkdir -p "$AOT_DIR"
+  local name
+  for name in core gateway realtime; do
+    java -Djarmode=tools -jar "$name/build/libs/$name.jar" extract --destination "$AOT_DIR/$name" > "$AOT_DIR/extract-$name.log" 2>&1 \
+      || { echo "$name jar 풀기 실패: $AOT_DIR/extract-$name.log" >&2; return 1; }
+    [[ -f $AOT_DIR/$name/$name.jar ]] || { echo "$name 풀린 jar를 찾지 못했습니다: $AOT_DIR/$name" >&2; return 1; }
+  done
+  AOT_PHASE=train
+  local dir="$AOT_DIR/train"
+  mkdir -p "$dir"
+  start_apps "$dir" 0 0 || return 1
+  "$ROOT/scripts/loadtest/seed.sh" members > "$dir/seed.log" 2>&1 || { echo "학습 회원 시드 실패: $dir/seed.log" >&2; return 1; }
+  local schedule_file="$OUT/schedule-$SCENARIO.json" round vus_env=()
+  [[ -z $VUS ]] || vus_env=(VUS="$VUS")
+  for ((round = 1; round <= AOT_TRAIN_ROUNDS; round++)); do
+    "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 || { echo "학습 회차 시드 실패: $dir/seed.log" >&2; return 1; }
+    env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+      "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6-$round.log" 2>&1 || true
+  done
+  cleanup # SIGTERM으로 정상 종료해야 캐시가 써진다. wait가 캐시 생성이 끝날 때까지 기다린다
+  for name in core gateway realtime; do
+    [[ -s $AOT_DIR/$name.aot ]] || { echo "AOT 캐시가 만들어지지 않았습니다: $AOT_DIR/$name.aot (로그: $dir/$name.log)" >&2; return 1; }
+  done
+  AOT_PHASE=use
+}
+
 overall=0
+$AOT_CACHE && { prepare_aot || { cleanup; exit 1; }; }
 for ((i = 1; i <= RUNS; i++)); do
   if ! run_once "$i"; then
     overall=1

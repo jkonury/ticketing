@@ -72,6 +72,14 @@ A는 모든 VU가 끝나면 즉시 종료하지만 최대 15분과 종료 유예
 
 출력된 `디렉터리`를 `RUN_DIR`에 넣고 A와 같은 명령으로 `seed.log`와 `measurement.txt`를 확인한다. `좌석 5000석, hot 100석`이면 같은 명령을 두 번 더 실행한다. 세 실행 디렉터리가 B의 3회 결과다.
 
+### AOT 캐시 기동으로 측정하기
+
+```bash
+./scripts/loadtest/run.sh --scenario hot-seats --runs 3 --observability --no-scouter --aot-cache [--aot-train-rounds 15]
+```
+
+jar를 풀고 학습 기동(hot-seats 부하 N회)으로 캐시를 만든 뒤, 측정 기동마다 `-XX:AOTMode=on`으로 새 프로세스를 띄운다. 캐시를 못 쓰면 기동이 실패한다. 학습은 실행당 1회이며 `aot/train/`에 로그가 남는다. `env.txt`에 사용 여부·학습 횟수·캐시 크기가 기록되고 `<앱>-aot.log`로 캐시 사용을 확인한다. `--warmup`과 함께 쓰지 않는다. 결정 배경은 [ADR 0026](../adr/0026-aot-cache-startup.md)이다.
+
 B의 60초 동시 시작 대기는 워밍업이 아니다. 모든 요청이 일찍 실패하면 60초 이전에 끝날 수도 있다. 대기 중인 VU가 남으면 최대 10분과 종료 유예 30초까지 걸릴 수 있다.
 
 ## 6. 매 회차 결과 확인

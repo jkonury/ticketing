@@ -38,3 +38,4 @@
 | [0023](0023-schedule-detail-api.md) | 예매 화면용 회차 조회 API | 수락 |
 | [0024](0024-observability-and-load-test.md) | 관측 스택과 부하 테스트 방식 | 수락 |
 | [0025](0025-booking-seat-copy-cache.md) | booking 불변 좌석 사본을 요청 좌석 단위로 Redis 캐시 | 수락 |
+| [0026](0026-aot-cache-startup.md) | 부하 측정의 AOT 캐시 기동(콜드 + 캐시) | 수락 |
