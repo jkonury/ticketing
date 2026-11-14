@@ -15,6 +15,7 @@
 | SSE 티켓 | `sse:ticket:<ticket>` String (회원 ID), TTL 30초 | 코어 `member` 발급, Gateway 1회 소비 |
 | rate limit | SCG `RedisRateLimiter` 내부 키 | Gateway |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
+| 불변 좌석 사본 캐시 | 회차별 Hash, TTL 6시간 | 코어 `booking` |
 | BFF 세션 | `bff:session:<sessionId>` String(JSON), TTL 14일 | `web` BFF |
 | BFF 토큰 갱신 락 | `bff:refresh-lock:<sessionId>` String, `SET NX PX` | `web` BFF |
 
@@ -50,3 +51,12 @@ realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`
 - 선점 가능 여부의 판단 기준은 스냅샷이 아니라 선점 키와 `SOLD`다.
 - 선점·해제·판매·판매 해제는 각각 Lua 스크립트 한 번으로 처리하며, 같은 스크립트에서 스냅샷과 Stream을 갱신한다.
 - DB 커밋 뒤 Redis 반영이 실패하면 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다([6.4절](./flows.md#64-결제-이벤트-기반)).
+
+### 불변 좌석 사본 캐시 (코어 `booking`)
+
+`booking:seat-copies:v1:{<scheduleId>}` Hash의 field는 좌석 ID, value는 `grade`, `label`, `price` JSON이다.
+판매 상태 스냅샷과 별개다. 요청 좌석만 HMGET하고 누락·손상은 DB 조회로 보완한다.
+등록·조회 결과는 커밋 후 Lua로 HSET과 EXPIRE(6시간)를 함께 적용한다. 채울 때 TTL을 갱신하며
+hit은 TTL을 연장하지 않는다. 빈 결과는 저장하지 않고 Redis 오류는 DB로 fallback한다.
+좌석 단위 hit/miss는 `ticketing.booking.seat.copy.cache` 카운터의 `result` 태그로 기록한다.
+자세한 대안과 불변 조건은 [ADR 0025](../adr/0025-booking-seat-copy-cache.md)를 본다.

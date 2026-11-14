@@ -29,6 +29,7 @@
 
 | 용도 | 키 | 쓰기(소유) | 읽기 |
 |---|---|---|---|
+| 불변 좌석 사본 캐시 | `booking:seat-copies:v1:{<scheduleId>}` | booking | booking |
 | 좌석 선점 | `booking:hold:{<scheduleId>}:<seatId>` | booking | booking |
 | 좌석 스냅샷 | `booking:seats:{<scheduleId>}` | booking | realtime |
 | 좌석 변경 스트림 | `booking:seat-events:{<scheduleId>}` | booking | realtime |

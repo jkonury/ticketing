@@ -173,6 +173,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 ## 5. 데이터
 
 - PostgreSQL은 인스턴스 하나에 모듈별 스키마(`member`, `catalog`, `booking`, `payment`, `settlement`, `batch`)를 두고 모듈 간 외래 키·조인을 금지한다. 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
+- booking의 불변 좌석 사본은 요청 좌석 단위 Redis 캐시로 읽고 누락·장애 시 DB에서 조회한다. 캐시는 커밋 후 채운다([ADR 0025](./adr/0025-booking-seat-copy-cache.md)).
 - Redis는 좌석 선점·스냅샷·Streams, 대기열, 입장 토큰, SSE 티켓, rate limit, 조회 캐시에 쓴다. 용도와 키 형식은 [redis.md](./architecture/redis.md)를 본다.
 
 ## 6. 핵심 흐름
