@@ -1,0 +1,555 @@
+diff --git c/scouter.agent.java/pom.xml i/scouter.agent.java/pom.xml
+index 76085e9d..1e622b24 100644
+--- c/scouter.agent.java/pom.xml
++++ i/scouter.agent.java/pom.xml
+@@ -490,6 +490,13 @@
+             <version>1.5.31</version>
+             <scope>provided</scope>
+         </dependency>
++        <!-- provided by the app (resolved by the app class loader at runtime). Never shaded/bundled into the agent jar. -->
++        <dependency>
++            <groupId>io.micrometer</groupId>
++            <artifactId>context-propagation</artifactId>
++            <version>1.2.1</version>
++            <scope>provided</scope>
++        </dependency>
+         <dependency>
+             <groupId>org.apache.kafka</groupId>
+             <artifactId>kafka-clients</artifactId>
+diff --git c/scouter.agent.java/src/main/java/scouter/agent/Configure.java i/scouter.agent.java/src/main/java/scouter/agent/Configure.java
+index 29de2877..9759c221 100644
+--- c/scouter.agent.java/src/main/java/scouter/agent/Configure.java
++++ i/scouter.agent.java/src/main/java/scouter/agent/Configure.java
+@@ -767,6 +767,14 @@ public class Configure extends Thread {
+     public boolean _hook_reactive_enabled = true;
+     @ConfigDesc("")
+     public boolean _hook_coroutine_enabled = true;
++    @ConfigDesc("How reactor propagates the txid to threads. lift(default): Hooks.onEachOperator lifter(original behavior). " +
++            "lift_light: lighter lifter (no Context re-allocation / checkpoint search when profile_reactor_checkpoint_enabled=false). " +
++            "context_propagation: no per-operator lifter; registers a micrometer context-propagation ThreadLocalAccessor " +
++            "(requires the app to enable Hooks.enableAutomaticContextPropagation / spring.reactor.context-propagation=auto; " +
++            "reactor checkpoint profile and active-service scannable dump are not supported)")
++    public String _hook_reactive_txid_propagation = "lift";
++    @ConfigDesc("track subscribed reactor operators of a transaction for active-service/stack dump. effective on lift and lift_light")
++    public boolean _hook_reactive_scannable_tracking_enabled = true;
+     @ConfigDesc("")
+     public boolean _hook_coroutine_debugger_hook_enabled = false;
+     @ConfigDesc("")
+@@ -1183,6 +1191,8 @@ public class Configure extends Thread {
+         this._hook_rabbit_enabled = getBoolean("_hook_rabbit_enabled", true);
+         this._hook_reactive_enabled = getBoolean("_hook_reactive_enabled", true);
+         this._hook_coroutine_enabled = getBoolean("_hook_coroutine_enabled", true);
++        this._hook_reactive_txid_propagation = getValue("_hook_reactive_txid_propagation", "lift").trim().toLowerCase();
++        this._hook_reactive_scannable_tracking_enabled = getBoolean("_hook_reactive_scannable_tracking_enabled", true);
+         this._hook_coroutine_debugger_hook_enabled = getBoolean("_hook_coroutine_debugger_hook_enabled", false);
+         this._hook_thread_name_enabled = getBoolean("_hook_thread_name_enabled", false);
+ 
+diff --git c/scouter.agent.java/src/main/java/scouter/xtra/reactive/LightTxidLifter.java i/scouter.agent.java/src/main/java/scouter/xtra/reactive/LightTxidLifter.java
+new file mode 100644
+index 00000000..c8c2da25
+--- /dev/null
++++ i/scouter.agent.java/src/main/java/scouter/xtra/reactive/LightTxidLifter.java
+@@ -0,0 +1,111 @@
++package scouter.xtra.reactive;
++
++import org.reactivestreams.Subscription;
++import reactor.core.CoreSubscriber;
++import reactor.core.Scannable;
++import reactor.util.context.Context;
++import scouter.agent.Configure;
++import scouter.agent.Logger;
++import scouter.agent.trace.TraceContext;
++import scouter.agent.trace.TraceContextManager;
++
++/**
++ * Lightweight variant of {@link ReactiveSupportWithCoroutine.TxidLifter} used when
++ * _hook_reactive_txid_propagation=lift_light and profile_reactor_checkpoint_enabled=false.
++ * It only restores the txid ThreadLocal: no checkpoint search, no Context re-allocation (the downstream
++ * subscriber's Context is returned as is) and optional scannable tracking.
++ */
++public class LightTxidLifter<T> implements SpanSubscription<T>, Scannable {
++
++    private static final Configure configure = Configure.getInstance();
++
++    private final CoreSubscriber<T> coreSubscriber;
++    private final Scannable scannable;
++    private final TraceContext traceContext;
++    private final boolean trackScannable;
++    private Subscription orgSubs;
++
++    public LightTxidLifter(CoreSubscriber<T> coreSubscriber, Scannable scannable, TraceContext traceContext) {
++        this.coreSubscriber = coreSubscriber;
++        this.scannable = scannable;
++        this.traceContext = traceContext;
++        this.trackScannable = configure._hook_reactive_scannable_tracking_enabled;
++    }
++
++    @Override
++    public void onSubscribe(Subscription subs) {
++        copyToThread();
++        if (trackScannable) {
++            try {
++                traceContext.scannables.put(scannable.hashCode(),
++                        new TraceContext.TimedScannable(System.currentTimeMillis(), scannable));
++            } catch (Throwable e) {
++                Logger.println("[R109L]", "reactive support onSubscribe error.", e);
++            }
++        }
++        this.orgSubs = subs;
++        coreSubscriber.onSubscribe(this);
++    }
++
++    @Override
++    public void onNext(T t) {
++        copyToThread();
++        coreSubscriber.onNext(t);
++    }
++
++    @Override
++    public void onError(Throwable throwable) {
++        copyToThread();
++        untrack();
++        coreSubscriber.onError(throwable);
++    }
++
++    @Override
++    public void onComplete() {
++        copyToThread();
++        untrack();
++        coreSubscriber.onComplete();
++    }
++
++    @Override
++    public void request(long n) {
++        this.orgSubs.request(n);
++    }
++
++    @Override
++    public void cancel() {
++        copyToThread();
++        untrack();
++        this.orgSubs.cancel();
++    }
++
++    @Override
++    public Context currentContext() {
++        return coreSubscriber.currentContext();
++    }
++
++    @Override
++    public Object scanUnsafe(Attr key) {
++        if (key == Attr.PARENT) {
++            return this.orgSubs;
++        }
++        return key == Attr.ACTUAL ? this.coreSubscriber : null;
++    }
++
++    private void untrack() {
++        if (trackScannable) {
++            try {
++                traceContext.scannables.remove(scannable.hashCode());
++            } catch (Throwable e) {
++                Logger.println("[R110L]", "reactive support untrack error.", e);
++            }
++        }
++    }
++
++    private void copyToThread() {
++        Long threadLocalTxid = TraceContextManager.getLocalTxid();
++        if (threadLocalTxid == null || threadLocalTxid != traceContext.txid) {
++            TraceContextManager.setTxidLocal(traceContext.txid);
++        }
++    }
++}
+diff --git c/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupport.java i/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupport.java
+index 337bb7b0..2aefa43a 100644
+--- c/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupport.java
++++ i/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupport.java
+@@ -122,28 +122,14 @@ public class ReactiveSupport implements IReactiveSupport {
+     @Override
+     public void contextOperatorHook() {
+         try {
+-            Hooks.onEachOperator(AgentCommonConstant.TRACE_ID, Operators.lift(
+-                    new BiFunction<Scannable, CoreSubscriber<? super Object>, CoreSubscriber<? super Object>>() {
++            ReactiveTxidPropagation.install(configure, new ReactiveTxidPropagation.LifterFactory() {
+                 @Override
+-                public CoreSubscriber<? super Object> apply(Scannable scannable, CoreSubscriber<? super Object> subscriber) {
+-                    try {
+-                        if (scannable instanceof Fuseable.ScalarCallable) {
+-                            return subscriber;
+-                        }
+-                        Context context = subscriber.currentContext();
+-                        TraceContext traceContext = getTraceContext(scannable, context);
+-
+-                        if (traceContext != null) {
+-                            return new TxidLifter(subscriber, scannable, null, traceContext);
+-                        } else {
+-                            return subscriber;
+-                        }
+-                    } catch (Exception e) {
+-                        Logger.println("R1660", e.getMessage(), e);
+-                        return subscriber;
+-                    }
++                @SuppressWarnings({"unchecked", "rawtypes"})
++                public CoreSubscriber<? super Object> create(CoreSubscriber<? super Object> subscriber,
++                                                             Scannable scannable, TraceContext traceContext) {
++                    return new TxidLifter(subscriber, scannable, null, traceContext);
+                 }
+-            }));
++            });
+         } catch (Throwable e) {
+             Logger.println("R166", e.getMessage(), e);
+         }
+diff --git c/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupportWithCoroutine.java i/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupportWithCoroutine.java
+index b2a37f0c..e4f7907b 100644
+--- c/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupportWithCoroutine.java
++++ i/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveSupportWithCoroutine.java
+@@ -124,28 +124,14 @@ public class ReactiveSupportWithCoroutine implements IReactiveSupport {
+     @Override
+     public void contextOperatorHook() {
+         try {
+-            Hooks.onEachOperator(AgentCommonConstant.TRACE_ID, Operators.lift(
+-                    new BiFunction<Scannable, CoreSubscriber<? super Object>, CoreSubscriber<? super Object>>() {
++            ReactiveTxidPropagation.install(configure, new ReactiveTxidPropagation.LifterFactory() {
+                 @Override
+-                public CoreSubscriber<? super Object> apply(Scannable scannable, CoreSubscriber<? super Object> subscriber) {
+-                    try {
+-                        if (scannable instanceof Fuseable.ScalarCallable) {
+-                            return subscriber;
+-                        }
+-                        Context context = subscriber.currentContext();
+-                        TraceContext traceContext = getTraceContext(scannable, context);
+-
+-                        if (traceContext != null) {
+-                            return new TxidLifter(subscriber, scannable, null, traceContext);
+-                        } else {
+-                            return subscriber;
+-                        }
+-                    } catch (Exception e) {
+-                        Logger.println("R1660", e.getMessage(), e);
+-                        return subscriber;
+-                    }
++                @SuppressWarnings({"unchecked", "rawtypes"})
++                public CoreSubscriber<? super Object> create(CoreSubscriber<? super Object> subscriber,
++                                                             Scannable scannable, TraceContext traceContext) {
++                    return new TxidLifter(subscriber, scannable, null, traceContext);
+                 }
+-            }));
++            });
+         } catch (Throwable e) {
+             Logger.println("R166", e.getMessage(), e);
+         }
+diff --git c/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveTxidPropagation.java i/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveTxidPropagation.java
+new file mode 100644
+index 00000000..21eacd9e
+--- /dev/null
++++ i/scouter.agent.java/src/main/java/scouter/xtra/reactive/ReactiveTxidPropagation.java
+@@ -0,0 +1,104 @@
++package scouter.xtra.reactive;
++
++import reactor.core.CoreSubscriber;
++import reactor.core.Fuseable;
++import reactor.core.Scannable;
++import reactor.core.publisher.Hooks;
++import reactor.core.publisher.Operators;
++import reactor.util.context.Context;
++import scouter.agent.AgentCommonConstant;
++import scouter.agent.Configure;
++import scouter.agent.Logger;
++import scouter.agent.trace.TraceContext;
++
++import java.util.function.BiFunction;
++
++/**
++ * Selects how the txid is propagated to reactor threads (_hook_reactive_txid_propagation).
++ * Shared by ReactiveSupport and ReactiveSupportWithCoroutine.
++ */
++final class ReactiveTxidPropagation {
++
++    static final String MODE_LIFT = "lift";
++    static final String MODE_LIFT_LIGHT = "lift_light";
++    static final String MODE_CONTEXT_PROPAGATION = "context_propagation";
++
++    private ReactiveTxidPropagation() {
++    }
++
++    interface LifterFactory {
++        CoreSubscriber<? super Object> create(CoreSubscriber<? super Object> subscriber, Scannable scannable,
++                                              TraceContext traceContext);
++    }
++
++    /** @param legacyLifter factory of the original TxidLifter, used for lift mode and as a fallback */
++    static void install(Configure configure, LifterFactory legacyLifter) {
++        String mode = configure._hook_reactive_txid_propagation;
++        if (MODE_CONTEXT_PROPAGATION.equals(mode)) {
++            if (registerContextPropagation()) {
++                return;
++            }
++            Logger.println("R168", "context_propagation unavailable. fallback to lift");
++        } else if (MODE_LIFT_LIGHT.equals(mode)) {
++            if (!configure.profile_reactor_checkpoint_enabled) {
++                hookLift(new LifterFactory() {
++                    @Override
++                    @SuppressWarnings({"unchecked", "rawtypes"})
++                    public CoreSubscriber<? super Object> create(CoreSubscriber<? super Object> subscriber,
++                                                                 Scannable scannable, TraceContext traceContext) {
++                        return new LightTxidLifter(subscriber, scannable, traceContext);
++                    }
++                });
++                return;
++            }
++            Logger.println("R169", "lift_light requires profile_reactor_checkpoint_enabled=false. use lift");
++        } else if (!MODE_LIFT.equals(mode)) {
++            Logger.println("R170", "unknown _hook_reactive_txid_propagation=" + mode + ". use lift");
++        }
++        hookLift(legacyLifter);
++    }
++
++    private static void hookLift(final LifterFactory factory) {
++        try {
++            Hooks.onEachOperator(AgentCommonConstant.TRACE_ID, Operators.lift(
++                    new BiFunction<Scannable, CoreSubscriber<? super Object>, CoreSubscriber<? super Object>>() {
++                        @Override
++                        public CoreSubscriber<? super Object> apply(Scannable scannable,
++                                                                    CoreSubscriber<? super Object> subscriber) {
++                            try {
++                                if (scannable instanceof Fuseable.ScalarCallable) {
++                                    return subscriber;
++                                }
++                                Context context = subscriber.currentContext();
++                                if (scannable == null || context == null) {
++                                    return subscriber;
++                                }
++                                TraceContext traceContext = context.getOrDefault(TraceContext.class, null);
++                                if (traceContext != null) {
++                                    return factory.create(subscriber, scannable, traceContext);
++                                }
++                                return subscriber;
++                            } catch (Exception e) {
++                                Logger.println("R1660", e.getMessage(), e);
++                                return subscriber;
++                            }
++                        }
++                    }));
++        } catch (Throwable e) {
++            Logger.println("R166", e.getMessage(), e);
++        }
++    }
++
++    private static boolean registerContextPropagation() {
++        try {
++            TraceContextThreadLocalAccessor.register();
++            Logger.println("R171", "reactive txid propagation: micrometer context-propagation accessor registered. "
++                    + "The app must enable Hooks.enableAutomaticContextPropagation() "
++                    + "(spring.reactor.context-propagation=auto) or the txid is not propagated across threads.");
++            return true;
++        } catch (Throwable e) {
++            Logger.println("R172", "context-propagation registration failed: " + e, e);
++            return false;
++        }
++    }
++}
+diff --git c/scouter.agent.java/src/main/java/scouter/xtra/reactive/TraceContextThreadLocalAccessor.java i/scouter.agent.java/src/main/java/scouter/xtra/reactive/TraceContextThreadLocalAccessor.java
+new file mode 100644
+index 00000000..aa548818
+--- /dev/null
++++ i/scouter.agent.java/src/main/java/scouter/xtra/reactive/TraceContextThreadLocalAccessor.java
+@@ -0,0 +1,50 @@
++package scouter.xtra.reactive;
++
++import io.micrometer.context.ContextRegistry;
++import io.micrometer.context.ThreadLocalAccessor;
++import scouter.agent.trace.TraceContext;
++import scouter.agent.trace.TraceContextManager;
++
++/**
++ * Micrometer context-propagation accessor that bridges the Reactor Context entry
++ * (key = TraceContext.class, put by subscriptOnContext) and the txid ThreadLocal of TraceContextManager.
++ * Loaded only when _hook_reactive_txid_propagation=context_propagation, so the app's
++ * context-propagation library is never required otherwise.
++ */
++public class TraceContextThreadLocalAccessor implements ThreadLocalAccessor<TraceContext> {
++
++    /** @throws Throwable (NoClassDefFoundError etc.) when context-propagation is not available */
++    static void register() {
++        ContextRegistry.getInstance().registerThreadLocalAccessor(new TraceContextThreadLocalAccessor());
++    }
++
++    @Override
++    public Object key() {
++        return TraceContext.class;
++    }
++
++    @Override
++    public TraceContext getValue() {
++        if (TraceContextManager.getLocalTxid() == null) {
++            return null;
++        }
++        return TraceContextManager.getContext(true);
++    }
++
++    @Override
++    public void setValue(TraceContext value) {
++        TraceContextManager.setTxidLocal(value.txid);
++    }
++
++    @Override
++    public void setValue() {
++        TraceContextManager.setTxidLocal(null);
++    }
++
++    /** for context-propagation 1.0.0~1.0.2 which call reset() */
++    @Override
++    @Deprecated
++    public void reset() {
++        TraceContextManager.setTxidLocal(null);
++    }
++}
+diff --git c/scouter.agent.java/src/test/java/scouter/xtra/reactive/ReactiveTxidPropagationTest.java i/scouter.agent.java/src/test/java/scouter/xtra/reactive/ReactiveTxidPropagationTest.java
+new file mode 100644
+index 00000000..fe2d6aab
+--- /dev/null
++++ i/scouter.agent.java/src/test/java/scouter/xtra/reactive/ReactiveTxidPropagationTest.java
+@@ -0,0 +1,142 @@
++package scouter.xtra.reactive;
++
++import io.micrometer.context.ContextRegistry;
++import io.micrometer.context.ContextSnapshot;
++import io.micrometer.context.ContextSnapshotFactory;
++import org.junit.After;
++import org.junit.Test;
++import org.reactivestreams.Subscription;
++import reactor.core.CoreSubscriber;
++import reactor.core.Scannable;
++import reactor.core.publisher.Mono;
++import reactor.util.context.Context;
++import scouter.agent.trace.TraceContext;
++import scouter.agent.trace.TraceContextManager;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertNull;
++import static org.junit.Assert.assertSame;
++import static org.junit.Assert.assertTrue;
++
++public class ReactiveTxidPropagationTest {
++
++    @After
++    public void cleanup() {
++        TraceContextManager.setTxidLocal(null);
++    }
++
++    private TraceContext newTraceContext(long txid) {
++        TraceContext ctx = new TraceContext(false);
++        ctx.txid = txid;
++        ctx.initScannables();
++        TraceContextManager.start(ctx);
++        return ctx;
++    }
++
++    @Test
++    public void accessorKeyMatchesKeyUsedBySubscriptOnContext() {
++        assertSame(TraceContext.class, new TraceContextThreadLocalAccessor().key());
++    }
++
++    @Test
++    public void setValueSetsLocalTxidAndGetValueReturnsContext() {
++        TraceContext ctx = newTraceContext(910001L);
++        TraceContextThreadLocalAccessor accessor = new TraceContextThreadLocalAccessor();
++        TraceContextManager.setTxidLocal(null);
++        assertNull(accessor.getValue());
++
++        accessor.setValue(ctx);
++        assertEquals(Long.valueOf(910001L), TraceContextManager.getLocalTxid());
++        assertSame(ctx, accessor.getValue());
++
++        accessor.setValue();
++        assertNull(TraceContextManager.getLocalTxid());
++        assertNull(accessor.getValue());
++    }
++
++    @Test
++    public void snapshotScopeSetsAndRestoresPreviousTxid() {
++        TraceContext other = newTraceContext(910002L);
++        TraceContext mine = newTraceContext(910003L);
++        ContextRegistry registry = new ContextRegistry();
++        registry.registerThreadLocalAccessor(new TraceContextThreadLocalAccessor());
++        ContextSnapshotFactory factory = ContextSnapshotFactory.builder().contextRegistry(registry).build();
++
++        TraceContextManager.setTxidLocal(mine.txid);
++        ContextSnapshot snapshot = factory.captureAll();
++
++        // 1) previous value exists -> restored after scope
++        TraceContextManager.setTxidLocal(other.txid);
++        try (ContextSnapshot.Scope ignored = snapshot.setThreadLocals()) {
++            assertEquals(Long.valueOf(910003L), TraceContextManager.getLocalTxid());
++        }
++        assertEquals(Long.valueOf(910002L), TraceContextManager.getLocalTxid());
++
++        // 2) no previous value -> cleared after scope
++        TraceContextManager.setTxidLocal(null);
++        try (ContextSnapshot.Scope ignored = snapshot.setThreadLocals()) {
++            assertEquals(Long.valueOf(910003L), TraceContextManager.getLocalTxid());
++        }
++        assertNull(TraceContextManager.getLocalTxid());
++    }
++
++    @Test
++    public void lightLifterReturnsDownstreamContextWithoutAllocation() {
++        final TraceContext ctx = newTraceContext(910004L);
++        final Context downstream = Context.of(TraceContext.class, ctx);
++        final long[] seenTxid = new long[1];
++        CoreSubscriber<Object> subscriber = new CoreSubscriber<Object>() {
++            @Override public Context currentContext() { return downstream; }
++            @Override public void onSubscribe(Subscription s) { }
++            @Override public void onNext(Object o) {
++                Long t = TraceContextManager.getLocalTxid();
++                seenTxid[0] = t == null ? -1 : t;
++            }
++            @Override public void onError(Throwable t) { }
++            @Override public void onComplete() { }
++        };
++        Scannable scannable = Scannable.from(Mono.just(1));
++        LightTxidLifter<Object> lifter = new LightTxidLifter<Object>(subscriber, scannable, ctx);
++
++        assertSame(downstream, lifter.currentContext());
++        assertTrue(lifter.currentContext() == lifter.currentContext());
++
++        TraceContextManager.setTxidLocal(null);
++        lifter.onNext("x");
++        assertEquals(910004L, seenTxid[0]);
++    }
++
++    @Test
++    public void lightLifterTracksScannablesOnlyWhenEnabled() {
++        final TraceContext ctx = newTraceContext(910005L);
++        CoreSubscriber<Object> subscriber = new CoreSubscriber<Object>() {
++            @Override public Context currentContext() { return Context.empty(); }
++            @Override public void onSubscribe(Subscription s) { }
++            @Override public void onNext(Object o) { }
++            @Override public void onError(Throwable t) { }
++            @Override public void onComplete() { }
++        };
++        Subscription subs = new Subscription() {
++            @Override public void request(long n) { }
++            @Override public void cancel() { }
++        };
++        Scannable scannable = Scannable.from(Mono.just(1));
++        scouter.agent.Configure conf = scouter.agent.Configure.getInstance();
++        boolean old = conf._hook_reactive_scannable_tracking_enabled;
++        try {
++            conf._hook_reactive_scannable_tracking_enabled = false;
++            LightTxidLifter<Object> off = new LightTxidLifter<Object>(subscriber, scannable, ctx);
++            off.onSubscribe(subs);
++            assertEquals(0, ctx.scannables.size());
++
++            conf._hook_reactive_scannable_tracking_enabled = true;
++            LightTxidLifter<Object> on = new LightTxidLifter<Object>(subscriber, scannable, ctx);
++            on.onSubscribe(subs);
++            assertEquals(1, ctx.scannables.size());
++            on.onComplete();
++            assertEquals(0, ctx.scannables.size());
++        } finally {
++            conf._hook_reactive_scannable_tracking_enabled = old;
++        }
++    }
++}

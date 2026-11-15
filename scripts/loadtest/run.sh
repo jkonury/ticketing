@@ -113,10 +113,13 @@ for port in 18000 18080 18081 18090; do
   [[ -z $occupied ]] || { printf '포트 %s 사용 중: %s\n' "$port" "$occupied" >&2; exit 1; }
 done
 
+# 실행 시 지정한 SCOUTER_AGENT_DIR(예: 패치 에이전트 대조 측정)이 .env 값보다 우선한다.
+preset_scouter_agent_dir=${SCOUTER_AGENT_DIR:-}
 set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+[[ -z $preset_scouter_agent_dir ]] || SCOUTER_AGENT_DIR=$preset_scouter_agent_dir
 if $NO_SCOUTER; then unset SCOUTER_AGENT_DIR; fi
 
 if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
