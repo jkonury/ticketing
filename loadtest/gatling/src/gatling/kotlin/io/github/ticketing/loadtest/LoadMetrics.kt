@@ -26,7 +26,27 @@ object LoadMetrics {
     /** 종료 시 한 번 호출한다. 요약을 출력하고 SUMMARY_FILE이 있으면 파일로도 남긴다. */
     fun finish() {
         print(summary())
-        LoadEnv.writeSummary(counters.mapValues { (_, counter) -> counter.get() })
+        LoadEnv.writeSummary(counters.mapValues { (_, counter) -> counter.get() }, bookingOutcomes())
+    }
+
+    fun recordBooking(status: Int, code: String?, durationMs: Long) {
+        val outcome = when {
+            Api.isOk(status) -> "success"
+            status == 409 && code == "SEAT_ALREADY_HELD" -> "conflict"
+            status == 429 -> "rateLimited"
+            else -> "other"
+        }
+        record("booking_$outcome", durationMs)
+    }
+
+    private fun bookingOutcomes(): Map<String, Any> = listOf("success", "conflict", "rateLimited", "other").associateWith { outcome ->
+        val sorted = trends["booking_$outcome"]?.sorted().orEmpty()
+        mapOf(
+            "count" to sorted.size,
+            "p50" to sorted.takeIf { it.isNotEmpty() }?.let { percentile(it, 50) },
+            "p95" to sorted.takeIf { it.isNotEmpty() }?.let { percentile(it, 95) },
+            "p99" to sorted.takeIf { it.isNotEmpty() }?.let { percentile(it, 99) },
+        )
     }
 
     fun value(name: String): Long = counters[name]?.get() ?: 0

@@ -120,6 +120,14 @@ object Endpoints {
     fun createBooking(): ChainBuilder = Api.call(
         http("booking_create")
             .post("/api/v1/bookings")
+            .transformResponse { response, _ ->
+                LoadMetrics.recordBooking(
+                    response.status().code(),
+                    LoadEnv.errorCode(response.body().string()),
+                    response.endTimestamp() - response.startTimestamp(),
+                )
+                response
+            }
             .header("X-Admission-Token", "#{${Keys.ADMISSION_TOKEN}}")
             .header("Idempotency-Key", "#{${Keys.BOOKING_KEY}}")
             .header("Content-Type", "application/json")

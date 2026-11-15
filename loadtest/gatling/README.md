@@ -60,9 +60,15 @@ env BASE_URL=... TICKETING_JWT_SECRET=... MEMBERS_FILE=... SCHEDULE_FILE=... VUS
 
 ## k6와 다른 점
 
-- 사용자 정의 지표(`flow_*`, `booking_conflict`, `confirm_latency` 등)는 Gatling에 카운터가 없어 메모리로 집계해 종료 시 표준 출력으로 낸다. 요청별 응답 시간·성공률은 Gatling 리포트가 맡는다.
-- k6의 threshold는 Gatling `assertions`로 옮겼다. booking_create p95(100명 이하 300ms, 초과 1,500ms), 전체 실패율 1% 미만, SSE 연결 성공률 99.9% 초과이며 미달해도 중단하지 않고 종료 코드로만 알린다.
+- 사용자 정의 지표(`flow_*`, `booking_conflict`, `confirm_latency` 등)는 Gatling에 카운터가 없어 메모리로 집계해 종료 시 표준 출력으로 낸다. 요청별 응답 시간·성공률은 Gatling 원시 로그·리포트가 맡는다. 예매 응답 분류별 표본 수와 p50/p95/p99도 요약 JSON에 남긴다.
+- k6의 threshold는 Gatling `assertions`로 옮겼다. booking_create p95(기본 100명 이하 300ms, 초과 1,500ms; `--booking-p95-ms N`/`BOOKING_P95_MS`로 명시 가능), 전체 실패율 1% 미만, SSE 연결 성공률 99.9% 초과이며 미달해도 중단하지 않고 종료 코드로만 알린다.
 - 409 SEAT_ALREADY_HELD·429는 k6처럼 예상 응답이다. 429는 `Retry-After`(최대 5초)만큼 쉬고 최대 5번 다시 보낸다. 다른 4xx·5xx는 KO다.
 - SSE는 Gatling 내장 SSE 지원을 쓴다(xk6-sse 불필요). 메시지는 `{"event":"…","data":…}` JSON으로 체크에 전달된다.
 - Gatling 기본 워밍업이 외부로 요청을 보내므로 끈다(`disableWarmUp`).
-- `run.sh --tool gatling`으로 앱 기동·시드·서버 지표 차분·정합성 검증까지 k6와 같은 절차로 실행한다. queue-surge·hot-seats만 지원하며 `--warmup`·`--aot-cache`·seat-conflict-refund·smoke는 k6 전용이다.
+- `run.sh --tool gatling`으로 앱 기동·시드·서버 지표 차분·정합성 검증까지 k6와 같은 절차로 실행한다. queue-surge·hot-seats와 `--warmup --warmup-rounds N`을 지원한다. `--aot-cache`·seat-conflict-refund·smoke는 러너에서 k6 전용이다. Gatling 예열은 지연 미달만 허용하고 준비·오류·SSE·정합성·settle 실패는 거부한다. 본 측정은 `verdict.json`으로 전체·생성 성공 p95와 통제 입력 등을 판정하며 미달 시 러너도 비정상 종료한다.
+
+## 예열·판정·전용 대시보드
+
+예열 결과는 `warmup-<n>/`에, 본 측정 결과는 독립 실행 디렉터리에 남긴다. Gatling JVM은 회차마다 새로 띄우고 앱 JVM은 예열과 본 측정 사이에 유지한다. `gatling-results.py`는 Gatling **3.16.0** 바이너리 로그 전용이며 버전 변경 시 검토해야 한다. `gatling-summary.json`의 기존 `metrics` 카운터 구조를 유지하면서 `bookingOutcomes`, `requests`를 추가한다. 생성 성공은 Gatling OK가 아닌 HTTP 2xx로 구분한다.
+
+관측을 켜면 [전용 Grafana 대시보드](../../docs/performance/gatling-hot-seats-dashboard.md)에서 스크립트의 준비·지연·정합성·서버 차분·자원 표본도 확인할 수 있다. 현재 구현의 실제 실행 검증 범위와 남은 작업은 [인계 문서](../../docs/plans/hot-seats-gatling-handoff.md)를 따른다.

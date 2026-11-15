@@ -22,13 +22,20 @@ object LoadEnv {
         return value
     }
 
+    fun bookingP95Limit(defaultValue: Int): Int {
+        val raw = System.getenv("BOOKING_P95_MS") ?: return defaultValue
+        return requireNotNull(raw.toIntOrNull()?.takeIf { it > 0 }) { "BOOKING_P95_MS는 양의 정수여야 합니다." }
+    }
+
+    fun errorCode(body: String): String? = runCatching { mapper.readTree(body).path("code").asText() }.getOrNull()
+
     fun readJson(variable: String): JsonNode = mapper.readTree(Files.readString(Path.of(requireEnv(variable))))
 
     /** SUMMARY_FILE이 있으면 k6 --summary-export와 같은 `{"metrics":{이름:{"count":n}}}` 형태로 남긴다(metrics-delta.py가 읽는다). */
-    fun writeSummary(counts: Map<String, Long>) {
+    fun writeSummary(counts: Map<String, Long>, outcomes: Map<String, Any>) {
         val path = System.getenv("SUMMARY_FILE")?.takeIf { it.isNotBlank() } ?: return
         val metrics = counts.mapValues { (_, count) -> mapOf("count" to count) }
-        Files.writeString(Path.of(path), mapper.writeValueAsString(mapOf("metrics" to metrics)))
+        Files.writeString(Path.of(path), mapper.writeValueAsString(mapOf("metrics" to metrics, "bookingOutcomes" to outcomes)))
     }
 
     /** READINESS_FILE이 있으면 러너가 읽을 수 있게 JSON을 남긴다. */

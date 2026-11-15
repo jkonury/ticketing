@@ -55,6 +55,22 @@ services:
       timeout: 3s
       retries: 10
 
+  loadtest-exporter:
+    image: python:3.13.18-alpine3.23
+    command: ["python3", "-B", "/app/dashboard-metrics.py", "serve", "/runs"]
+    volumes:
+      - ./scripts/loadtest/dashboard-metrics.py:/app/dashboard-metrics.py:ro
+      - ./build/loadtest/runs:/runs:ro
+    read_only: true
+    user: "65534:65534"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:19100/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   redis-exporter:
     image: oliver006/redis_exporter:v1.77.0
     environment:

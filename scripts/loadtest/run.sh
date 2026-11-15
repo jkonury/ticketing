@@ -11,10 +11,10 @@ usage() {
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
-            [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report]
+            [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N]
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
---warmup-rounds는 워밍업 횟수입니다(기본 5, 고정). 회차별 결과는 warmup-k6-summary-<n>.json, warmup-settle-<n>.json에 남깁니다.
+--warmup-rounds는 워밍업 횟수입니다(기본 5). Gatling 회차별 결과는 warmup-<n>/, settle은 warmup-settle-<n>.json에 남깁니다.
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
@@ -22,8 +22,8 @@ SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
 --warmup·--failure-inject와 함께 쓰지 않습니다.
---tool gatling은 k6 대신 Gatling(loadtest/gatling)으로 같은 시나리오를 실행합니다. 부하 도구 메모리 비교용이라 queue-surge·hot-seats만 지원하며
---warmup·--aot-cache와 함께 쓰지 않습니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
+--tool gatling은 queue-surge·hot-seats를 지원하며 --aot-cache와 함께 쓰지 않습니다.
+--booking-p95-ms는 Gatling 예매 p95 한도(양의 정수)입니다. 미지정 시 100명 이하 300ms, 초과 1500ms입니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
 JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 기본은 리포트를 생략하며(-nr), --gatling-report로 HTML 리포트를 생성합니다.
 리포트는 회차별 gatling-results/<실행 디렉터리>/index.html에 저장됩니다. 리포트 생성 시간·메모리도 측정에 포함됩니다.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
@@ -52,9 +52,10 @@ AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
 TOOL=k6
 GATLING_HEAP=2g
+BOOKING_P95_MS=
 GATLING_REPORT=false
 GATLING_DIST="$ROOT/loadtest/gatling/build/gatling-dist"
-need_value() { [[ $# -ge 2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
+need_value() { [[ $# -ge 2 && -n $2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
   case "$1" in
     --scenario) need_value "$@"; SCENARIO=$2; shift 2 ;;
@@ -71,6 +72,7 @@ while (($#)); do
     --warmup-rounds) need_value "$@"; WARMUP_ROUNDS=$2; shift 2 ;;
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
     --tool) need_value "$@"; TOOL=$2; shift 2 ;;
+    --booking-p95-ms) need_value "$@"; BOOKING_P95_MS=$2; shift 2 ;;
     --gatling-heap) need_value "$@"; GATLING_HEAP=$2; shift 2 ;;
     --gatling-report) GATLING_REPORT=true; shift ;;
     --aot-cache) AOT_CACHE=true; shift ;;
@@ -90,7 +92,11 @@ fi
 [[ $GATLING_HEAP =~ ^[1-9][0-9]*[mMgG]$ ]] || { echo '--gatling-heap에는 512m, 4g 같은 값이 필요합니다.' >&2; exit 1; }
 if [[ $TOOL == gatling ]]; then
   [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats ]] || { echo '--tool gatling은 queue-surge, hot-seats만 지원합니다.' >&2; exit 1; }
-  { $WARMUP || $AOT_CACHE; } && { echo '--tool gatling은 --warmup, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1; }
+  $AOT_CACHE && { echo '--tool gatling은 --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1; }
+fi
+if [[ -n $BOOKING_P95_MS ]]; then
+  [[ $TOOL == gatling ]] || { echo '--booking-p95-ms는 Gatling 전용입니다.' >&2; exit 1; }
+  [[ $BOOKING_P95_MS =~ ^[1-9][0-9]*$ && ${#BOOKING_P95_MS} -le 9 ]] || { echo '--booking-p95-ms에는 양의 정수가 필요합니다.' >&2; exit 1; }
 fi
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
@@ -138,11 +144,17 @@ while IFS= read -r -d '' source_file; do
   diff_status=0
   git diff --no-index --binary -- /dev/null "$source_file" >> "$RUN_ROOT/source.patch" || diff_status=$?
   ((diff_status <= 1)) || exit "$diff_status"
-done < <(git ls-files --others --exclude-standard -z -- core/src core-batch/src realtime/src gateway/src fake-pg/src)
+done < <(git ls-files --others --exclude-standard -z -- core/src core-batch/src realtime/src gateway/src fake-pg/src loadtest/gatling scripts/loadtest scripts/lib observability)
 
 PIDS=()
 SAMPLER_PID=
+LOAD_PID=
 cleanup() {
+  if [[ -n $LOAD_PID ]]; then
+    kill "$LOAD_PID" 2>/dev/null || true
+    wait "$LOAD_PID" 2>/dev/null || true
+    LOAD_PID=
+  fi
   if [[ -n $SAMPLER_PID ]]; then
     kill "$SAMPLER_PID" 2>/dev/null || true
     wait "$SAMPLER_PID" 2>/dev/null || true
@@ -154,7 +166,9 @@ cleanup() {
     PIDS=()
   fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 build_tasks=(:core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar)
 if [[ $TOOL == gatling ]]; then
@@ -175,7 +189,7 @@ compose=(docker compose)
 services=(postgres redis)
 if $OBSERVABILITY; then
   compose+=(-f compose.yaml -f compose.observability.yaml)
-  services+=(prometheus tempo grafana redis-exporter postgres-exporter)
+  services+=(prometheus tempo grafana redis-exporter postgres-exporter loadtest-exporter)
 fi
 "${compose[@]}" up -d --wait "${services[@]}" > "$RUN_ROOT/compose.log" 2>&1 \
   || { echo "Compose 기동 실패: $RUN_ROOT/compose.log" >&2; tail -n 30 "$RUN_ROOT/compose.log" >&2; exit 1; }
@@ -232,6 +246,8 @@ write_env() {
     printf 'jdk: %s\n' "$(java -version 2>&1 | head -n 1)"
     printf 'cpu: %s (논리 코어 %s)\n' "$(LC_ALL=C lscpu | awk -F: '/Model name/ {gsub(/^ +/, "", $2); print $2}')" "$(nproc)"
     printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
+    printf 'booking-p95-ms: %s\n' "${BOOKING_P95_MS:-VU별 기본}"
+    printf 'generator-warmup: 매회 새 JVM, 외부 warmup 비활성\n'
     printf 'tool: %s\n' "$TOOL"
     if [[ $TOOL == gatling ]]; then
       printf 'gatling: %s, 힙 -Xmx%s(고정)\n' "$(ls "$GATLING_DIST/lib" | rg -o 'gatling-core-[0-9.]+' | head -n 1)" "$GATLING_HEAP"
@@ -263,6 +279,13 @@ write_env() {
       printf 'aot-cache: 미사용\n'
     fi
     printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
+    if [[ -n ${SCOUTER_AGENT_DIR:-} ]]; then
+      sha256sum "$SCOUTER_AGENT_DIR/scouter.agent.jar"
+      for name in core gateway realtime fake-pg; do
+        sha256sum "$ROOT/deploy/scouter/$(scouter_config_file "$name")"
+      done
+    fi
+    LC_ALL=C lscpu -e=CPU,CORE,SOCKET
   } > "$1/env.txt"
 }
 
@@ -294,6 +317,39 @@ collect_metrics() {
   local prom=()
   if $OBSERVABILITY; then prom=(--prometheus http://localhost:19090); fi
   python3 "$ROOT/scripts/loadtest/metrics-delta.py" collect "$1" "${prom[@]}" "${METRIC_TARGETS[@]}"
+}
+
+# 회차마다 새 Gatling JVM. 원시 로그와 준비·응답 분류 요약은 디렉터리로 격리한다.
+launch_gatling() {
+  local dir=$1 schedule_file=$2
+  shift 2
+  local simulation=QueueSurgeSimulation report_args=() load_env=()
+  case "$SCENARIO" in
+    hot-seats) simulation=HotSeatsSimulation ;;
+  esac
+  $GATLING_REPORT || report_args=(-nr)
+  [[ -z $VUS ]] || load_env+=(VUS="$VUS")
+  [[ -z $BOOKING_P95_MS ]] || load_env+=(BOOKING_P95_MS="$BOOKING_P95_MS")
+  mkdir -p "$dir/gatling-prefs/.java/.userPrefs"
+  cp "$schedule_file" "$dir/schedule.json"
+  env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$dir/schedule.json" \
+    READINESS_FILE="$dir/readiness.json" SUMMARY_FILE="$dir/gatling-summary.json" "${load_env[@]}" "$@" \
+    taskset -c "$K6_CPUS" java -Xmx"$GATLING_HEAP" "-Xlog:gc*:file=$dir/gatling-gc.log" -XX:+HeapDumpOnOutOfMemoryError "-XX:HeapDumpPath=$dir/gatling.hprof" \
+    --enable-native-access=ALL-UNNAMED "-Djava.util.prefs.userRoot=$dir/gatling-prefs" \
+    --add-opens java.base/java.lang=ALL-UNNAMED -cp "$GATLING_DIST/lib/*" io.gatling.app.Gatling \
+    -s "io.github.ticketing.loadtest.$simulation" -rf "$dir/gatling-results" "${report_args[@]}" > "$dir/gatling.log" 2>&1 &
+  GATLING_PID=$!
+  LOAD_PID=$GATLING_PID
+}
+
+enrich_gatling() {
+  python3 "$ROOT/scripts/loadtest/gatling-results.py" enrich "$1" > "$1/gatling-results.log" 2>&1
+}
+
+gatling_limit() {
+  if [[ -n $BOOKING_P95_MS ]]; then echo "$BOOKING_P95_MS"
+  elif [[ -n $VUS && $VUS -le 100 ]]; then echo 300
+  else echo 1500; fi
 }
 
 # warmup_settle <dir> <round> <schedule_id> <k6 종료 코드>: 워밍업 회차의 비동기 처리가 끝났는지 확인하고 warmup-settle-<round>.json을 남긴다.
@@ -400,11 +456,17 @@ conflict_manifest() {
   [[ $(jq '.completePairs == .expectedPairs' "$dir/conflict-manifest.json") == true ]]
 }
 
+publish_dashboard() {
+  [[ $TOOL == gatling ]] || return 0
+  python3 "$ROOT/scripts/loadtest/dashboard-metrics.py" publish "$@"
+}
+
 SUMMARY=()
 run_once() {
   local n=$1 dir="$RUN_ROOT/$1"
   mkdir -p "$dir"
   write_env "$dir"
+  publish_dashboard "$dir" starting
   local failure=0 duplicate=0
   if $FAILURE_INJECT; then failure=0.1; duplicate=0.3; fi
   # 보상 검증은 결제 실패와 좌석 충돌 환불을 구분하려고 실패율 0, 웹훅 중복 30%로 고정한다
@@ -430,14 +492,30 @@ run_once() {
       warm_schedule=
       [[ $SCENARIO == smoke ]] || warm_schedule=$(jq -r .scheduleId "$schedule_file")
       warm_status=0
-      env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-        READINESS_FILE="$dir/warmup-readiness-$round.json" \
-        "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6-$round.log" 2>&1 || warm_status=$?
+      if [[ $TOOL == gatling ]]; then
+        publish_dashboard "$dir" warmup --round "$round"
+        launch_gatling "$dir/warmup-$round" "$schedule_file"
+        wait "$GATLING_PID" || warm_status=$?
+        LOAD_PID=
+        enrich_gatling "$dir/warmup-$round" || warm_ok=false
+      else
+        env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+          READINESS_FILE="$dir/warmup-readiness-$round.json" \
+          "${warm_vus[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/warmup-k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/warmup-k6-$round.log" 2>&1 || warm_status=$?
+      fi
       if [[ $SCENARIO != smoke ]]; then
         warm_ids="${warm_ids:+$warm_ids,}$warm_schedule"
         if ! warmup_settle "$dir" "$round" "$warm_schedule" "$warm_status"; then
           warm_ok=false
           echo "워밍업 $round회 비동기 처리가 상한 안에 끝나지 않았습니다: $dir/warmup-settle-$round.json" >&2
+        fi
+        if [[ $TOOL == gatling ]]; then
+          "$ROOT/scripts/loadtest/verify-integrity.sh" "$warm_schedule" > "$dir/warmup-$round/integrity.log" 2>&1 || warm_ok=false
+          cp "$OUT/integrity-$warm_schedule.json" "$dir/warmup-$round/integrity.json" || warm_ok=false
+          python3 "$ROOT/scripts/loadtest/gatling-results.py" judge "$dir/warmup-$round" --scenario "$SCENARIO" \
+            --limit "$(gatling_limit)" --exit-code "$warm_status" --warmup > "$dir/warmup-$round/verdict.log" 2>&1 || warm_ok=false
+          publish_dashboard "$dir" warmup --round "$round" --artifacts "$dir/warmup-$round"
+          $warm_ok || { echo "워밍업 $round회 무효: $dir/warmup-$round/verdict.json" >&2; return 1; }
         fi
         "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
           || { echo "워밍업 $round회 뒤 회차 시드 실패: $dir/seed.log" >&2; return 1; }
@@ -463,33 +541,28 @@ run_once() {
   local k6_from k6_to
   # 본 부하 직전 직접 수집(서버 지표 사전값). 워밍업이 있으면 워밍업과 시드 요청은 여기까지의 값에 들어간다
   collect_metrics "$dir/server-metrics-pre.json" || { echo "본 측정 전 지표 수집 실패: $dir/server-metrics-pre.json" >&2; return 1; }
+  publish_dashboard "$dir" measurement --round "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)"
   k6_from=$(date +%s)
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
   if [[ $TOOL == gatling ]]; then
-    local simulation=QueueSurgeSimulation
-    local report_args=()
-    $GATLING_REPORT || report_args=(-nr)
-    [[ $SCENARIO != hot-seats ]] || simulation=HotSeatsSimulation
-    # 기본 사용자 홈이 읽기 전용이어도 Preferences의 잠금·저장이 가능하도록 회차별로 격리한다.
-    mkdir -p "$dir/gatling-prefs/.java/.userPrefs"
-    # taskset이 java를 exec하므로 $!가 곧 Gatling JVM이다(RSS 샘플링 대상)
-    env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-      READINESS_FILE="$dir/readiness.json" SUMMARY_FILE="$load_summary" "${vus_env[@]}" "${scenario_env[@]}" \
-      taskset -c "$K6_CPUS" java -Xmx"$GATLING_HEAP" "-Xlog:gc*:file=$dir/gatling-gc.log" -XX:+HeapDumpOnOutOfMemoryError "-XX:HeapDumpPath=$dir/gatling.hprof" \
-      --enable-native-access=ALL-UNNAMED "-Djava.util.prefs.userRoot=$dir/gatling-prefs" \
-      --add-opens java.base/java.lang=ALL-UNNAMED -cp "$GATLING_DIST/lib/*" io.gatling.app.Gatling \
-      -s "io.github.ticketing.loadtest.$simulation" -rf "$dir/gatling-results" "${report_args[@]}" > "$load_log" 2>&1 &
+    launch_gatling "$dir" "$schedule_file" "${scenario_env[@]}"
   else
     env K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS='p(95),p(99),avg,max' \
       BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
       READINESS_FILE="$dir/readiness.json" "${vus_env[@]}" "${scenario_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" "${k6_args[@]}" "loadtest/scenarios/$SCENARIO.ts" > "$load_log" 2>&1 &
   fi
   local k6_pid=$!
+  [[ $TOOL != gatling ]] || k6_pid=$GATLING_PID
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
   "$ROOT/scripts/loadtest/sample-pg.sh" "$k6_pid" "$dir/pg-activity.log" &
   PG_SAMPLER_PID=$!
+  LOAD_PID=$k6_pid
   wait "$k6_pid" || k6_status=$?
+  LOAD_PID=
+  if [[ $TOOL == gatling ]]; then
+    enrich_gatling "$dir" || { server_delta_ok=false; echo "Gatling 원시 결과 집계 실패: $dir/gatling-results.log" >&2; }
+  fi
   k6_to=$(date +%s)
   printf 'k6_end_unix_seconds: %s\nk6_exit_code: %s\n' "$k6_to" "$k6_status" >> "$dir/measurement.txt"
   # 본 부하 직후 직접 수집(서버 지표 사후값)
@@ -509,11 +582,13 @@ run_once() {
   printf 'server_delta_valid: %s\nserver_delta_controlled_inputs: %s\n' "$($server_delta_ok && echo yes || echo no)" "$( ((delta_status == 1)) && echo 불일치 || echo 일치·판정불가)" >> "$dir/measurement.txt"
   if $WARMUP; then
     # 워밍업 구간(워밍업 직전~본 부하 직전) 차분은 워밍업 요청이 이 구간에만 들어갔음을 확인하는 통제 입력이다
+    local warm_summaries=("$dir"/warmup-k6-summary-*.json)
+    [[ $TOOL != gatling ]] || warm_summaries=("$dir"/warmup-*/gatling-summary.json)
     if [[ $SCENARIO != smoke ]]; then
       jq -s '{metrics: {flow_booking_attempt: {count: (map(.metrics.flow_booking_attempt.count // 0) | add)}, http_reqs: {count: (map(.metrics.http_reqs.count // 0) | add)}}}' \
-        "$dir"/warmup-k6-summary-*.json > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
+        "${warm_summaries[@]}" > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
     else
-      jq -s '{metrics: {http_reqs: {count: (map(.metrics.http_reqs.count // 0) | add)}}}' "$dir"/warmup-k6-summary-*.json > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
+      jq -s '{metrics: {http_reqs: {count: (map(.metrics.http_reqs.count // 0) | add)}}}' "${warm_summaries[@]}" > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
     fi
     python3 "$ROOT/scripts/loadtest/metrics-delta.py" diff "$dir/server-metrics-pre-warmup.json" "$dir/server-metrics-pre.json" "$dir/server-delta-warmup.json" \
       --scenario "$SCENARIO" --k6-summary "$dir/warmup-k6-summary-total.json" --label warmup > "$dir/server-delta-warmup.log" 2>&1 || true
@@ -574,6 +649,15 @@ run_once() {
     printf 'conflict_readiness: %s\n' "$readiness" >> "$dir/measurement.txt"
   fi
 
+  local verdict_ok=true
+  if [[ $TOOL == gatling ]]; then
+    local verdict_args=(--scenario "$SCENARIO" --limit "$(gatling_limit)" --exit-code "$k6_status" --server)
+    $WARMUP && verdict_args+=(--isolation)
+    python3 "$ROOT/scripts/loadtest/gatling-results.py" judge "$dir" "${verdict_args[@]}" > "$dir/verdict.log" 2>&1 || verdict_ok=false
+    publish_dashboard "$dir" completed --round "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)"
+    $verdict_ok || echo "Gatling 최종 판정 미달: $dir/verdict.json" >&2
+  fi
+
   cleanup # SIGTERM으로 종료해 JFR이 파일로 남게 한다
 
   # k6 종료 코드 99, gatling 종료 코드 2는 threshold(assertion) 미달이다. 기준 측정은 미달 항목을 그대로 기록하므로 스크립트 실패로 보지 않는다.
@@ -582,7 +666,7 @@ run_once() {
   local threshold_code=99
   [[ $TOOL != gatling ]] || threshold_code=2
   if ((k6_status == threshold_code)) && [[ $SCENARIO != smoke ]]; then
-    thresholds="미달($TOOL 종료 코드 $threshold_code, 기록용이며 실패 아님)"
+    thresholds="미달($TOOL 종료 코드 $threshold_code)"
   elif ((k6_status != 0)); then
     thresholds="스크립트 오류($TOOL 종료 코드 $k6_status, $TOOL.log 참고)"
     script_ok=false
@@ -627,7 +711,7 @@ run_once() {
   # 부하 도구 프로세스의 최대 RSS(MB). k6와 gatling을 같은 방식으로 비교하는 지표다
   tool_rss_mb=$(awk -F, 'NR > 1 && $3 + 0 > max {max = $3 + 0} END {if (max > 0) printf "%.0f", max / 1048576; else print "n/a"}' "$dir/resources.csv" 2>/dev/null || echo n/a)
   SUMMARY+=("run $n: 도구 $TOOL, thresholds $thresholds, 부하 도구 최대 RSS ${tool_rss_mb}MB, 호스트 메모리 최대 사용률 ${host_mem_peak}, 요청 $reqs, http_req_failed $failed, 예매 생성 p95 $p95, 정합성 $integrity, 워밍업 $($WARMUP && echo "$WARMUP_ROUNDS회, $isolation" || echo 없음), 서버 차분 $($server_delta_ok && echo 유효 || echo 오류), B 준비 $readiness, 보상 $compensation, 디렉터리 $dir")
-  $script_ok && $integrity_ok && $isolation_ok && $compensation_ok
+  $script_ok && $integrity_ok && $isolation_ok && $compensation_ok && $verdict_ok
 }
 
 AOT_DIR="$RUN_ROOT/aot"
@@ -666,6 +750,7 @@ for ((i = 1; i <= RUNS; i++)); do
   if ! run_once "$i"; then
     overall=1
     cleanup
+    publish_dashboard "$RUN_ROOT/$i" failed --round "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)" || true
     SUMMARY+=("run $i: 실패(위 메시지와 $RUN_ROOT/$i 참고)")
   fi
 done

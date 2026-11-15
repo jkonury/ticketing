@@ -24,7 +24,7 @@ private val HOT_SEATS_MAX_DURATION = Duration.ofMinutes(10)
 private val HOT_SEATS_START_DELAY = Duration.ofSeconds(60)
 
 internal fun commonAssertions(vusCount: Int, streams: List<String>): List<Assertion> {
-    val limit = if (vusCount > STRESS_VUS) STRESS_BOOKING_P95_MS else BOOKING_P95_MS
+    val limit = LoadEnv.bookingP95Limit(if (vusCount > STRESS_VUS) STRESS_BOOKING_P95_MS else BOOKING_P95_MS)
     return listOf(
         details("booking_create").responseTime().percentile(BOOKING_P95_PERCENTILE).lt(limit),
         global().failedRequests().percent().lt(1.0),
