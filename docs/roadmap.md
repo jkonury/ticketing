@@ -79,7 +79,7 @@
 ## M5. 부하 테스트와 관측
 
 - [x] Micrometer + Prometheus + Grafana, 분산 추적
-  - [x] Scouter Gateway·realtime 설정 분리, SSE 계측 비용 축소 및 개발·부하 테스트 설정 선택 통일 ([Gatling ON/OFF 각 3회 비교](./performance/scouter-gatling-comparison.md): OOM 0건, ON 성능 비용 잔존)
+  - [x] Scouter Gateway·realtime 설정 분리, SSE 계측 비용 축소 및 개발·부하 테스트 설정 선택 통일 ([Gatling ON/OFF 각 3회 비교](./performance/scouter-gatling-comparison.md): OOM 0건. 패치 에이전트로 reactive 훅 비용 제거, [ADR 0027](./adr/0027-scouter-reactive-txid-context-propagation.md))
 - [x] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
 - [x] 기준 수치 측정 후 병목 개선, 전후 수치 기록
   - 기준 측정 완료: [m5-baseline.md](./performance/m5-baseline.md)

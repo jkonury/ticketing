@@ -8,7 +8,8 @@
 - hot-seats 예매 생성 p95는 OFF **1,855ms** → ON **2,607ms**, **+40.5%**였다. ON/OFF 모두 3회 전부 임시 1,500ms 기준 미달이며, 후속 목표인 300ms도 미달이다.
 - 전 실행 요청 실패율 0%, SSE 연결 성공률 100%, 전원 입장, 중복 판매·DB/Redis 불일치 0건이다. hot-seats는 6회 모두 정시 준비·예매 시도 1,000명이다. ON 6회에서 OOM은 관측되지 않았다.
 - 현재 경량 설정에서도 이 부하에서 Scouter ON 비용이 관측된다. 성능 기준선은 OFF로 분리하고 ON 결과는 진단 계열로 관리한다. 특정 훅을 원인으로 지목하거나, 과거 설정 대비 OOM 개선율을 주장할 근거는 이번 비교에 없다.
-- 후속 실험에서 SSE 경로를 XLog에서 제외하고 코루틴 훅을 끄면(F) queue-surge의 ON 시간 -12.9%·CPU -21.4%·GC -47.5%였다. OFF 대비로는 CPU +55.5%가 남아 채택 구성으로 유지하고 진단 계열로 관리한다. 자세한 내용은 [후속 실험](#후속-실험-reactor코루틴-훅-비용-분리-queue-surge)에 있다.
+- 후속 실험에서 SSE 경로를 XLog에서 제외하고 코루틴 훅을 끄면(F) queue-surge의 ON 시간 -12.9%·CPU -21.4%·GC -47.5%였다. OFF 대비로는 CPU +55.5%가 남았다. 자세한 내용은 [후속 실험](#후속-실험-reactor코루틴-훅-비용-분리-queue-surge)에 있다.
+- 남은 비용의 원인은 Scouter lift가 Reactor 자동 컨텍스트 전파와 겹쳐 모든 연산자에서 ThreadLocal 복원을 일으키는 것이었다. txid 전파를 context-propagation에 맡기는 패치 에이전트(C)는 reactive 훅을 켠 채로 queue-surge 앱 CPU가 OFF와 같았고(851.9 vs 851.8 CPU초), hot-seats 예매 p95는 OFF 대비 +23.0%(기존 ON +40.5%)였다. C를 채택한다([후속 실험](#후속-실험-txid-전파-방식-교체-패치-에이전트), [ADR 0027](../adr/0027-scouter-reactive-txid-context-propagation.md)).
 
 ## 실행 조건
 
@@ -123,10 +124,50 @@ F는 3회씩 두 묶음으로 실행했고 묶음별 중앙값이 시간 323·32
 
 - ON(기존) 대비 F: 시간 -12.9%, CPU -21.4%, GC -47.5%. OFF 대비 F: 시간 +27.6%, CPU +55.5%, GC +141.7%.
 - 기여 순서(연속 실행이라 근사): SSE discard가 CPU 약 15%, coroutine 훅 OFF가 추가 약 8%를 줄였다. reactive 훅을 끄면(D) CPU·GC가 OFF와 같아진다. 이 부하에서 남은 비용은 대부분 reactive 훅의 `TxidLifter`로 보이며, 메서드 프로파일·스케줄러 XLog 등 나머지 Scouter 기능 비용은 관측되지 않았다.
-- **채택: F.** HTTP XLog 수집은 유지하되 coroutine 훅을 끄고 SSE 경로를 XLog·TPS에서 제외한다. F 구성에서 HTTP XLog가 수집되는 것은 사용자가 수동 확인했다. 비용 잔존(CPU +55.5%)은 ON 계열이 진단용이라는 위 결론을 바꾸지 않는다.
+- **채택: F**(이후 [txid 전파 방식 교체](#후속-실험-txid-전파-방식-교체-패치-에이전트)의 C로 대체). HTTP XLog 수집은 유지하되 coroutine 훅을 끄고 SSE 경로를 XLog·TPS에서 제외한다. F 구성에서 HTTP XLog가 수집되는 것은 사용자가 수동 확인했다. 비용 잔존(CPU +55.5%)은 ON 계열이 진단용이라는 위 결론을 바꾸지 않는다.
 - D는 3회 중 1회(`20261115-142700-queue-surge`)에서 Gatling 사용자 1명이 SSE 대기열 결과를 받지 못해 900초 상한에서 끝났다(`sse_queue_result` 9,999). 이 회차 서버 CPU·GC·정합성(5,000석 판매·중복 0)은 정상이라 시간 최댓값 902초는 서버 처리 시간이 아니다. 훅 OFF와의 관련 여부는 이 표본으로 판단할 수 없고 원인은 추적하지 않았다. 다른 모든 실행(E·F 포함)은 10,000건이었다.
 - 한계: hot-seats는 재측정하지 않았다. 조합을 교차 배치하지 않고 연속 실행했다(순서: E → F1 → D → F2). SSE 판정 외 coroutine·reactive 훅의 요청별 비용은 분리하지 않았다. 표본 3~6회로 통계적 유의성을 주장하지 않는다.
 - 실행 ID(`build/loadtest/runs/`, 각 `<ID>-queue-surge`): E `20261115-125630`·`130316`·`130957`, F `131828`·`132434`·`133048`·`144654`·`145301`·`145921`, D `141710`·`142203`·`142700`.
+
+## 후속 실험: txid 전파 방식 교체 (패치 에이전트)
+
+F에 남은 비용(OFF 대비 CPU +55.5%)의 원인을 JFR로 찾고, Scouter 소스를 패치해 txid 전파 방식만 바꿔 측정했다. 코드·부하 조건은 위와 같다. 에이전트는 Scouter 2.21.3과 같은 소스에 [패치](../../deploy/scouter/patches/scouter-2.21.3-reactive-txid-propagation.patch)를 적용해 빌드했고(`scouter.agent.jar` SHA-256 `ac30c33b28fb0e67af5f32cea8d915ffa384d15e515589d9010e969c2e172aec`), `SCOUTER_AGENT_DIR`로 네 JVM에 연결했다. 설정은 F에 `_hook_reactive_txid_propagation` 한 줄만 더했다.
+
+### 원인
+
+- F 구성 queue-surge 1회를 JFR로 기록했다(`20261115-152119-queue-surge`). gateway 실행 샘플의 25.6%가 `TxidLifter` 프레임을 지나지만 Scouter·lift 프레임이 최상위인 샘플은 수 %였다. 최상위 프레임은 `DefaultContextSnapshot$DefaultScope.close`·`ThreadLocalMap`·`SimpleObservation.notifyOnScopeOpened` 등 ThreadLocal 복원 비용이었다.
+- Reactor 3.8.8 `Operators.LiftFunction.liftScannable`은 자동 컨텍스트 전파(`spring.reactor.context-propagation: auto`)가 켜져 있으면 lift되는 연산자마다 하위 subscriber를 `ContextWriteRestoringThreadLocalsSubscriber`로 감싼다. Scouter lifter가 subscriber를 그대로 돌려줘도 감싸므로, `Hooks.onEachOperator` 등록 자체가 모든 연산자의 신호마다 ThreadLocal 복원을 일으킨다. SSE discard로 트랜잭션이 없는 요청도 이 비용을 낸다.
+
+### 조합과 결과
+
+| 조합 | `_hook_reactive_txid_propagation` | 내용 |
+|---|---|---|
+| F | 없음(공식 에이전트, `lift`와 같음) | 연산자마다 `TxidLifter` |
+| B | `lift_light` + `_hook_reactive_scannable_tracking_enabled=false` | lift 유지, 체크포인트 탐색·Context 재할당·scannable 추적 제거 |
+| **C(채택)** | `context_propagation` | lift 미등록. Micrometer `ThreadLocalAccessor`(키 `TraceContext.class`)를 등록해 앱의 자동 전파가 txid를 복원 |
+
+queue-surge (3~6회 중앙값, 범위):
+
+| 조합 | 실행 수 | 전체 측정 시간 (초) | 앱 CPU 합계 (CPU초) | 앱 GC pause 합계 (초) | realtime CPU | gateway CPU |
+|---|---:|---:|---:|---:|---:|---:|
+| OFF | 3 | 255 (249~255) | 851.8 (840.3~865.4) | 5.75 (5.63~6.17) | 415.3 | 281.5 |
+| F | 6 | 326 (322~336) | 1,324.8 (1,280.8~1,363.0) | 13.89 (12.73~14.21) | 704.1 | 466.5 |
+| B | 3 | 330 (324~340) | 1,288.0 (1,281.6~1,308.5) | 12.84 (12.82~13.15) | 683.7 | 451.7 |
+| **C** | 3 | **248** (247~249) | **851.9** (842.9~860.5) | **5.26** (5.09~5.31) | 416.2 | 278.7 |
+
+hot-seats (3회 중앙값, 범위). ON은 기본 비교의 기존 설정이며 F는 hot-seats를 측정하지 않았다:
+
+| 조합 | 예매 생성 p95 (ms) | 앱 CPU 합계 (CPU초) | 앱 GC pause 합계 (초) | gateway CPU | realtime CPU | core CPU |
+|---|---:|---:|---:|---:|---:|---:|
+| OFF | 1,855 (1,726~1,979) | 94.8 (92.4~97.1) | 0.299 | 40.0 | 22.3 | 29.4 |
+| ON(기존) | 2,607 (2,490~3,052) | 120.1 (113.2~122.8) | 0.299 | 50.5 | 32.3 | 31.4 |
+| **C** | 2,281 (1,972~2,381) | 99.6 (97.4~102.2) | 0.080 | 41.5 | 24.4 | 29.0 |
+
+- C는 queue-surge에서 F 대비 시간 -23.8%·CPU -35.7%·GC -62.1%이고 OFF와 시간 -2.7%·CPU 0.0%로 차이가 없다. B는 F 대비 CPU -2.8%로 효과가 없어, 비용은 `TxidLifter` 내부가 아니라 lift 등록 자체에서 나온다는 위 분석과 일치한다.
+- hot-seats에서 C는 CPU가 OFF 대비 +5.1%, 예매 p95는 +23.0%(ON 기존 +40.5%)다. p95 범위가 OFF와 일부 겹치고 표본이 3회라 남은 차이의 원인은 분리하지 않았다. 6회 모두 1,000명 정시 준비·예매 시도, 정합성 통과다.
+- C에서 HTTP XLog와 Gateway Filter 메서드 스텝이 수집되는 것은 사용자가 수동 확인했다. 패치 에이전트 연결은 실행마다 gateway·realtime 로그의 `[R171]`로 확인했다.
+- 한계: txid는 스케줄러 경계와 `handle`·`tap` 등 자동 전파 지점에서만 복원되므로 Netty 이벤트 루프에서 바로 발생하는 신호의 하위 스텝은 덜 연결될 수 있다. 하위 스텝 연결 수를 F와 정량 비교하지 않았다. Reactor 체크포인트 프로파일과 scannable 덤프는 C에서 쓸 수 없다. 조합은 연속 실행했다(JFR → C×3 → B×3 → hot-seats C×3).
+- 실행 ID(`build/loadtest/runs/`): JFR `20261115-152119-queue-surge`, C `20261115-{153931,154422,154914}-queue-surge`, B `20261115-{155403,160010,160633}-queue-surge`, C hot-seats `20261115-{162616,162804,162952}-hot-seats`.
 
 ## 검증과 산출물
 

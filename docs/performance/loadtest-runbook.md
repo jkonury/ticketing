@@ -182,7 +182,7 @@ GUI로 볼 때는 `$MAT/MemoryAnalyzer`에서 hprof를 열고 Dominator Tree(보
 - 덤프: `TraceContext` 9,850개(연결당 약 55KB)가 `ThreadCallPossibleStep` 222만 개, `MethodStep` 95만 개, `ParameterizedMessageStep` 55만 개를 들고 있었다.
 - 조치: realtime은 별도 설정 파일 `deploy/scouter/ticketing-realtime.conf`를 쓰고, 여기서 `hook_async_*` 세 항목을 끄고 `*Service.*`를 메서드 추적에서 뺐다(공통 항목을 고치면 `ticketing.conf`와 같이 고친다). 1차 조치(async 훅 off, `*Service.*` 추적 제외) 후 재측정한 덤프에서도 `TraceContext` 약 9,900개가 힙의 51.5%였다. `ThreadCallPossibleStep`은 사라지고 `MethodStep`은 연결당 3개로 줄었지만 `ParameterizedMessageStep` 96만 개(보존 391MB)가 남았다. 리액터 체크포인트(`profile_reactor_checkpoint_enabled`)를 꺼도 줄지 않았다. MAT OQL로 스텝 내용을 뽑아 보니 `EXISTS key<booking:seats:{30}>` 같은 Redis 명령이었다. 2차 조치로 realtime 설정에서 `_hook_redis_enabled=false`를 두었다. 이 조치만의 효과는 분리 측정하지 않았다.
 
-현재 설정은 Gateway도 `deploy/scouter/ticketing-gateway.conf`로 분리해 개발·부하 테스트에서 동일하게 선택한다. 두 WebFlux 앱 모두 async·Redis·코루틴 훅과 Reactor 체크포인트, 스레드별 CPU·할당량 수집을 끄고 SSE 경로(`/api/v1/streams/*`)는 XLog에서 제외한다. Reactor 훅은 켜서 HTTP XLog를 수집한다. 이 구성이 훅을 모두 켠 설정보다 queue-surge에서 시간 -12.9%·CPU -21.4%·GC -47.5%이나 OFF 대비 CPU +55.5%가 남는다([후속 실험](scouter-gatling-comparison.md#후속-실험-reactor코루틴-훅-비용-분리-queue-surge)). Reactor 훅까지 끄면 WebFlux HTTP XLog·요청 TPS·응답시간 수집이 중단되고 비용은 OFF와 같아지므로 그때는 HTTP 관측에 Micrometer를 사용한다. 현재 설정의 [Gatling ON/OFF 각 3회 비교](scouter-gatling-comparison.md)에서는 ON 6회 OOM 0건이었지만, ON에서 A 전체 처리 시간 중앙값 +46.7%·앱 CPU 시간 +98.0%, B 예매 p95 +40.5%가 관측됐다. 과거 설정과의 전후 비교가 아니므로 OOM·성능 개선율로 쓰지 않는다.
+현재 설정은 Gateway도 `deploy/scouter/ticketing-gateway.conf`로 분리해 개발·부하 테스트에서 동일하게 선택한다. 두 WebFlux 앱 모두 async·Redis·코루틴 훅과 Reactor 체크포인트, 스레드별 CPU·할당량 수집을 끄고 SSE 경로(`/api/v1/streams/*`)는 XLog에서 제외한다. Reactor 훅은 켜서 HTTP XLog를 수집하고, txid 스레드 전파는 패치 에이전트의 `_hook_reactive_txid_propagation=context_propagation`으로 앱의 자동 컨텍스트 전파에 맡긴다([ADR 0027](../adr/0027-scouter-reactive-txid-context-propagation.md)). 이 구성의 queue-surge 앱 CPU는 OFF와 같다([후속 실험](scouter-gatling-comparison.md#후속-실험-txid-전파-방식-교체-패치-에이전트)). 공식 에이전트로 띄우면 이 키가 무시되고 기본 lift로 동작해 OFF 대비 CPU +55.5%가 남는다([이전 실험](scouter-gatling-comparison.md#후속-실험-reactor코루틴-훅-비용-분리-queue-surge)). 현재 설정의 [Gatling ON/OFF 각 3회 비교](scouter-gatling-comparison.md)에서는 ON 6회 OOM 0건이었지만, ON에서 A 전체 처리 시간 중앙값 +46.7%·앱 CPU 시간 +98.0%, B 예매 p95 +40.5%가 관측됐다. 과거 설정과의 전후 비교가 아니므로 OOM·성능 개선율로 쓰지 않는다.
 
 `profile_step_max_count=256`은 전송 묶음 크기다. 연결별 메모리 버퍼는 `profile_step_max_keep_in_memory_count=256`으로 별도 지정하며, 버퍼가 차면 전송 후 교체한다. 전체 스텝 생성량이나 전체 메모리의 상한은 아니다. 훅 변경은 JVM을 재시작한 뒤 확인한다.
 
@@ -195,3 +195,15 @@ $MAT/ParseHeapDump.sh <앱>.hprof -command='oql "SELECT s.hash, toString(s.param
 `-command`는 report ID(`org.eclipse.mat.api:query`)보다 앞에 둬야 한다. `-format`, `-limit`을 붙이면 `Invalid command line` 오류가 난다.
 
 실제로 붙은 에이전트는 덤프의 System Properties(`scouter.dir`, `scouter.config`)로 확인한다. 이번에는 `/home/hong/dev/tool/scouter-2.21/agent.java21plus`였다.
+
+### 패치 에이전트 빌드와 선택
+
+Scouter 2.21.3 배포본과 같은 소스(커밋 `959f18d3`)에 [`deploy/scouter/patches/scouter-2.21.3-reactive-txid-propagation.patch`](../../deploy/scouter/patches/scouter-2.21.3-reactive-txid-propagation.patch)를 적용해 빌드한다. JDK 21로 빌드하며, 산출 jar를 공식 `agent.java21plus` 디렉터리 복사본에 교체한다.
+
+```bash
+git -C <scouter 소스> apply <ticketing>/deploy/scouter/patches/scouter-2.21.3-reactive-txid-propagation.patch
+JAVA_HOME=<JDK 21> JAVA_21_HOME=<JDK 21> mvn -B -pl scouter.agent.java -am -Pjava-21-plus -DskipTests package
+SCOUTER_AGENT_DIR=<패치 에이전트 디렉터리> ./scripts/loadtest/run.sh --scenario queue-surge --tool gatling --observability
+```
+
+`run.sh`는 실행 시 지정한 `SCOUTER_AGENT_DIR`을 `.env` 값보다 우선한다. 패치 에이전트가 붙었는지는 gateway·realtime 로그의 `[R171] reactive txid propagation: micrometer context-propagation accessor registered`로 확인한다. `[R168]`·`[R172]`가 보이면 `lift`로 되돌아간 것이다.
