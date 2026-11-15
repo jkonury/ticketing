@@ -173,7 +173,7 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 
 - 주요 옵션: `--runs N`(반복 횟수), `--vus N`, `--k6-cpus 0-3`·`--app-cpus 4-15`(CPU 분리), `--keep`(앱만 정리하고 Compose 인프라는 남긴다), `-h`(전체 옵션).
 - 결과는 `build/loadtest/runs/<타임스탬프>-<시나리오>/<N>/`에 저장된다. `k6-summary.json`, `k6.log`, `prometheus.json`, 앱별 `core.log`·`realtime.log`·`gateway.log`·`fake-pg.log`가 있다. git에는 넣지 않는다.
-- 18090을 compose의 `ticketing-fake-pg-1` 컨테이너가 점유하면 측정 전 `docker stop ticketing-fake-pg-1`, 끝나면 `docker start ticketing-fake-pg-1`로 복구한다(E2E가 다시 띄우므로 부하 전에 재중지). 결과 해석은 [M5 최종 보고서](performance/m5-improvements.md#step-8-최종-측정과-m5-결과-보고서-2026-11-14)를 따른다.
+- 18090을 compose의 `ticketing-fake-pg-1` 컨테이너가 점유하면 측정 전 `docker stop ticketing-fake-pg-1`, 끝나면 `docker start ticketing-fake-pg-1`로 복구한다(E2E가 다시 띄우므로 부하 전에 재중지). 결과 해석은 [M5 최종 보고서](performance/m5/11-step8-final-report.md)를 따른다.
 - 부하 테스트는 `build`·`check`에 포함되지 않는다. Gradle 작업과 동시에 실행하지 않는다. 측정은 다른 검사가 끝난 뒤 단독으로 돌린다.
 
 정합성 검증이 실패하면(`정합성 위반`, 종료 코드 1) 다음을 본다.
