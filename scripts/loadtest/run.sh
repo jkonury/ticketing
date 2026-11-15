@@ -12,12 +12,16 @@ usage() {
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
             [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N]
+            [--internal-warmup] [--core-jvm-opts '옵션...'] [--gateway-jvm-opts '옵션...']
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
 --warmup-rounds는 워밍업 횟수입니다(기본 5). Gatling 회차별 결과는 warmup-<n>/, settle은 warmup-settle-<n>.json에 남깁니다.
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
+--internal-warmup은 core가 기동 중(readiness 전, /actuator/health가 UP이 되기 전)에 실제 예매 생성 경로를 스스로 예열하게 합니다(ADR 0028).
+외부 워밍업 요청은 없으므로 콜드 계열이며, 예열 중 DB·Redis 호출 수와 소요 시간은 env.txt의 internal-warmup 줄에 남깁니다.
+--core-jvm-opts·--gateway-jvm-opts는 해당 JVM에 공백으로 나뉜 옵션을 추가합니다(예: '-XX:CompileThresholdScaling=0.25'). env.txt에 기록합니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
@@ -50,6 +54,10 @@ METRIC_TARGETS=(core=18080 realtime=18081 gateway=18000 fake-pg=18090)
 AOT_CACHE=false
 AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
+INTERNAL_WARMUP=false
+CORE_JVM_OPTS=
+GATEWAY_JVM_OPTS=
+CORE_HEALTH_TIMEOUT=90
 TOOL=k6
 GATLING_HEAP=2g
 BOOKING_P95_MS=
@@ -71,6 +79,9 @@ while (($#)); do
     --warmup) WARMUP=true; shift ;;
     --warmup-rounds) need_value "$@"; WARMUP_ROUNDS=$2; shift 2 ;;
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
+    --internal-warmup) INTERNAL_WARMUP=true; shift ;;
+    --core-jvm-opts) need_value "$@"; CORE_JVM_OPTS=$2; shift 2 ;;
+    --gateway-jvm-opts) need_value "$@"; GATEWAY_JVM_OPTS=$2; shift 2 ;;
     --tool) need_value "$@"; TOOL=$2; shift 2 ;;
     --booking-p95-ms) need_value "$@"; BOOKING_P95_MS=$2; shift 2 ;;
     --gatling-heap) need_value "$@"; GATLING_HEAP=$2; shift 2 ;;
@@ -98,6 +109,8 @@ if [[ -n $BOOKING_P95_MS ]]; then
   [[ $TOOL == gatling ]] || { echo '--booking-p95-ms는 Gatling 전용입니다.' >&2; exit 1; }
   [[ $BOOKING_P95_MS =~ ^[1-9][0-9]*$ && ${#BOOKING_P95_MS} -le 9 ]] || { echo '--booking-p95-ms에는 양의 정수가 필요합니다.' >&2; exit 1; }
 fi
+[[ $CORE_JVM_OPTS$GATEWAY_JVM_OPTS != *[\$'\n;|&`']* ]] || { echo 'JVM 옵션에는 개행·셸 메타문자를 쓸 수 없습니다.' >&2; exit 1; }
+$INTERNAL_WARMUP && CORE_HEALTH_TIMEOUT=150 # 예열 시간 상한(40초)과 기동 시간을 더해도 넘지 않게 한다
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $AOT_TRAIN_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--aot-train-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
@@ -228,7 +241,7 @@ start() {
 }
 
 health() {
-  local name=$1 port=$2 pid=$3 dir=$4 deadline=$((SECONDS + 90))
+  local name=$1 port=$2 pid=$3 dir=$4 deadline=$((SECONDS + ${5:-90}))
   until curl -fsS "http://localhost:$port/actuator/health" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
     if ((SECONDS >= deadline)) || ! kill -0 "$pid" 2>/dev/null; then
       printf '%s 기동 실패. 로그: %s/%s.log\n' "$name" "$dir" "$name" >&2
@@ -279,6 +292,8 @@ write_env() {
       printf 'aot-cache: 미사용\n'
     fi
     printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
+    printf 'core-jvm-opts: %s\ngateway-jvm-opts: %s\n' "${CORE_JVM_OPTS:-없음}" "${GATEWAY_JVM_OPTS:-없음}"
+    printf 'internal-warmup-enabled: %s\n' "$INTERNAL_WARMUP"
     if [[ -n ${SCOUTER_AGENT_DIR:-} ]]; then
       sha256sum "$SCOUTER_AGENT_DIR/scouter.agent.jar"
       for name in core gateway realtime fake-pg; do
@@ -289,6 +304,15 @@ write_env() {
   } > "$1/env.txt"
 }
 
+# core 로그의 내부 예열 요약 줄(예열 중 DB·Redis 호출 수와 소요 시간)을 env.txt에 옮긴다
+record_internal_warmup() {
+  $INTERNAL_WARMUP || return 0
+  local line
+  line=$(rg -o 'internal-warmup: .*' "$1/core.log" | tail -n 1)
+  [[ -n $line ]] || { echo "core 로그에 internal-warmup 요약 줄이 없습니다(예열 실패 또는 비활성): $1/core.log" >&2; return 1; }
+  printf '%s\n' "$line" >> "$1/env.txt"
+}
+
 start_apps() {
   local dir=$1 failure=$2 duplicate=$3 batch=() obs=()
   [[ $SCENARIO != hot-seats && $SCENARIO != seat-conflict-refund ]] || batch=(TICKETING_REALTIME_QUEUE_ADMISSION_BATCH_SIZE=1000)
@@ -296,13 +320,16 @@ start_apps() {
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
     FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
-  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar "${obs[@]}"
+  local core_env=()
+  if $INTERNAL_WARMUP; then core_env=(TICKETING_WARMUP_ENABLED=true); fi
+  start core "$dir" "-Xms2g -Xmx2g $CORE_JVM_OPTS" core/build/libs/core.jar "${core_env[@]}" "${obs[@]}"
   start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"
   local gw_env=()
   if $NO_RATE_LIMIT; then gw_env=(TICKETING_GATEWAY_RATE_LIMIT_ENABLED=false); fi
-  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar "${gw_env[@]}" "${obs[@]}"
+  start gateway "$dir" "-Xms1g -Xmx1g $GATEWAY_JVM_OPTS" gateway/build/libs/gateway.jar "${gw_env[@]}" "${obs[@]}"
   health fake-pg 18090 "${PIDS[0]}" "$dir" || return 1
-  health core 18080 "${PIDS[1]}" "$dir" || return 1
+  health core 18080 "${PIDS[1]}" "$dir" "$CORE_HEALTH_TIMEOUT" || return 1
+  record_internal_warmup "$dir"
   health realtime 18081 "${PIDS[2]}" "$dir" || return 1
   health gateway 18000 "${PIDS[3]}" "$dir" || return 1
 }

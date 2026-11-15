@@ -86,6 +86,7 @@
   - 개선 확인: 대기열·입장 경합 수정으로 A 예상 밖 오류 7.65% → 0%·입장 약 7,000 → 10,000명, B 정시 준비 1,000/1,000 (Step 2 전후 3회 등, [최종 보고서](./performance/m5/11-step8-final-report.md))
   - **미해결**: B 예매 생성 p95 잠정 기준 300ms 미달(최종 콜드 1,385ms, 워밍업 383ms). 원인 미확정, 후속 과제
   - [ ] [Gatling hot-seats 1,000명 p95 300ms 후속 계획](./plans/hot-seats-gatling-p95-300ms.md): 15회 예열 후 독립 실행 5회 검증. 측정 기반·전용 대시보드 추가, 첫 예열 확인 후 중단. 본 측정·Scouter ON/OFF 비교 미완료([인계](./plans/hot-seats-gatling-handoff.md)). 콜드 목표와 분리
+  - [ ] [hot-seats 내부 예열 후속 계획](./plans/hot-seats-internal-warmup.md): 기동 시 내부 예열을 콜드로 인정한 1,000명 p95 300ms 검증([ADR 0028](./adr/0028-internal-startup-warmup.md)). 구현 완료, 측정은 Gatling 외부 15회 예열 결과 확인 뒤 진행
   - [x] booking 불변 좌석 사본 캐시 구현·회귀 검증 ([ADR 0025](./adr/0025-booking-seat-copy-cache.md))
   - M5-2 계획: [병목 개선과 전후 비교](./plans/m5-2-improvements.md)
 - [x] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)
