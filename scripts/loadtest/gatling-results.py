@@ -145,6 +145,8 @@ def judge(directory, scenario, limit, exit_code, warmup=False, check_server=Fals
             check('noLate', ready.get('readyLate') == 0 and ready.get('fullContention') is True)
             check('bookingRequestCount', all_booking['count'] == expected)
             check('no429', outcomes['rateLimited']['count'] == 0)
+        if scenario == 'seat-conflict-refund':
+            check('compensation', read('compensation.json').get('ok') is True)
         if scenario != 'seat-conflict-refund':
             counters = summary['metrics']
             success = outcomes['success']['count']

@@ -61,11 +61,11 @@ while :; do
 done
 waited=$((SECONDS - started))
 
-# PG 거래 조회 계약(GET /v1/transactions?date=). UTC 자정을 넘긴 실행도 보게 전날·오늘을 합친다
+# PG 거래 조회 계약(GET /v1/transactions?date=). 날짜는 Asia/Seoul 기준이며 자정을 넘긴 실행도 보게 전날·오늘을 합친다
 pg_ok=true
 {
-  curl -fsS "$PG_URL/v1/transactions?date=$(date -u -d yesterday +%F)" || pg_ok=false
-  curl -fsS "$PG_URL/v1/transactions?date=$(date -u +%F)" || pg_ok=false
+  curl -fsS "$PG_URL/v1/transactions?date=$(TZ=Asia/Seoul date -d yesterday +%F)" || pg_ok=false
+  curl -fsS "$PG_URL/v1/transactions?date=$(TZ=Asia/Seoul date +%F)" || pg_ok=false
 } | jq -s 'add // []' > "$OUTDIR/ledger-pg.json" || pg_ok=false
 
 # Redis: 그룹의 모든 좌석에 대해 스냅샷 값과 선점 키 존재 여부

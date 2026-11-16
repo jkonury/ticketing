@@ -22,7 +22,7 @@ SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
 --warmup·--failure-inject와 함께 쓰지 않습니다.
---tool gatling은 queue-surge·hot-seats를 지원하며 --aot-cache와 함께 쓰지 않습니다.
+--tool gatling은 queue-surge·hot-seats·seat-conflict-refund를 지원하며 --aot-cache와 함께 쓰지 않습니다.
 --booking-p95-ms는 Gatling 예매 p95 한도(양의 정수)입니다. 미지정 시 100명 이하 300ms, 초과 1500ms입니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
 JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 기본은 리포트를 생략하며(-nr), --gatling-report로 HTML 리포트를 생성합니다.
 리포트는 회차별 gatling-results/<실행 디렉터리>/index.html에 저장됩니다. 리포트 생성 시간·메모리도 측정에 포함됩니다.
@@ -91,7 +91,7 @@ if $GATLING_REPORT && [[ $TOOL != gatling ]]; then
 fi
 [[ $GATLING_HEAP =~ ^[1-9][0-9]*[mMgG]$ ]] || { echo '--gatling-heap에는 512m, 4g 같은 값이 필요합니다.' >&2; exit 1; }
 if [[ $TOOL == gatling ]]; then
-  [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats ]] || { echo '--tool gatling은 queue-surge, hot-seats만 지원합니다.' >&2; exit 1; }
+  [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats || $SCENARIO == seat-conflict-refund ]] || { echo '--tool gatling은 queue-surge, hot-seats, seat-conflict-refund만 지원합니다.' >&2; exit 1; }
   $AOT_CACHE && { echo '--tool gatling은 --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1; }
 fi
 if [[ -n $BOOKING_P95_MS ]]; then
@@ -326,6 +326,7 @@ launch_gatling() {
   local simulation=QueueSurgeSimulation report_args=() load_env=()
   case "$SCENARIO" in
     hot-seats) simulation=HotSeatsSimulation ;;
+    seat-conflict-refund) simulation=SeatConflictRefundSimulation ;;
   esac
   $GATLING_REPORT || report_args=(-nr)
   [[ -z $VUS ]] || load_env+=(VUS="$VUS")
@@ -404,12 +405,25 @@ conflict_first_phase() {
   local dir=$1 schedule_file=$2 schedule_id members_min first_status=0 created
   schedule_id=$(jq -r .scheduleId "$schedule_file")
   members_min=$(jq -r .userIdMin "$OUT/members.json")
-  env PHASE=first BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
-    READINESS_FILE="$dir/conflict-first-readiness.json" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/k6-first-summary.json" \
-    loadtest/scenarios/seat-conflict-refund.ts > "$dir/k6-first.log" 2>&1 || first_status=$?
-  if ((first_status != 0 && first_status != 99)) || rg -q 'source=stacktrace|script exception' "$dir/k6-first.log"; then
-    echo "첫 단계 k6 오류(종료 코드 $first_status): $dir/k6-first.log" >&2
-    return 1
+  if [[ $TOOL == gatling ]]; then
+    # 첫 단계도 새 Gatling JVM이다. 로그·원시 결과는 first-gatling/ 아래에 두어 본 단계와 섞지 않는다
+    mkdir -p "$dir/first-gatling"
+    launch_gatling "$dir/first-gatling" "$schedule_file" PHASE=first
+    wait "$GATLING_PID" || first_status=$?
+    LOAD_PID=
+    # Gatling은 assertion 미달을 종료 코드 2로 알린다. 예매 생성 수는 아래 PENDING 검사로 확인한다
+    if ((first_status != 0 && first_status != 2)) || rg -q 'Exception in thread|UnsupportedClassVersionError' "$dir/first-gatling/gatling.log"; then
+      echo "첫 단계 Gatling 오류(종료 코드 $first_status): $dir/first-gatling/gatling.log" >&2
+      return 1
+    fi
+  else
+    env PHASE=first BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+      READINESS_FILE="$dir/conflict-first-readiness.json" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/k6-first-summary.json" \
+      loadtest/scenarios/seat-conflict-refund.ts > "$dir/k6-first.log" 2>&1 || first_status=$?
+    if ((first_status != 0 && first_status != 99)) || rg -q 'source=stacktrace|script exception' "$dir/k6-first.log"; then
+      echo "첫 단계 k6 오류(종료 코드 $first_status): $dir/k6-first.log" >&2
+      return 1
+    fi
   fi
   psql_q "SELECT coalesce(jsonb_agg(jsonb_build_object('pair', member_id - $members_min + 1, 'memberId', member_id, 'bookingId', id, 'holdToken', hold_token) ORDER BY member_id), '[]'::jsonb)
     FROM booking.booking WHERE schedule_id = $schedule_id AND status = 'PENDING' AND member_id BETWEEN $members_min AND $((members_min + CONFLICT_PAIRS - 1))" > "$dir/conflict-first.json"

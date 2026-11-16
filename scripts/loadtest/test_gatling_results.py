@@ -99,11 +99,22 @@ class GatlingResultsTest(unittest.TestCase):
         path.write_bytes(data[:-1])
         with self.assertRaises(ValueError): list(RESULTS.LogReader(path).requests())
 
+    def test_보상_시나리오는_보상_원장_검증_결과를_판정에_반영한다(self):
+        self.write('gatling-summary.json', self.summary)
+        judge = lambda: RESULTS.judge(self.directory, 'seat-conflict-refund', 1500, 0)
+        missing = judge()  # compensation.json 누락은 합격이 아니다
+        self.assertFalse(missing['passed'])
+        self.assertFalse(missing['checks']['requiredArtifacts'])
+        self.write('compensation.json', {'ok': False})
+        self.assertFalse(judge()['checks']['compensation'])
+        self.write('compensation.json', {'ok': True})
+        self.assertTrue(judge()['checks']['compensation'])
+
     def test_TERM은_자식을_정리하고_다음_반복_없이_종료한다(self):
         runner = (ROOT / 'scripts/loadtest/run.sh').read_text()
         handlers = runner[runner.index('PIDS=()'):runner.index('build_tasks=')]
         script = self.directory / 'signal.sh'
-        script.write_text('set -euo pipefail\n' + handlers + '\nsleep 30 &\nLOAD_PID=$!\necho ready\nwait "$LOAD_PID" || true\necho unexpected-next-run\n')
+        script.write_text('set -euo pipefail\n' + handlers + '\nsleep 30 &\nLOAD_PID=$!\nwhile [[ $(ps -o comm= -p "$LOAD_PID") != sleep ]]; do :; done\necho ready\nwait "$LOAD_PID" || true\necho unexpected-next-run\n')
         process = subprocess.Popen(['bash', str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             self.assertEqual(process.stdout.readline().strip(), 'ready')

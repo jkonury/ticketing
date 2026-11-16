@@ -65,7 +65,7 @@ env BASE_URL=... TICKETING_JWT_SECRET=... MEMBERS_FILE=... SCHEDULE_FILE=... VUS
 - 409 SEAT_ALREADY_HELD·429는 k6처럼 예상 응답이다. 429는 `Retry-After`(최대 5초)만큼 쉬고 최대 5번 다시 보낸다. 다른 4xx·5xx는 KO다.
 - SSE는 Gatling 내장 SSE 지원을 쓴다(xk6-sse 불필요). 메시지는 `{"event":"…","data":…}` JSON으로 체크에 전달된다.
 - Gatling 기본 워밍업이 외부로 요청을 보내므로 끈다(`disableWarmUp`).
-- `run.sh --tool gatling`으로 앱 기동·시드·서버 지표 차분·정합성 검증까지 k6와 같은 절차로 실행한다. queue-surge·hot-seats와 `--warmup --warmup-rounds N`을 지원한다. `--aot-cache`·seat-conflict-refund·smoke는 러너에서 k6 전용이다. Gatling 예열은 지연 미달만 허용하고 준비·오류·SSE·정합성·settle 실패는 거부한다. 본 측정은 `verdict.json`으로 전체·생성 성공 p95와 통제 입력 등을 판정하며 미달 시 러너도 비정상 종료한다.
+- `run.sh --tool gatling`으로 앱 기동·시드·서버 지표 차분·정합성 검증까지 k6와 같은 절차로 실행한다. queue-surge·hot-seats와 `--warmup --warmup-rounds N`을 지원한다. seat-conflict-refund는 첫 단계(`PHASE=first`)와 본 단계(`PHASE=second`)를 각각 새 Gatling JVM으로 실행하고 보상 원장 검증 결과(`compensation.json`)를 `verdict.json`에 반영한다(`--warmup`과는 함께 쓰지 않는다). `--aot-cache`·smoke는 러너에서 k6 전용이다. Gatling 예열은 지연 미달만 허용하고 준비·오류·SSE·정합성·settle 실패는 거부한다. 본 측정은 `verdict.json`으로 전체·생성 성공 p95와 통제 입력 등을 판정하며 미달 시 러너도 비정상 종료한다.
 
 ## 예열·판정·전용 대시보드
 
