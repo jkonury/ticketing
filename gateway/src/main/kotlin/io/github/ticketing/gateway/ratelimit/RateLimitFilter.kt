@@ -16,12 +16,14 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
+import java.util.concurrent.atomic.AtomicLong
 
 private const val DEFAULT_REPLENISH_RATE = 20
 private const val DEFAULT_BURST_CAPACITY = 40L
 private const val BOOKING_BURST_CAPACITY = 5L
 private const val STREAM_REPLENISH_RATE = 5
 private const val STREAM_BURST_CAPACITY = 10L
+private const val WARMUP_KEY_POOL = 1024
 
 @ConfigurationProperties("ticketing.gateway.rate-limit")
 data class RateLimitProperties(
@@ -59,6 +61,7 @@ class RateLimitFilter(
     private val registry: MeterRegistry,
 ) : GatewayFilter {
     private val enabled = properties.enabled
+    private val warmupSequence = AtomicLong()
 
     init {
         mapOf(
@@ -73,12 +76,21 @@ class RateLimitFilter(
     }
 
     override fun filter(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> =
-        // Gateway가 자신의 예열 요청에 표시한 경우만 건너뛴다. 15,000건이 회원 -1의 버킷을 소진해 429가 나지 않게 한다
-        if (!enabled || exchange.getAttribute<Boolean>(GatewayAttributes.STARTUP_WARMUP) == true) {
-            chain.filter(exchange)
-        } else {
-            filterLimited(exchange, chain)
+        when {
+            !enabled -> chain.filter(exchange)
+            exchange.getAttribute<Boolean>(GatewayAttributes.STARTUP_WARMUP) == true -> filterWarmup(exchange, chain)
+            else -> filterLimited(exchange, chain)
         }
+
+    // 예열 요청도 실제 isAllowed(Redis 스크립트·응답 매핑)를 실행해 JIT가 그 경로를 익히게 한다. 키를 회원 -1 하나로 두면
+    // 버킷이 소진되므로 예열 전용 키 풀을 돌려 쓰고 결과는 무시한다. 측정 지표(stage 타이머)를 오염시키지 않도록 기록하지 않는다. 429는 만들지 않으며 키는 limiter TTL로 사라진다
+    private fun filterWarmup(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> {
+        val route = exchange.getRequiredAttribute<org.springframework.cloud.gateway.route.Route>(GATEWAY_ROUTE_ATTR)
+        val key = "warmup:${warmupSequence.getAndIncrement() % WARMUP_KEY_POOL}"
+        return limiter.isAllowed(route.id, key)
+            .onErrorResume { Mono.empty() }
+            .then(Mono.defer { chain.filter(exchange) })
+    }
 
     private fun filterLimited(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> =
         keyResolver.resolve(exchange).flatMap { key ->
