@@ -6,6 +6,8 @@
 
 예열 HTTP 요청이 별도 예열 컨트롤러 대신 Gateway 운영 라우트(`core-bookings-create`)와 core의 실제 `BookingController.create`·`hasRole('USER')` 인가를 거치도록 바꿨다. 기능 검사는 통과했고 예열은 이전과 같은 15회 · 15,000건을 완료했다. 그러나 JFR OFF 3회 전체 예매 p95는 **709·1,458·816ms**로 300ms 목표에 모두 미달이다. 이전(741·843·853ms)보다 낫다고 말할 수 없고, 2회차는 오히려 높다. 예매 구간 `jdk.Deoptimization`은 core **203건**(이전 198), Gateway **13건**(이전 46)이며 core의 최상위 Interpreted 표본 비율은 23.2%로 거의 같다. "예열과 본 요청의 호출 경로 차이가 core 탈최적화의 원인"이라는 가설은 core에서는 지지되지 않았다. Gateway 쪽 감소는 관찰했으나 지연 감소와의 인과는 확인하지 못했다. 순수 콜드 회귀는 생략했다.
 
+> 2026-11-16 900ms 잠정 기준 재판정([16](16-startup-warmup-burst-volume.md#목표-전환)): 전체 p95 709·1,458·816ms 중 2회차가 900ms 미달이라 3회 모두 충족은 아니다. 300ms는 모두 미달이다.
+
 ## 변경
 
 - Gateway 예열 요청: `POST /api/v1/bookings`(Gateway 자신의 포트). 운영 JWT·입장 토큰(Redis 실조회)·본문 캐시 필터와 라우트를 거친다. 한도 필터만 예열 표시 요청에서 건너뛴다.
