@@ -11,13 +11,14 @@ usage() {
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
-            [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N]
+            [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N] [--jvm-opts '-XX:옵션 ...']
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
 --warmup-rounds는 워밍업 횟수입니다(기본 5). Gatling 회차별 결과는 warmup-<n>/, settle은 warmup-settle-<n>.json에 남깁니다.
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
+--jvm-opts는 core·gateway JVM에만 추가하는 -XX 옵션입니다(예: '-XX:CompileThresholdScaling=0.25'). 컴파일 임계 대조용이며 env.txt에 기록합니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
@@ -35,6 +36,7 @@ SCENARIO=
 RUNS=1
 FAILURE_INJECT=false
 JFR=false
+JVM_OPTS=
 OBSERVABILITY=false
 KEEP=false
 VUS=
@@ -65,6 +67,7 @@ while (($#)); do
     --app-cpus) need_value "$@"; APP_CPUS=$2; shift 2 ;;
     --failure-inject) FAILURE_INJECT=true; shift ;;
     --jfr) JFR=true; shift ;;
+    --jvm-opts) need_value "$@"; JVM_OPTS=$2; shift 2 ;;
     --observability) OBSERVABILITY=true; shift ;;
     --keep) KEEP=true; shift ;;
     --no-scouter) NO_SCOUTER=true; shift ;;
@@ -98,6 +101,7 @@ if [[ -n $BOOKING_P95_MS ]]; then
   [[ $TOOL == gatling ]] || { echo '--booking-p95-ms는 Gatling 전용입니다.' >&2; exit 1; }
   [[ $BOOKING_P95_MS =~ ^[1-9][0-9]*$ && ${#BOOKING_P95_MS} -le 9 ]] || { echo '--booking-p95-ms에는 양의 정수가 필요합니다.' >&2; exit 1; }
 fi
+[[ -z $JVM_OPTS || $JVM_OPTS =~ ^-XX:[A-Za-z0-9_.=+:-]+( -XX:[A-Za-z0-9_.=+:-]+)*$ ]] || { echo '--jvm-opts에는 공백으로 구분한 -XX:옵션만 쓸 수 있습니다.' >&2; exit 1; }
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $AOT_TRAIN_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--aot-train-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
@@ -203,6 +207,10 @@ start() {
   if $JFR; then
     opts+=("-XX:StartFlightRecording=filename=$dir/$name.jfr,dumponexit=true,settings=profile,jdk.VirtualThreadPinned#threshold=0ms")
   fi
+  if [[ -n $JVM_OPTS && ( $name == core || $name == gateway ) ]]; then
+    read -r -a extra_opts <<< "$JVM_OPTS"
+    opts+=("${extra_opts[@]}")
+  fi
   if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
     local scouter_conf
     scouter_conf=$(scouter_config_file "$name")
@@ -247,6 +255,7 @@ write_env() {
     printf 'cpu: %s (논리 코어 %s)\n' "$(LC_ALL=C lscpu | awk -F: '/Model name/ {gsub(/^ +/, "", $2); print $2}')" "$(nproc)"
     printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
     printf 'booking-p95-ms: %s\n' "${BOOKING_P95_MS:-VU별 기본}"
+    printf 'jvm-opts(core·gateway): %s\n' "${JVM_OPTS:-없음}"
     printf 'generator-warmup: 매회 새 JVM, 외부 warmup 비활성\n'
     printf 'tool: %s\n' "$TOOL"
     if [[ $TOOL == gatling ]]; then

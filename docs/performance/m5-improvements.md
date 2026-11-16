@@ -91,5 +91,6 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 | [10-step7-compensation-under-load.md](m5/10-step7-compensation-under-load.md) | Step 7 보상 경로 부하 검증과 `release.lua` 수정 |
 | [11-step8-final-report.md](m5/11-step8-final-report.md) | Step 8 최종 측정 A·B·워밍업 B, 계열 비교, JFR, 풀·정합성, 한계 |
 | [12-gatling-hot-seats-p95-300ms-report.md](m5/12-gatling-hot-seats-p95-300ms-report.md) | Gatling 외부 15회 예열 hot-seats p95 300ms 최종 판정(미달), 진단, Scouter ON/OFF, 회귀 |
+| [13-compile-threshold-control.md](m5/13-compile-threshold-control.md) | 컴파일 임계(CompileThresholdScaling) 대조, 순수 콜드 B 9회, 중단 조건 해당 |
 
 새 측정이나 변경은 해당 단계 파일에 이어 적거나 새 파일을 만들고, 이 허브의 현재 상태와 표를 함께 갱신한다. `phases/m5-2-improvement/`의 step 지시서는 이 문서를 결과 인계처로 지정하고 있다. 그 지시는 과거 실행 기록으로 읽는다.
