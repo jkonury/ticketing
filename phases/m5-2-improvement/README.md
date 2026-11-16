@@ -16,3 +16,10 @@ M5-1 기준 측정을 바탕으로 대기열·예매·Gateway 병목과 정합�
 | 8 | [publish-m5-results](./step8-publish-m5-results.md) |
 
 원본 계획: [M5-2 병목 개선과 전후 비교](../../docs/plans/m5-2-improvements.md).
+
+## 상태 (2026-11-16 정리)
+
+- 위 8단계는 **기록으로 대체**했다. 실행 결과는 [단계별 기록 허브](../../docs/performance/m5-improvements.md)의 「단계 요약」을 따른다. 각 단계 문서는 k6 기준 전제라 그대로 다시 실행하지 않는다.
+- Step 1~8 대응: 1 [01](../../docs/performance/m5/01-step1-measurement-gaps.md) · 2 [05](../../docs/performance/m5/05-step2-queue-races.md) · 3 [06](../../docs/performance/m5/06-step3-warmup-separation.md) · 4 [07](../../docs/performance/m5/07-step4-queue-throughput.md) · 5 [08](../../docs/performance/m5/08-step5-booking-connection-wait.md) · 6 [09](../../docs/performance/m5/09-step6-gateway-delay.md) · 7 [10](../../docs/performance/m5/10-step7-compensation-under-load.md) · 8 [11](../../docs/performance/m5/11-step8-final-report.md)
+- 이후 hot-seats 측정은 Gatling과 내부 예열로 진행했다([Gatling 인계](../../docs/plans/hot-seats-gatling-handoff.md), [내부 예열 계획](../../docs/plans/hot-seats-internal-warmup-cold-900ms.md)).
+- 300ms 장기 목표는 미달로 후속 과제로 이관했다.
