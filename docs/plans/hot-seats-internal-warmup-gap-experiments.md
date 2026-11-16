@@ -1,7 +1,7 @@
 # 내부 예열 ↔ 외부 예열 격차: 추가 실험 대상과 접근 가이드
 
 - 작성일: 2026-11-16
-- 상태: 계획만 작성했다. 실험 실행·러너·서비스 코드 변경은 하지 않았다.
+- 상태: E2(4절)·E1(5절)을 실행했다. 러너·판정기에 진단 옵션만 추가했고 서비스 코드는 바꾸지 않았다.
 - 배경: [문서 18](../performance/m5/18-warmup-traffic-mix.md)에서 core 탈최적화가 203건에서 52건으로 줄었지만 내부 예열 p95는 750~772ms로, 외부 15회 예열([문서 19](../performance/m5/19-warmup-tcp-diagnosis.md)의 435·436ms)과 약 330ms 차이가 남는다. "core JIT가 주원인" 가설은 지지되지 않았다. 다음 실험은 격차가 어느 서비스·단계에서 생기는지 나눈 뒤 고른다.
 - 상위 계획: [내부 예열 콜드 900ms 계획](./hot-seats-internal-warmup-cold-900ms.md)
 
@@ -90,4 +90,22 @@
 - 두 내부 회차 모두 미컴파일인 메서드의 군: core는 Hibernate SQM→SQL 변환(`BaseSqmToSqlAstConverter`, `AbstractSqlAstTranslator`, `SqmQueryImpl`, `SimpleNonSelectQueryPlan`)과 Lettuce 연결, gateway는 Lettuce·reactive Redis 스크립트(`data.redis.core.script`)·rate limiter 필터·reactor-netty 풀·헤더 필터다.
 - 해석(가설): gateway 쪽은 예열이 rate limiter(`RedisRateLimiter` 스크립트)를 건너뛰는 것과 일치하고, 이 구간이 Gateway stage 지연이 가장 크게 벌어진 곳이다(1절). core 쪽은 예열이 실행하지 않는 HQL/JPQL 쿼리 경로가 후보지만 실제 호출 지점은 확인하지 않았다. 이 값은 "컴파일 여부"일 뿐 지연 기여율이 아니다.
 - 한계: 외부 1회·내부 2회, `burst` 덤프는 시작 52초 뒤라 대기열 단계 트래픽 이후 상태다. 외부 계열은 예열에서 대기열·SSE·웹훅까지 전체 흐름을 실행하므로 prometheus·OTLP 내보내기 군의 차이는 요청 경로 밖일 수 있다.
-- 다음: gateway rate limiter·Lettuce 예열(3절 첫 행)을 가설로 E1(서비스별 귀속)을 먼저 확인해 효과를 확인한 뒤 구현을 합의한다.
+- 다음: E1(5절)로 서비스별 귀속을 확인했다.
+
+## 5. E1 결과 (2026-11-16, 서비스별 재기동)
+
+- 러너에 진단 전용 `--restart-after-warmup <core,gateway|gateway|realtime|core>`를 추가했다(`scripts/loadtest/run.sh`, 판정기 `gatling-results.py`에 `--no-warmup-delta`). 외부 `--warmup-rounds 15` 직후 지정 서비스만 새 JVM으로 띄운다. core·gateway는 내부 예열을 켜고 realtime은 예열 없이 띄운다. 이전 로그는 `<서비스>-prewarm.log`로 남기며, 카운터가 초기화되므로 워밍업 구간 차분 검사는 건너뛴다. 각 변형은 1회(n=1)다.
+
+| 변형(외부 예열 후 재기동) | 실행 | 전체 p50 / p95 / p99 (ms) | 비고 |
+|---|---|---|---|
+| (기준) 외부, 재기동 없음 | `20261116-220644` | 271 / 390 / 427 | E2 실행 |
+| realtime | `20261116-230923` | 246 / 354 / 377 | 외부와 같은 수준 |
+| core + gateway | `20261116-225034` | 657 / 826 / 886 | 내부 계열(796·810)과 같은 수준 |
+| core만 | `20261116-232808` | 991 / 1,308 / 1,411 | core는 자체 예열(6.5초)만, Hikari 획득 평균 208ms, core 처리 평균 546ms |
+| gateway만 | `20261116-223338` | 측정 불가 | 재기동한 Gateway의 예열이 core `/internal/startup-warmup/credential`에서 404 |
+
+- gateway 단독은 설계상 불가능하다. core 예열 경로가 core ready 뒤 3분 동안만 열린다(`StartupWarmupCredential.kt`의 `WINDOW`). 따라서 **Gateway만의 기여는 이 방법으로 분리하지 못한다.**
+- realtime은 격차의 원인이 아니다(354ms, 기준 390ms와 같은 수준). 같은 DB·fake-pg 상태에서 core+gateway 재기동이 내부 계열을 재현하므로, 격차는 실행 순서·데이터가 아니라 **core·gateway 프로세스의 상태**에 있다.
+- core만 재기동한 변형이 1,308ms로 가장 나쁘다. Gateway가 외부 예열 상태여도 core가 Gateway의 HTTP 혼합 예열 없이 자체 예열만 거치면 p95가 크게 오른다. 즉 **core의 예열 수준에 대한 민감도가 가장 크다.** 이 변형은 내부 계열과 같은 core 예열이 아니라 더 약한 예열이라서 "core가 격차의 주인"이라는 증거가 아니라 core의 레버리지를 보여 주는 값이다.
+- 한계: 각 1회, core+gateway 변형은 내부 2회(796·810)와 비교한 것이다. gateway만 분리하려면 core 예열 경로 창(3분)이나 Gateway 예열 방식을 바꿔야 한다(서비스 동작 변경이므로 합의 필요).
+- 다음 후보: E2에서 외부에만 C2인 core 메서드군(Hibernate SQM 쿼리 경로·Lettuce)이 예열 혼합에서 실행되는지 코드 경로를 확인하고, 빠진 경로를 core 예열에 추가한다. Gateway 쪽은 rate limiter 예열(3절 첫 행)을 E1과 별도로 실험해 효과를 본다.

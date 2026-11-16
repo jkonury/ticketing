@@ -10,7 +10,7 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
-            [--warmup [--warmup-rounds N]] [--internal-warmup] [--codelist] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
+            [--warmup [--warmup-rounds N]] [--internal-warmup] [--codelist] [--restart-after-warmup core,gateway|gateway|realtime] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
             [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N] [--jvm-opts '-XX:옵션 ...']
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
@@ -19,6 +19,7 @@ usage() {
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
+--restart-after-warmup은 진단 전용으로 --warmup 15회 직후 지정한 서비스(쉼표 구분)만 새 JVM으로 다시 띄웁니다. core·gateway는 내부 예열을 켜고 realtime은 예열 없이 띄웁니다. 재기동 서비스의 이전 로그는 <서비스>-prewarm.log로 남기며 워밍업 구간 차분 검사는 건너뜁니다.
 --codelist는 진단 전용으로 본 부하 직전과 CODELIST_DELAY초(기본 52, 예매 폭주 직전) 뒤에 core·gateway의 jcmd Compiler.codelist를 codelist-<서비스>-<pre|burst>.txt로 남깁니다.
 --jvm-opts는 core·gateway JVM에만 추가하는 -XX 옵션입니다(예: '-XX:CompileThresholdScaling=0.25'). 컴파일 임계 대조용이며 env.txt에 기록합니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
@@ -39,6 +40,7 @@ RUNS=1
 FAILURE_INJECT=false
 JFR=false
 CODELIST=false
+RESTART_AFTER=
 CODELIST_DELAY=52
 JVM_OPTS=
 OBSERVABILITY=false
@@ -73,6 +75,7 @@ while (($#)); do
     --failure-inject) FAILURE_INJECT=true; shift ;;
     --jfr) JFR=true; shift ;;
     --codelist) CODELIST=true; shift ;;
+    --restart-after-warmup) need_value "$@"; RESTART_AFTER=$2; shift 2 ;;
     --jvm-opts) need_value "$@"; JVM_OPTS=$2; shift 2 ;;
     --observability) OBSERVABILITY=true; shift ;;
     --keep) KEEP=true; shift ;;
@@ -112,6 +115,7 @@ fi
 [[ $RUNS =~ ^[1-9][0-9]*$ ]] || { echo '--runs에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $AOT_TRAIN_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--aot-train-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+[[ -z $RESTART_AFTER ]] || { $WARMUP || { echo '--restart-after-warmup은 --warmup이 필요합니다.' >&2; exit 1; }; [[ $RESTART_AFTER =~ ^(core|gateway|realtime)(,(core|gateway|realtime))*$ ]] || { echo '--restart-after-warmup은 core,gateway,realtime 중 쉼표로 구분한 값이어야 합니다.' >&2; exit 1; }; }
 $AOT_CACHE && $WARMUP && { echo '--aot-cache와 --warmup은 함께 쓰지 않습니다(콜드 + AOT 조건).' >&2; exit 1; }
 if $INTERNAL_WARMUP && { $WARMUP || $AOT_CACHE; }; then
   echo '--internal-warmup은 --warmup·--aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
@@ -354,6 +358,35 @@ dump_codelist() {
   done
 }
 
+# restart_after_warmup <디렉터리>: 외부 예열 직후 지정 서비스만 새 JVM으로 재기동한다(진단 전용). core → gateway 순서로 띄워 Gateway 예열이 core ready 뒤에 돈다
+restart_after_warmup() {
+  local dir=$1 name idx port obs=() batch=() gw_env=()
+  if $OBSERVABILITY; then obs=(TRACING_EXPORT_ENABLED=true TRACING_SAMPLING_PROBABILITY=0.1); fi
+  [[ $SCENARIO != hot-seats ]] || batch=(TICKETING_REALTIME_QUEUE_ADMISSION_BATCH_SIZE=1000)
+  if $NO_RATE_LIMIT; then gw_env=(TICKETING_GATEWAY_RATE_LIMIT_ENABLED=false); fi
+  for name in realtime core gateway; do
+    [[ ,$RESTART_AFTER, == *,$name,* ]] || continue
+    case $name in core) idx=1 ;; realtime) idx=2 ;; gateway) idx=3 ;; esac
+    kill "${PIDS[$idx]}" 2>/dev/null || true
+    wait "${PIDS[$idx]}" 2>/dev/null || true
+    mv "$dir/$name.log" "$dir/$name-prewarm.log"
+    case $name in
+      core) start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar STARTUP_WARMUP_ENABLED=true "${obs[@]}"; port=18080 ;;
+      realtime) start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"; port=18081 ;;
+      gateway) start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar STARTUP_WARMUP_ENABLED=true "${gw_env[@]}" "${obs[@]}"; port=18000 ;;
+    esac
+    local new=${PIDS[${#PIDS[@]}-1]}
+    unset "PIDS[${#PIDS[@]}-1]"
+    PIDS[$idx]=$new
+    health "$name" "$port" "$new" "$dir" || return 1
+    if [[ $name != realtime ]] && ! rg -q 'startup-warmup outcome=completed ' "$dir/$name.log"; then
+      echo "재기동한 $name 내부 예열 미완료: $dir/$name.log" >&2
+      return 1
+    fi
+  done
+  printf 'restart-after-warmup: %s (재기동 서비스 이전 로그: <서비스>-prewarm.log)\n' "$RESTART_AFTER" >> "$dir/env.txt"
+}
+
 psql_q() { # booking 스키마 조회용. 스키마를 넘는 조인은 하지 않는다
   docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt -c "$1"' sh "$1"
 }
@@ -586,6 +619,7 @@ run_once() {
       fi
     done
     $warm_ok || return 1
+    [[ -z $RESTART_AFTER ]] || restart_after_warmup "$dir" || return 1
   fi
 
   local scenario_env=()
@@ -670,7 +704,7 @@ run_once() {
     else
       jq -s '{metrics: {http_reqs: {count: (map(.metrics.http_reqs.count // 0) | add)}}}' "${warm_summaries[@]}" > "$dir/warmup-k6-summary-total.json" 2>/dev/null || true
     fi
-    python3 "$ROOT/scripts/loadtest/metrics-delta.py" diff "$dir/server-metrics-pre-warmup.json" "$dir/server-metrics-pre.json" "$dir/server-delta-warmup.json" \
+    [[ -n $RESTART_AFTER ]] || python3 "$ROOT/scripts/loadtest/metrics-delta.py" diff "$dir/server-metrics-pre-warmup.json" "$dir/server-metrics-pre.json" "$dir/server-delta-warmup.json" \
       --scenario "$SCENARIO" --k6-summary "$dir/warmup-k6-summary-total.json" --label warmup > "$dir/server-delta-warmup.log" 2>&1 || true
   fi
   if $OBSERVABILITY; then
@@ -733,6 +767,7 @@ run_once() {
   if [[ $TOOL == gatling ]]; then
     local verdict_args=(--scenario "$SCENARIO" --limit "$(gatling_limit)" --exit-code "$k6_status" --server)
     $WARMUP && verdict_args+=(--isolation)
+    [[ -z $RESTART_AFTER ]] || verdict_args+=(--no-warmup-delta)
     python3 "$ROOT/scripts/loadtest/gatling-results.py" judge "$dir" "${verdict_args[@]}" > "$dir/verdict.log" 2>&1 || verdict_ok=false
     publish_dashboard "$dir" completed --round "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)"
     $verdict_ok || echo "Gatling 최종 판정 미달: $dir/verdict.json" >&2

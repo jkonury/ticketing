@@ -111,7 +111,7 @@ def enrich(directory):
     return summary
 
 
-def judge(directory, scenario, limit, exit_code, warmup=False, check_server=False, isolation=False):
+def judge(directory, scenario, limit, exit_code, warmup=False, check_server=False, isolation=False, warmup_delta=True):
     directory = Path(directory)
     checks = {}
     def check(name, value):
@@ -161,8 +161,9 @@ def judge(directory, scenario, limit, exit_code, warmup=False, check_server=Fals
             check('controlledInputs', len(controlled) == 2 and all(c.get('ok') is True for c in controlled))
         if isolation:
             check('isolation', read('isolation.json')['isolated'])
-            warm_delta = read('server-delta-warmup.json')
-            check('warmupDelta', warm_delta['valid'] and len(warm_delta['controlledInputChecks']) == 2 and all(c.get('ok') is True for c in warm_delta['controlledInputChecks']))
+            if warmup_delta:  # 재기동 진단 계열은 누적 카운터가 초기화돼 워밍업 구간 차분을 낼 수 없다
+                warm_delta = read('server-delta-warmup.json')
+                check('warmupDelta', warm_delta['valid'] and len(warm_delta['controlledInputChecks']) == 2 and all(c.get('ok') is True for c in warm_delta['controlledInputChecks']))
     except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError) as error:
         checks['requiredArtifacts'] = False
         checks['artifactError'] = str(error)
@@ -181,11 +182,12 @@ def main():
     parser.add_argument('--warmup', action='store_true')
     parser.add_argument('--server', action='store_true')
     parser.add_argument('--isolation', action='store_true')
+    parser.add_argument('--no-warmup-delta', action='store_true')
     args = parser.parse_args()
     if args.action == 'enrich':
         enrich(args.directory)
         return 0
-    result = judge(args.directory, args.scenario, args.limit, args.exit_code, args.warmup, args.server, args.isolation)
+    result = judge(args.directory, args.scenario, args.limit, args.exit_code, args.warmup, args.server, args.isolation, not args.no_warmup_delta)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result['passed'] else 1
 
