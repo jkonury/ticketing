@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono
 
 object GatewayAttributes {
     const val MEMBER_ID = "gateway.memberId"
+    const val STARTUP_WARMUP = "gateway.startupWarmup"
 }
 
 const val MEMBER_HEADER = "X-Member-Id"
@@ -23,7 +24,8 @@ const val MEMBER_HEADER = "X-Member-Id"
 class JwtAuthenticationFilter(private val decoder: ReactiveJwtDecoder, private val registry: MeterRegistry) :
     GlobalFilter,
     Ordered {
-    override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE
+    // 예열 자격 헤더 정리(StartupWarmupIngressFilter)가 먼저 실행되어야 한다
+    override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE + 1
 
     override fun filter(exchange: ServerWebExchange, chain: GatewayFilterChain): Mono<Void> {
         val request = exchange.request.mutate().headers { it.remove(MEMBER_HEADER) }.build()

@@ -17,15 +17,9 @@ import org.springframework.boot.DefaultApplicationArguments
 import org.springframework.boot.availability.ApplicationAvailability
 import org.springframework.boot.availability.ReadinessState
 import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.http.MediaType
-import org.springframework.security.core.authority.SimpleGrantedAuthority
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import ticketing.jooq.booking.tables.references.BOOKING_
 import java.math.BigDecimal
 import java.time.Duration
@@ -45,7 +39,6 @@ internal class BookingWarmupTests(
     private val redis: StringRedisTemplate,
     private val cache: ScheduleSeatCache,
     private val holds: SeatHoldPort,
-    private val mvc: MockMvc,
     private val availability: ApplicationAvailability,
 ) : IntegrationTestSupport() {
     @Test
@@ -86,21 +79,6 @@ internal class BookingWarmupTests(
             redis.delete(keys)
         }
     }
-
-    @Test
-    fun `내부 예열 경로는 서버 전용 역할만 호출할 수 있다`() {
-        mvc.perform(post("/internal/startup-warmup")).andExpect(status().isUnauthorized)
-        mvc.perform(warmupRequest().with(jwt().authorities(SimpleGrantedAuthority("ROLE_USER"))))
-            .andExpect(status().isForbidden)
-        mvc.perform(warmupRequest().with(jwt().authorities(SimpleGrantedAuthority("ROLE_STARTUP_WARMUP"))))
-            .andExpect(status().isConflict)
-        mvc.perform(warmupRequest(false).with(jwt().authorities(SimpleGrantedAuthority("ROLE_STARTUP_WARMUP"))))
-            .andExpect(status().isCreated)
-    }
-
-    private fun warmupRequest(conflict: Boolean = true) = post("/internal/startup-warmup?conflict=$conflict")
-        .header("Idempotency-Key", "startup-warmup").contentType(MediaType.APPLICATION_JSON)
-        .content("""{"scheduleId":1,"seatIds":[1]}""")
 
     @Test
     fun `시간 상한에 도달하면 예열을 취소하고 반환한다`() {

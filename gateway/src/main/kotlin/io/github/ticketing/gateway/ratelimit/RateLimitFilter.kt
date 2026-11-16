@@ -73,7 +73,8 @@ class RateLimitFilter(
     }
 
     override fun filter(exchange: ServerWebExchange, chain: org.springframework.cloud.gateway.filter.GatewayFilterChain): Mono<Void> =
-        if (!enabled) {
+        // Gateway가 자신의 예열 요청에 표시한 경우만 건너뛴다. 15,000건이 회원 -1의 버킷을 소진해 429가 나지 않게 한다
+        if (!enabled || exchange.getAttribute<Boolean>(GatewayAttributes.STARTUP_WARMUP) == true) {
             chain.filter(exchange)
         } else {
             filterLimited(exchange, chain)

@@ -16,6 +16,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.core.env.Environment
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate
+import org.springframework.http.HttpHeaders
 import org.springframework.http.client.reactive.ReactorClientHttpConnector
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder
 import org.springframework.stereotype.Component
@@ -29,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.Duration
 import java.util.Date
+import java.util.UUID
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -37,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
 private const val DEFAULT_MAX_SECONDS = 120L
 private const val MAX_LOCAL_ITERATIONS = 100000
 private const val TOKEN_TTL_SECONDS = 120L
+private val ADMISSION_TTL: Duration = Duration.ofMinutes(3)
 
 @ConfigurationProperties("ticketing.startup-warmup")
 internal data class GatewayWarmupProperties(
@@ -71,6 +75,8 @@ internal class GatewayWarmupRunner(
     private val decoder: ReactiveJwtDecoder,
     private val mapper: JsonMapper,
     private val environment: Environment,
+    private val credential: StartupWarmupGatewayCredential,
+    private val redis: ReactiveStringRedisTemplate,
 ) : ApplicationRunner {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -85,11 +91,28 @@ internal class GatewayWarmupRunner(
         }.then()
     }
 
+    /**
+     * core가 기동 때 만든 일회성 비밀을 서버 역할 JWT로 받고, 실제 입장 토큰 검증 경로를 타도록 회원 -1·회차 1의 입장 토큰을
+     * TTL과 함께 만든다. 입장 토큰은 무작위 키라 실제 회원이 쓸 수 없고 회원 ID가 -1이라 실제 회원과 일치하지 않는다.
+     */
+    private fun credentials(http: WebClient, jwt: String, admissionKey: String): Mono<WarmupCredentials> =
+        http.post().uri("/internal/startup-warmup/credential").header(HttpHeaders.AUTHORIZATION, "Bearer $jwt")
+            .retrieve().bodyToMono(String::class.java).map { body ->
+                mapper.readTree(body).path("key").asString("").also { check(it.isNotEmpty()) }
+            }
+            .flatMap { key ->
+                credential.install(key)
+                redis.opsForHash<String, String>().putAll(admissionKey, mapOf("memberId" to "-1", "scheduleId" to "1"))
+                    .then(redis.expire(admissionKey, ADMISSION_TTL))
+                    .thenReturn(WarmupCredentials(jwt, key, admissionKey.removePrefix("queue:admission:")))
+            }
+
     override fun run(args: ApplicationArguments) {
         val started = System.nanoTime()
         val local = AtomicInteger()
         val traffic = WarmupTrafficCounts()
         val token = warmupToken(jwtProperties.secret, Clock.systemUTC())
+        val admissionKey = "queue:admission:warmup-${UUID.randomUUID()}"
         val connections = ConnectionProvider.builder("startup-warmup-generator")
             .maxConnections(properties.concurrency).pendingAcquireMaxCount(MAX_WARMUP_BATCH_SIZE).build()
         val http = WebClient.builder().baseUrl(gateway.coreUri)
@@ -99,8 +122,13 @@ internal class GatewayWarmupRunner(
         val future = localWarmup(token, local).then(
             http.get().uri("/actuator/health/readiness").retrieve().toBodilessEntity()
                 .retryWhen(Retry.fixedDelay(Long.MAX_VALUE, Duration.ofMillis(100))),
-        ).then(warmupTraffic(http, "http://127.0.0.1:$port", token, properties, mapper, traffic))
-            .timeout(properties.maxDuration).toFuture()
+        ).then(
+            Mono.defer {
+                credentials(http, token, admissionKey).flatMap { warmup ->
+                    warmupTraffic(http, "http://127.0.0.1:$port", warmup, properties, mapper, traffic)
+                }
+            },
+        ).timeout(properties.maxDuration).toFuture()
         var outcome = "completed"
         try {
             // ApplicationRunner의 기동 스레드만 기다린다. 예열 I/O와 지연은 Reactor에서 비동기로 수행한다.
@@ -116,6 +144,8 @@ internal class GatewayWarmupRunner(
         } finally {
             future.cancel(true)
             connections.dispose()
+            // 만료(TTL)가 최종 방어선이다. 기동 스레드를 막지 않도록 비동기로 지운다.
+            redis.delete(admissionKey).subscribe({}, {})
             logger.info(
                 "startup-warmup outcome={} elapsedMs={} local={} rounds={} remote={} winners={} dbStatements={} redisCommands={}",
                 outcome,

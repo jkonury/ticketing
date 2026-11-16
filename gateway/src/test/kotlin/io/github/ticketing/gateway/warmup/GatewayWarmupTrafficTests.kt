@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 internal class GatewayWarmupTrafficTests {
     private val mapper = JsonMapper.builder().build()
+    private val credentials = WarmupCredentials("jwt", "key", "admission")
 
     @Test
     fun `동시 호출 상한을 지키고 이전 회차가 끝난 뒤 다음 회차를 실행한다`() {
@@ -28,7 +29,10 @@ internal class GatewayWarmupTrafficTests {
                 Mono.defer {
                     assertThat(counts.rounds.get()).isEqualTo(started.getAndIncrement() / properties.batchSize)
                     peak.accumulateAndGet(active.incrementAndGet(), ::maxOf)
-                    val winner = request.url().query == "conflict=false"
+                    val winner = request.headers().getFirst("Idempotency-Key") == WARMUP_WINNER_KEY
+                    assertThat(request.url().path).isEqualTo("/api/v1/bookings")
+                    assertThat(request.headers().getFirst(STARTUP_WARMUP_HEADER)).isEqualTo("key")
+                    assertThat(request.headers().getFirst("X-Admission-Token")).isEqualTo("admission")
                     Mono.delay(Duration.ofSeconds(1)).map {
                         active.decrementAndGet()
                         response(winner)
@@ -37,7 +41,7 @@ internal class GatewayWarmupTrafficTests {
             },
         ).build()
 
-        StepVerifier.withVirtualTime { warmupTraffic(http, "http://localhost", "token", properties, mapper, counts) }
+        StepVerifier.withVirtualTime { warmupTraffic(http, "http://localhost", credentials, properties, mapper, counts) }
             .thenAwait(Duration.ofSeconds(10)).verifyComplete()
 
         assertThat(peak.get()).isEqualTo(4)
@@ -60,7 +64,7 @@ internal class GatewayWarmupTrafficTests {
         val properties = GatewayWarmupProperties(rounds = 2, batchSize = 20, concurrency = 4)
 
         StepVerifier.withVirtualTime {
-            warmupTraffic(http, "http://localhost", "token", properties, mapper, counts).timeout(Duration.ofSeconds(1))
+            warmupTraffic(http, "http://localhost", credentials, properties, mapper, counts).timeout(Duration.ofSeconds(1))
         }.thenAwait(Duration.ofSeconds(1)).expectError(TimeoutException::class.java).verify()
 
         assertThat(cancelled.get()).isEqualTo(4)
@@ -69,5 +73,6 @@ internal class GatewayWarmupTrafficTests {
     }
 
     private fun response(winner: Boolean): ClientResponse = ClientResponse.create(if (winner) HttpStatus.CREATED else HttpStatus.CONFLICT)
-        .body("""{"winner":$winner,"dbStatements":1,"redisCommands":2}""").build()
+        .header(STARTUP_WARMUP_IO_HEADER, "db=1;redis=2")
+        .body(if (winner) """{"bookingId":1,"status":"PENDING"}""" else """{"code":"SEAT_ALREADY_HELD"}""").build()
 }

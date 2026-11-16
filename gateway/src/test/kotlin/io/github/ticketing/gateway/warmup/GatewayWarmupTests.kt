@@ -10,8 +10,12 @@ import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.mock
+import org.mockito.stubbing.Answer
 import org.springframework.boot.DefaultApplicationArguments
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.mock.env.MockEnvironment
+import reactor.core.publisher.Mono
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.Duration
@@ -62,6 +66,8 @@ internal class GatewayWarmupTests {
             JwtConfiguration().jwtDecoder(properties),
             JsonMapper.builder().build(),
             MockEnvironment(),
+            StartupWarmupGatewayCredential(),
+            mock(ReactiveStringRedisTemplate::class.java, Answer { Mono.just(1L) }),
         )
         val started = System.nanoTime()
 

@@ -12,4 +12,12 @@ class GatewayWarmupDisabledTests(client: WebTestClient) : GatewayIntegrationTest
 
         assertThat(core.requests).isEmpty()
     }
+
+    @Test
+    fun `외부에서 보낸 예열 자격 헤더는 core로 전달하지 않는다`() {
+        client.get().uri("/api/v1/performances").header(STARTUP_WARMUP_HEADER, "forged").exchange()
+
+        assertThat(core.requests).hasSize(1)
+        assertThat(core.requests.single().headers.getFirst(STARTUP_WARMUP_HEADER)).isNull()
+    }
 }

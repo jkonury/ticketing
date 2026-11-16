@@ -6,6 +6,7 @@ import io.github.ticketing.booking.adapter.provided.web.CreateBookingRequest
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter
 import io.github.ticketing.booking.adapter.required.redis.ScheduleSeatCache
 import io.github.ticketing.booking.application.port.provided.CreateBookingCommand
+import io.github.ticketing.booking.application.port.provided.CreateBookingResult
 import io.github.ticketing.booking.application.port.provided.CreateBookingUseCase
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.application.service.SeatAlreadyHeldException
@@ -21,6 +22,7 @@ import io.lettuce.core.protocol.CommandArgs
 import io.netty.buffer.Unpooled
 import jakarta.validation.Validator
 import org.jooq.DSLContext
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
@@ -37,7 +39,7 @@ private const val WARMUP_TTL_SECONDS = 30L
 
 @Component
 internal class BookingWarmupWork(
-    private val createBooking: CreateBookingUseCase,
+    @Qualifier("createBookingService") private val createBooking: CreateBookingUseCase,
     private val cache: ScheduleSeatCache,
     private val holds: SeatHoldPort,
     private val redis: StringRedisTemplate,
@@ -86,7 +88,20 @@ internal class BookingWarmupWork(
         if (Thread.currentThread().isInterrupted) throw java.util.concurrent.CancellationException("예열 취소")
     }
 
-    fun exercise(conflict: Boolean): Boolean {
+    /** 직접 호출 예열(러너)용이다. 승자는 응답 직렬화까지 거치고 패자는 선점 충돌 예외를 삼킨다. */
+    fun exercise(conflict: Boolean): Boolean = try {
+        val result = create(conflict)
+        mapper.writeValueAsString(BookingResponse.from(result.booking))
+        true
+    } catch (_: SeatAlreadyHeldException) {
+        false
+    }
+
+    /**
+     * 음수 회차 격리 환경에서 실제 예매 생성 유스케이스를 호출한다. 승자는 항상 DB 롤백하고, 패자는
+     * [SeatAlreadyHeldException]을 그대로 던진다. 컨트롤러 아래(HTTP 경유 예열)에서도 같은 격리를 쓴다.
+     */
+    fun create(conflict: Boolean): CreateBookingResult {
         val schedule = ScheduleId(-((UUID.randomUUID().mostSignificantBits and Long.MAX_VALUE).coerceAtLeast(1)))
         val seat = SeatId(1)
         val keys =
@@ -112,23 +127,18 @@ internal class BookingWarmupWork(
             val command = CreateBookingCommand(schedule.value, UUID.randomUUID().toString(), schedule.value, listOf(seat.value))
             ensureActive()
             if (conflict) {
-                try {
-                    createBooking.create(command)
-                    error("예열 경합 요청이 성공했습니다.")
-                } catch (_: SeatAlreadyHeldException) {
-                    false
-                }
+                createBooking.create(command)
+                error("예열 경합 요청이 성공했습니다.")
             } else {
-                rollback.execute { status ->
-                    try {
-                        val result = createBooking.create(command)
-                        mapper.writeValueAsString(BookingResponse.from(result.booking))
-                        check(result.created)
-                    } finally {
-                        status.setRollbackOnly()
-                    }
-                }
-                true
+                checkNotNull(
+                    rollback.execute { status ->
+                        try {
+                            createBooking.create(command).also { check(it.created) }
+                        } finally {
+                            status.setRollbackOnly()
+                        }
+                    },
+                )
             }
         } finally {
             WarmupIo.redisCommand()

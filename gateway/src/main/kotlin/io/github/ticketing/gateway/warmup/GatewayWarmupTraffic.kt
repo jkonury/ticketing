@@ -22,31 +22,39 @@ internal class WarmupTrafficCounts {
     val redis = AtomicInteger()
 }
 
+/** 예열 HTTP 요청이 실제 운영 경로(`POST /api/v1/bookings`)에서 쓰는 자격이다. */
+internal class WarmupCredentials(val jwt: String, val key: String, val admissionToken: String)
+
 internal fun warmupTraffic(
     http: WebClient,
     baseUri: String,
-    token: String,
+    credentials: WarmupCredentials,
     properties: GatewayWarmupProperties,
     mapper: JsonMapper,
     counts: WarmupTrafficCounts,
 ): Mono<Void> = Flux.range(0, properties.rounds).concatMap { round ->
     Flux.range(0, properties.batchSize).flatMap({ index ->
         val conflict = index % WINNER_INTERVAL != 0
-        http.post().uri("$baseUri/internal/startup-warmup?conflict=$conflict")
-            .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
-            .header("Idempotency-Key", "startup-warmup")
+        http.post().uri("$baseUri/api/v1/bookings")
+            .header(HttpHeaders.AUTHORIZATION, "Bearer ${credentials.jwt}")
+            .header("X-Admission-Token", credentials.admissionToken)
+            .header(STARTUP_WARMUP_HEADER, credentials.key)
+            .header("Idempotency-Key", if (conflict) WARMUP_CONFLICT_KEY else WARMUP_WINNER_KEY)
             .contentType(MediaType.APPLICATION_JSON).bodyValue("""{"scheduleId":1,"seatIds":[1]}""")
             .exchangeToMono { response ->
                 if (response.statusCode() == if (conflict) HttpStatus.CONFLICT else HttpStatus.CREATED) {
+                    val io = response.headers().header(STARTUP_WARMUP_IO_HEADER).firstOrNull()
                     response.bodyToMono(String::class.java).switchIfEmpty(Mono.error(IllegalStateException("빈 예열 응답")))
+                        .map { body -> body to requireNotNull(io) { "예열 I/O 헤더 없음" } }
                 } else {
-                    response.createError<String>()
+                    response.createError<Pair<String, String>>()
                 }
-            }.doOnNext { json ->
-                val result = mapper.readTree(json)
-                check(result.path("winner").booleanValue() == !conflict)
-                counts.db.addAndGet(result.path("dbStatements").intValue())
-                counts.redis.addAndGet(result.path("redisCommands").intValue())
+            }.doOnNext { (body, io) ->
+                val result = mapper.readTree(body)
+                check(if (conflict) result.path("code").asString("") == "SEAT_ALREADY_HELD" else !result.path("bookingId").isMissingNode)
+                val (db, redis) = parseIo(io)
+                counts.db.addAndGet(db)
+                counts.redis.addAndGet(redis)
                 if (!conflict) counts.winners.incrementAndGet()
                 counts.completed.incrementAndGet()
             }
@@ -61,3 +69,8 @@ internal fun warmupTraffic(
         )
     }
 }.then()
+
+private fun parseIo(header: String): Pair<Int, Int> {
+    val values = header.split(';').associate { it.substringBefore('=') to it.substringAfter('=').toInt() }
+    return values.getValue("db") to values.getValue("redis")
+}

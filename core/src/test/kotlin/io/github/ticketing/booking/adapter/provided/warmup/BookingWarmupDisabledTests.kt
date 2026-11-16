@@ -11,9 +11,18 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 class BookingWarmupDisabledTests(private val mvc: MockMvc) : IntegrationTestSupport() {
     @Test
-    fun `기본 설정에서는 내부 예열 경로가 없다`() {
-        mvc.perform(post("/internal/startup-warmup").with(jwt().authorities(SimpleGrantedAuthority("ROLE_STARTUP_WARMUP"))))
-            .andExpect(status().isNotFound)
+    fun `기본 설정에서는 예열 자격 발급 경로가 없다`() {
+        mvc.perform(
+            post("/internal/startup-warmup/credential").with(jwt().authorities(SimpleGrantedAuthority("ROLE_STARTUP_WARMUP"))),
+        ).andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `기본 설정에서는 예열 자격 헤더가 있어도 일반 예매 체인에서 인증 없이 거절된다`() {
+        mvc.perform(
+            post("/api/v1/bookings").header(STARTUP_WARMUP_HEADER, "forged").header("Idempotency-Key", WARMUP_WINNER_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content("""{"scheduleId":1,"seatIds":[1]}"""),
+        ).andExpect(status().isUnauthorized)
     }
 
     @Test
