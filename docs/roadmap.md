@@ -79,6 +79,7 @@
 ## M5. 부하 테스트와 관측
 
 - [x] Micrometer + Prometheus + Grafana, 분산 추적
+  - [ ] [내부 예열 모니터링 지표 분리](./plans/internal-warmup-metrics-isolation.md): 설계 문서 작성 완료, 구현 미착수. 일반 요청·내부 예열을 별도 수집하고 기본 대시보드·부하 테스트 집계에서 예열 제외. fake-pg 포함, 공유 자원 지표는 원본 유지 ([ADR 0033](./adr/0033-internal-warmup-metrics-isolation.md))
   - [x] Scouter Gateway·realtime 설정 분리, SSE 계측 비용 축소 및 개발·부하 테스트 설정 선택 통일 ([Gatling ON/OFF 각 3회 비교](./performance/scouter-gatling-comparison.md): OOM 0건. 패치 에이전트로 reactive 훅 비용 제거, [ADR 0027](./adr/0027-scouter-reactive-txid-context-propagation.md))
 - [x] k6 시나리오: 1만 명 동시 진입, 인기 좌석 집중 선점
 - [x] 기준 수치 측정 후 병목 개선, 전후 수치 기록
