@@ -99,5 +99,6 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 | [16-startup-warmup-burst-volume.md](m5/16-startup-warmup-burst-volume.md) | HTTP 예열 15회 × 1,000건·본문 캐시·MVC 검증 확대, 기능 통과·JFR 및 성능 목표 미달 |
 | [17-warmup-through-real-handler.md](m5/17-warmup-through-real-handler.md) | 예열을 실제 예매 핸들러·보안 체인 경유로 변경, 탈최적화 core 203·Gateway 13, JFR OFF 3회 p95 709·1,458·816ms 미달 |
 | [18-warmup-traffic-mix.md](m5/18-warmup-traffic-mix.md) | 예열을 예매·결제·상세·웹훅·PG 조회 혼합으로 확장, 탈최적화 core 203→52, JFR OFF 3회 p95 760·772·750ms 미달 |
+| [19-warmup-tcp-diagnosis.md](m5/19-warmup-tcp-diagnosis.md) | TCP 계측 보강, 외부 2회 p95 435·436ms·폭주 시 overflow/SYN 재전송 0, 사용자 요청으로 외부 3회차 예열 중 중단·내부 비교 미실행 |
 
 새 측정이나 변경은 해당 단계 파일에 이어 적거나 새 파일을 만들고, 이 허브의 현재 상태와 표를 함께 갱신한다. `phases/m5-2-improvement/`의 step 지시서는 이 문서를 결과 인계처로 지정하고 있다. 그 지시는 과거 실행 기록으로 읽는다.

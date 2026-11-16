@@ -158,6 +158,7 @@ done < <(git ls-files --others --exclude-standard -z -- core/src core-batch/src 
 
 PIDS=()
 SAMPLER_PID=
+TCP_SAMPLER_PID=
 LOAD_PID=
 cleanup() {
   if [[ -n $LOAD_PID ]]; then
@@ -169,6 +170,11 @@ cleanup() {
     kill "$SAMPLER_PID" 2>/dev/null || true
     wait "$SAMPLER_PID" 2>/dev/null || true
     SAMPLER_PID=
+  fi
+  if [[ -n $TCP_SAMPLER_PID ]]; then
+    kill "$TCP_SAMPLER_PID" 2>/dev/null || true
+    wait "$TCP_SAMPLER_PID" 2>/dev/null || true
+    TCP_SAMPLER_PID=
   fi
   if ((${#PIDS[@]})); then
     kill "${PIDS[@]}" 2>/dev/null || true
@@ -583,6 +589,12 @@ run_once() {
   # 본 부하 직전 직접 수집(서버 지표 사전값). 워밍업이 있으면 워밍업과 시드 요청은 여기까지의 값에 들어간다
   collect_metrics "$dir/server-metrics-pre.json" || { echo "본 측정 전 지표 수집 실패: $dir/server-metrics-pre.json" >&2; return 1; }
   publish_dashboard "$dir" measurement --round "$($WARMUP && echo "$WARMUP_ROUNDS" || echo 0)"
+  # 호스트 TCP 큐·재전송 진단(tcp-delta.json). 진단 전용이라 실패해도 실행과 판정에 영향을 주지 않는다
+  python3 "$ROOT/scripts/loadtest/tcp-probe.py" snapshot "$dir/tcp-pre.json" 2>"$dir/tcp-probe.log" || true
+  {
+    printf 'tcp-sysctl: %s\n' "$(jq -c .sysctl "$dir/tcp-pre.json" 2>/dev/null || echo n/a)"
+    printf 'tcp-listen-queues(ss -ltn 상당, 부하 직전): %s\n' "$(jq -c .listen "$dir/tcp-pre.json" 2>/dev/null || echo n/a)"
+  } >> "$dir/env.txt"
   k6_from=$(date +%s)
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
   if [[ $TOOL == gatling ]]; then
@@ -596,11 +608,14 @@ run_once() {
   [[ $TOOL != gatling ]] || k6_pid=$GATLING_PID
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
+  python3 "$ROOT/scripts/loadtest/tcp-probe.py" sample "$k6_pid" "$dir/tcp-samples.csv" 0.15 >> "$dir/tcp-probe.log" 2>&1 &
+  TCP_SAMPLER_PID=$!
   "$ROOT/scripts/loadtest/sample-pg.sh" "$k6_pid" "$dir/pg-activity.log" &
   PG_SAMPLER_PID=$!
   LOAD_PID=$k6_pid
   wait "$k6_pid" || k6_status=$?
   LOAD_PID=
+  python3 "$ROOT/scripts/loadtest/tcp-probe.py" snapshot "$dir/tcp-post.json" >> "$dir/tcp-probe.log" 2>&1 || true
   if [[ $TOOL == gatling ]]; then
     enrich_gatling "$dir" || { server_delta_ok=false; echo "Gatling 원시 결과 집계 실패: $dir/gatling-results.log" >&2; }
   fi
@@ -609,6 +624,8 @@ run_once() {
   # 본 부하 직후 직접 수집(서버 지표 사후값)
   collect_metrics "$dir/server-metrics-post.json" || { server_delta_ok=false; echo "본 측정 후 지표 수집 실패: $dir/server-metrics-post.json" >&2; }
   wait "$SAMPLER_PID" || true
+  wait "$TCP_SAMPLER_PID" || true
+  TCP_SAMPLER_PID=
   wait "$PG_SAMPLER_PID" || true
   SAMPLER_PID=
 
@@ -620,6 +637,7 @@ run_once() {
     ((delta_status != 2)) || { server_delta_ok=false; echo "서버 지표 차분 오류(reset·누락): $dir/server-delta.log" >&2; }
     if ((delta_status == 1)); then echo "통제 입력 불일치: $dir/server-delta.log" >&2; fi
   fi
+  python3 "$ROOT/scripts/loadtest/tcp-probe.py" summarize "$dir" >> "$dir/tcp-probe.log" 2>&1 || true
   printf 'server_delta_valid: %s\nserver_delta_controlled_inputs: %s\n' "$($server_delta_ok && echo yes || echo no)" "$( ((delta_status == 1)) && echo 불일치 || echo 일치·판정불가)" >> "$dir/measurement.txt"
   if $WARMUP; then
     # 워밍업 구간(워밍업 직전~본 부하 직전) 차분은 워밍업 요청이 이 구간에만 들어갔음을 확인하는 통제 입력이다
