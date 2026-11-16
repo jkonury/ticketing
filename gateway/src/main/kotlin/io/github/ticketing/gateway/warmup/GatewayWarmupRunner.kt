@@ -16,12 +16,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.core.env.Environment
-import org.springframework.http.HttpHeaders
+import org.springframework.http.client.reactive.ReactorClientHttpConnector
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder
 import org.springframework.stereotype.Component
 import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.netty.http.client.HttpClient
+import reactor.netty.resources.ConnectionProvider
 import reactor.util.retry.Retry
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
@@ -32,7 +34,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
-private const val DEFAULT_MAX_SECONDS = 30L
+private const val DEFAULT_MAX_SECONDS = 120L
 private const val MAX_LOCAL_ITERATIONS = 100000
 private const val TOKEN_TTL_SECONDS = 120L
 
@@ -41,10 +43,15 @@ internal data class GatewayWarmupProperties(
     val enabled: Boolean = false,
     val maxDuration: Duration = Duration.ofSeconds(DEFAULT_MAX_SECONDS),
     val localIterations: Int = 10000,
+    val rounds: Int = 15,
+    val batchSize: Int = 1000,
+    val concurrency: Int = 1000,
 ) {
     init {
         require(!maxDuration.isNegative && !maxDuration.isZero && maxDuration <= Duration.ofMinutes(2))
         require(localIterations in 0..MAX_LOCAL_ITERATIONS)
+        require(rounds in 1..MAX_WARMUP_ROUNDS)
+        require(batchSize in 1..MAX_WARMUP_BATCH_SIZE && concurrency in 1..MAX_WARMUP_BATCH_SIZE)
     }
 }
 
@@ -81,34 +88,19 @@ internal class GatewayWarmupRunner(
     override fun run(args: ApplicationArguments) {
         val started = System.nanoTime()
         val local = AtomicInteger()
-        val remote = AtomicInteger()
-        val db = AtomicInteger()
-        val redis = AtomicInteger()
+        val traffic = WarmupTrafficCounts()
         val token = warmupToken(jwtProperties.secret, Clock.systemUTC())
-        val http = WebClient.builder().baseUrl(gateway.coreUri).build()
+        val connections = ConnectionProvider.builder("startup-warmup-generator")
+            .maxConnections(properties.concurrency).pendingAcquireMaxCount(MAX_WARMUP_BATCH_SIZE).build()
+        val http = WebClient.builder().baseUrl(gateway.coreUri)
+            .clientConnector(ReactorClientHttpConnector(HttpClient.create(connections))).build()
         val port =
             environment.getProperty("local.server.port", Int::class.java) ?: environment.getProperty("server.port", Int::class.java, 18000)
         val future = localWarmup(token, local).then(
             http.get().uri("/actuator/health/readiness").retrieve().toBodilessEntity()
                 .retryWhen(Retry.fixedDelay(Long.MAX_VALUE, Duration.ofMillis(100))),
-        ).thenMany(
-            Flux.range(0, 8).concatMap { index ->
-                http.post().uri("http://127.0.0.1:$port/internal/startup-warmup?conflict=${index != 0}")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token").exchangeToMono { response ->
-                        if (response.statusCode().value() in setOf(201, 409)) {
-                            response.bodyToMono(String::class.java)
-                        } else {
-                            response.createError<String>()
-                        }
-                    }
-                    .doOnNext { json ->
-                        val result = mapper.readTree(json)
-                        db.addAndGet(result.path("dbStatements").intValue())
-                        redis.addAndGet(result.path("redisCommands").intValue())
-                        remote.incrementAndGet()
-                    }.delayElement(Duration.ofMillis(50))
-            },
-        ).then().timeout(properties.maxDuration).toFuture()
+        ).then(warmupTraffic(http, "http://127.0.0.1:$port", token, properties, mapper, traffic))
+            .timeout(properties.maxDuration).toFuture()
         var outcome = "completed"
         try {
             // ApplicationRunner의 기동 스레드만 기다린다. 예열 I/O와 지연은 Reactor에서 비동기로 수행한다.
@@ -123,14 +115,17 @@ internal class GatewayWarmupRunner(
             Thread.currentThread().interrupt()
         } finally {
             future.cancel(true)
+            connections.dispose()
             logger.info(
-                "startup-warmup outcome={} elapsedMs={} local={} remote={} dbStatements={} redisCommands={}",
+                "startup-warmup outcome={} elapsedMs={} local={} rounds={} remote={} winners={} dbStatements={} redisCommands={}",
                 outcome,
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
                 local.get(),
-                remote.get(),
-                db.get(),
-                redis.get(),
+                traffic.rounds.get(),
+                traffic.completed.get(),
+                traffic.winners.get(),
+                traffic.db.get(),
+                traffic.redis.get(),
             )
         }
     }

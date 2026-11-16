@@ -2,7 +2,7 @@
 
 ## 상태
 
-수락 (2026-11-16). 사용자가 컴파일 임계 대조·JFR 진단 이후에도 [계획 3.2](../plans/hot-seats-internal-warmup-cold-300ms.md)의 구현을 명시적으로 요청했다. p95 300ms 달성 여부와 분리한 구현 결정이다.
+일부 대체됨 ([ADR 0030](0030-startup-warmup-burst-volume.md), 2026-11-16): Gateway 호출량·시간 상한·경로 제한을 확대했다. 아래는 최초 결정 기록이다. 사용자가 컴파일 임계 대조·JFR 진단 이후에도 [계획 3.2](../plans/hot-seats-internal-warmup-cold-300ms.md)의 구현을 명시적으로 요청했다. p95 300ms 달성 여부와 분리한 구현 결정이다.
 
 ## 맥락과 대안
 

@@ -242,7 +242,7 @@ start() {
 }
 
 health() {
-  local name=$1 port=$2 pid=$3 dir=$4 deadline=$((SECONDS + 90))
+  local name=$1 port=$2 pid=$3 dir=$4 deadline=$((SECONDS + 180))
   local health_path=/actuator/health
   [[ $name != core && $name != gateway ]] || health_path=/actuator/health/readiness
   until curl -fsS "http://localhost:$port$health_path" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
@@ -326,6 +326,11 @@ start_apps() {
   if $INTERNAL_WARMUP; then
     printf '\n내부 예열 결과(기동 로그, timeout 시 취소 시점 호출 수):\n' >> "$dir/env.txt"
     rg 'startup-warmup outcome=' "$dir/core.log" "$dir/gateway.log" >> "$dir/env.txt"
+    if ! rg -q 'startup-warmup outcome=completed ' "$dir/core.log" ||
+      ! rg -q 'startup-warmup outcome=completed ' "$dir/gateway.log"; then
+      echo "내부 예열 미완료로 본 측정을 시작하지 않습니다: $dir/env.txt" >&2
+      return 1
+    fi
   fi
 }
 

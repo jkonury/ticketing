@@ -67,7 +67,7 @@ start realtime-a realtime/build/libs/realtime.jar
 start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_PORT"
 start gateway gateway/build/libs/gateway.jar
 health() {
-  local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-120}))
+  local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   local health_path=/actuator/health
   [[ $name != core && $name != gateway ]] || health_path=/actuator/health/readiness
   until curl -fsS "http://localhost:$port$health_path" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
@@ -90,7 +90,7 @@ if $WEB; then
   (cd web && pnpm build) > "$LOG_DIR/web.log" 2>&1 || { echo "web 빌드 실패: $LOG_DIR/web.log" >&2; exit 1; }
   (cd web && GATEWAY_URL=http://localhost:18000 GATEWAY_PUBLIC_URL=http://localhost:18000 REDIS_URL=redis://localhost:16379 WEB_ORIGIN=http://localhost:13000 exec pnpm start) >> "$LOG_DIR/web.log" 2>&1 &
   PIDS+=("$!")
-  deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-120}))
+  deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   until curl -s -o /dev/null http://localhost:13000; do
     if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[4]}" 2>/dev/null; then
       echo "web 기동 실패: $LOG_DIR/web.log" >&2

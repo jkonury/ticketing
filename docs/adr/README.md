@@ -41,4 +41,5 @@
 | [0026](0026-aot-cache-startup.md) | 부하 측정의 AOT 캐시 기동(콜드 + 캐시) | 수락 |
 | [0027](0027-scouter-reactive-txid-context-propagation.md) | Scouter WebFlux txid 전파를 context-propagation으로 교체한 패치 에이전트 | 수락 |
 | [0028](0028-cold-definition-internal-warmup.md) | 부하 측정의 "콜드" 정의: readiness 전 내부 예열 허용 | 수락 |
-| [0029](0029-layered-startup-warmup.md) | 선택 가능한 계층형 내부 예열과 DB·Redis·SSE 격리 | 수락 |
+| [0029](0029-layered-startup-warmup.md) | 선택 가능한 계층형 내부 예열과 DB·Redis·SSE 격리 | 일부 대체됨 (0030) |
+| [0030](0030-startup-warmup-burst-volume.md) | 내부 예열 HTTP 호출량·동시성을 외부 예열 기준으로 확대 | 수락 |

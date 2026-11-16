@@ -2,12 +2,12 @@
 
 ## 후속 세션 완료 상태 (2026-11-16)
 
-아래 본문은 재개 전 인계 기록이다. 최신 결과는 [구현·검증 보고](../performance/m5/15-layered-startup-warmup.md)를 따른다.
+아래 본문은 재개 전 인계 기록이다. 최초 구현 결과는 [구현·검증 보고](../performance/m5/15-layered-startup-warmup.md), 이후 사용자 요청에 따른 강화 결과는 [HTTP 예열 확대 보고](../performance/m5/16-startup-warmup-burst-volume.md)를 따른다.
 
 - 최종 컴파일·전체 테스트·ktlintCheck·detekt·예열 활성 E2E·셸/Python 회귀 검증을 완료했다. 전체 테스트에서 드러난 기존 PaymentFlowTests의 주문 ID 접두사 조회 충돌도 수정했다.
 - 내부 예열 JFR 진단 1회, JFR OFF 독립 3회를 완료했다. core Interpreted 31.8%, p95 1,505·1,448·1,242ms로 계획의 JFR·300ms 완료 기준은 미달이다. 정합성·오류·SSE 검사는 통과했다.
 - 순수 콜드 회귀는 **사용자가 스킵을 요청**해 실행하지 않았다. 예열 키·DB 음수 회차 예매는 0건이며 E2E용 fake-pg 컨테이너를 복원했다.
-- 구현은 미커밋이다. 과거 진단 커밋만 완료된 상태를 유지한다. 추가 튜닝이나 커밋은 수행하지 않았다.
+- 최초 구현은 `faeb0cc`로 커밋했다. 이후 Gateway 경유를 15회 × 1,000건으로 늘리고 운영 본문 캐시·core MVC 바인딩·검증을 보강했다. 최종 전체 테스트·품질 검사·E2E가 통과했으며 JFR core Interpreted 23.1%, JFR OFF 3회 p95 741·843·853ms로 목표 미달이다. 사용자가 강화 변경도 커밋하도록 요청했다.
 
 ## 사용자 요청과 현재 상태
 

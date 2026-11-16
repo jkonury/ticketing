@@ -1,7 +1,7 @@
 # hot-seats 1,000명 콜드 p95 300ms: 기동 시 내부 예열 계획
 
 - 작성일: 2026-11-16
-- 상태: 3.1 컴파일 임계 대조는 **중단 조건에 해당**([결과](../performance/m5/13-compile-threshold-control.md))했고 [콜드 JFR 진단](../performance/m5/14-cold-jfr-diagnosis.md) 후 사용자 승인으로 3.2를 구현했다([ADR 0029](../adr/0029-layered-startup-warmup.md)). 기능 검사는 통과했지만 JFR core Interpreted 31.8%와 JFR OFF 독립 3회 p95 1,505·1,448·1,242ms로 3.2 JFR·3.3 성능 완료 기준은 미달이다([검증 보고](../performance/m5/15-layered-startup-warmup.md)). 순수 콜드 회귀는 사용자 요청으로 생략했다.
+- 상태: 3.1 대조·콜드 진단 후 3.2를 구현했고, 사용자 요청으로 [HTTP 예열 15회 × 1,000건으로 확대](../performance/m5/16-startup-warmup-burst-volume.md)했다([ADR 0030](../adr/0030-startup-warmup-burst-volume.md)). 기능 검사는 통과했지만 JFR core Interpreted 23.1%와 JFR OFF 독립 3회 p95 741·843·853ms로 3.2 JFR·3.3 성능 완료 기준은 미달이다. 순수 콜드 회귀는 사용자 요청으로 생략했다. 최초 구현 결과는 [이전 검증 보고](../performance/m5/15-layered-startup-warmup.md)에 보존한다.
 - 목표(조건부): 앱을 새로 기동하고 readiness 전 내부 예열만 거친 뒤(외부 워밍업 요청 없음) 1,000명 hot-seats 예매 생성 p95 < 300ms를 독립 3회 모두 달성한다. 달성이 보장되지 않으며 미달이면 결과를 그대로 남긴다.
 - 실행 도구: Gatling 러너(`--booking-p95-ms 300`, `verdict.json`).
 - 관련 문서: [Gatling 최종 보고](../performance/m5/12-gatling-hot-seats-p95-300ms-report.md), [Gatling 계획](./hot-seats-gatling-p95-300ms.md), [Step 8 최종 보고](../performance/m5/11-step8-final-report.md), [ADR 0025](../adr/0025-booking-seat-copy-cache.md), [ADR 0026](../adr/0026-aot-cache-startup.md).
@@ -46,7 +46,7 @@
 
 - 계층 1(공유 자원 0, 많이 반복): Gateway JWT 검증·필터 파싱·Jackson, core 요청 역직렬화·Bean Validation·`Booking` 도메인 규칙·응답 직렬화, jOOQ 렌더링만, Lettuce 명령 인코딩.
 - 계층 2(실제 어댑터, 격리, 적게 반복): 실제 `CreateBookingService.create()` 호출. Redis는 예열 전용 회차 네임스페이스·짧은 TTL·종료 후 삭제, 좌석 사본은 Redis 캐시 경로(ADR 0025), persist는 rollback-only 트랜잭션, 승자·패자(409)를 실제 비율에 가깝게 섞고 동시성 2~4·초당 상한을 둔다. stub 포트로 예열하지 않는다(타입 프로파일 오염으로 deopt).
-- Gateway 계층 2는 core ready 뒤 예열 전용 경로로 소수만 호출한다.
+- Gateway 계층 2는 최초 8회 호출에서 사용자 요청에 따라 기본 15회 × 1,000건으로 확대했다([ADR 0030](../adr/0030-startup-warmup-burst-volume.md)). core ready 뒤 실제 HTTP·운영 본문 캐시·MVC DTO 변환·검증을 경유한다.
 - readiness: `ApplicationRunner`에서 예열하고 시간 상한을 넘기면 중단하고 ready로 전환한다.
 - 구현 전 확인할 가정: Spring Boot 4.x의 `ApplicationRunner`·readiness 전환 순서(공식 문서), rollback-only persist의 Modulith 이벤트 비발행, `SeatHoldPort` 어댑터가 realtime으로 좌석 이벤트를 흘리지 않는지, JDK 25 AOT 캐시가 기계어를 캐시하지 않는다는 가정(JEP 확인).
 - 완료 기준: 폭주 구간 JFR Interpreted 비율이 외부 15회 예열 수준으로 내려가고, 예열 중 DB·Redis 호출 수와 소요 시간이 `env.txt`에 기록된다.
@@ -66,8 +66,9 @@
 
 ## 5. 확정한 구현 조건
 
+- 최초 구현의 3.2 검증 후 사용자 요청으로 [ADR 0030](../adr/0030-startup-warmup-burst-volume.md)을 적용했다. 실제 HTTP 경유를 기본 15회 × 1,000건·동시 요청 상한 1,000으로 확대했다. [확대 검증 보고](../performance/m5/16-startup-warmup-burst-volume.md)에 별도 기록하며 순수 콜드 회귀 생략 요청은 유지한다.
 - 2026-11-16 사용자가 중단 이후에도 **3.2 계층형 내부 예열 구현**을 명시적으로 요청했다. DB 롤백·Redis 격리를 포함한 해당 범위의 구현을 진행한다.
-- 기동 예열 상한은 앱별 기본 30초, 설정 가능 범위는 0초 초과~2분이다. 상한·실패 시 새 작업을 중단하고 취소한 뒤 ready로 전환한다. 이미 발송된 I/O의 정리는 TTL·롤백으로 보장하며 timeout 호출 수는 취소 시점 스냅샷이다.
-- 기본 비활성. core는 메모리 10,000회·실제 200회(동시성 2·승자 5%·패자 95%·작업자별 50ms 대기), Gateway는 메모리 10,000회·core ready 뒤 실제 경유 8회다.
+- 기동 예열 상한은 core 기본 30초·Gateway 기본 120초(core 대기 포함), 설정 가능 범위는 0초 초과~2분이다. 상한·실패 시 새 작업을 중단하고 취소한 뒤 ready로 전환한다. 이미 발송된 I/O의 정리는 TTL·롤백으로 보장하며 timeout 호출 수는 취소 시점 스냅샷이다. 부하 러너는 예열 미완료 시 본 측정을 거부한다.
+- 기본 비활성. core는 메모리 10,000회·실제 200회(동시성 2·승자 5%·패자 95%·작업자별 50ms 대기), Gateway는 메모리 10,000회·core ready 뒤 실제 경유 15회 × 1,000건(승자 5%·동시 요청 상한 1,000)이다.
 - 예열 Redis 키는 음수 회차별 `booking:warmup:` 아래에서 생성 즉시 30초 TTL을 갖고 종료 시 삭제한다. DB에는 예열 회차 원장을 만들지 않으며 사본 캐시 경로로 읽고 예매 저장은 실제 JPA flush 후 롤백한다.
-- 자세한 경로 보호·관측·취소 정책은 [ADR 0029](../adr/0029-layered-startup-warmup.md)를 따른다. 300ms 목표 체크는 측정 통과 전까지 유지한다.
+- 경로는 생성 후 3분·최대 30,000회·동시 1,000개로 제한하며 서버 역할을 요구한다. 자세한 격리·관측·취소 정책은 [ADR 0029](../adr/0029-layered-startup-warmup.md)와 [ADR 0030](../adr/0030-startup-warmup-burst-volume.md)을 따른다. 300ms 목표 체크는 측정 통과 전까지 유지한다.

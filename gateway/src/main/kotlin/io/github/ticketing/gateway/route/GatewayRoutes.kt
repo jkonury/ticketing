@@ -60,6 +60,9 @@ class GatewayRoutes {
             if (startupWarmup) {
                 route(id = "core-startup-warmup", order = -1, uri = properties.coreUri) {
                     path("/internal/startup-warmup").and().method(org.springframework.http.HttpMethod.POST)
+                        .filters { filters ->
+                            filters.filter(GatewayFilter { exchange, chain -> admissionTokenFilter.validateBody(exchange, chain, 1L) })
+                        }
                 }
             }
             route(id = "realtime-queues", order = QUEUE_ROUTE_ORDER, uri = properties.realtimeUri) {

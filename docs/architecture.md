@@ -216,4 +216,4 @@ Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJ
 - APM(선택): Scouter 에이전트를 `SCOUTER_AGENT_DIR`로 연결한다. WebFlux 앱(gateway·realtime)은 txid 전파를 Reactor 자동 컨텍스트 전파에 맡기는 패치 에이전트를 쓴다. [ADR 0027](adr/0027-scouter-reactive-txid-context-propagation.md) 참고.
 - 성능 측정의 콜드: 앱을 새로 기동하고 외부 워밍업 요청을 보내지 않는 상태다. readiness 전 앱 내부 예열은 허용하되 별도 계열로 기록한다. [ADR 0028](adr/0028-cold-definition-internal-warmup.md) 참고.
 
-- 선택 가능한 내부 예열([ADR 0029](./adr/0029-layered-startup-warmup.md)): core·gateway는 기본 비활성이며, 활성화하면 readiness 전 메모리 연산과 격리된 실제 예매 호출을 수행한다. 기본 상한은 앱별 30초다. 음수 회차·`booking:warmup:` 키와 DB 롤백으로 일반 예매·SSE와 격리한다. 러너·E2E는 readiness를 기다린다.
+- 선택 가능한 내부 예열([ADR 0029](./adr/0029-layered-startup-warmup.md), [호출량 확대 ADR 0030](./adr/0030-startup-warmup-burst-volume.md)): core·gateway는 기본 비활성이며, 활성화하면 readiness 전 메모리 연산과 격리된 실제 예매 호출을 수행한다. core 직접 호출은 200회·기본 상한 30초, Gateway 실제 HTTP 경유는 15회 × 1,000건·동시 요청 상한 1,000·기본 전체 상한 120초다. 음수 회차·`booking:warmup:` 키와 DB 롤백으로 일반 예매·SSE와 격리한다. 러너·E2E는 readiness를 기다린다.

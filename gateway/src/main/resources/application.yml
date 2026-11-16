@@ -69,8 +69,11 @@ server:
 ticketing:
   startup-warmup:
     enabled: ${STARTUP_WARMUP_ENABLED:false}
-    max-duration: ${STARTUP_WARMUP_MAX_DURATION:30s}
+    max-duration: ${STARTUP_WARMUP_MAX_DURATION:120s}
     local-iterations: ${STARTUP_WARMUP_LOCAL_ITERATIONS:10000}
+    rounds: ${STARTUP_WARMUP_ROUNDS:15}
+    batch-size: ${STARTUP_WARMUP_BATCH_SIZE:1000}
+    concurrency: ${STARTUP_WARMUP_CONCURRENCY:1000}
   jwt:
     secret: ${TICKETING_JWT_SECRET}
   gateway:

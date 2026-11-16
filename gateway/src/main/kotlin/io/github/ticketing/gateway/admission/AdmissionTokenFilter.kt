@@ -44,7 +44,7 @@ class AdmissionTokenFilter(
             }
     }
 
-    private fun validateBody(exchange: ServerWebExchange, chain: GatewayFilterChain, scheduleId: Long): Mono<Void> =
+    internal fun validateBody(exchange: ServerWebExchange, chain: GatewayFilterChain, scheduleId: Long): Mono<Void> =
         DataBufferUtils.join(exchange.request.body, properties.bookingBodyMaxBytes)
             .timedStage(registry, "admission-body")
             .flatMap { buffer ->
