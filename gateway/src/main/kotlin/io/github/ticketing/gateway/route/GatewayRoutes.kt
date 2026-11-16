@@ -6,6 +6,7 @@ import io.github.ticketing.gateway.auth.MEMBER_HEADER
 import io.github.ticketing.gateway.ratelimit.RateLimitFilter
 import io.github.ticketing.gateway.sse.SseTicketFilter
 import io.github.ticketing.gateway.support.writeProblem
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.gateway.filter.GatewayFilter
@@ -37,6 +38,7 @@ class GatewayRoutes {
         admissionTokenFilter: AdmissionTokenFilter,
         sseTicketFilter: SseTicketFilter,
         rateLimitFilter: RateLimitFilter,
+        @Value("\${ticketing.startup-warmup.enabled:false}") startupWarmup: Boolean,
     ): RouteLocator {
         val requireMember = GatewayFilter { exchange, chain ->
             val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
@@ -55,6 +57,11 @@ class GatewayRoutes {
             }
         }
         return builder.routes {
+            if (startupWarmup) {
+                route(id = "core-startup-warmup", order = -1, uri = properties.coreUri) {
+                    path("/internal/startup-warmup").and().method(org.springframework.http.HttpMethod.POST)
+                }
+            }
             route(id = "realtime-queues", order = QUEUE_ROUTE_ORDER, uri = properties.realtimeUri) {
                 path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember).filter(rateLimitFilter) }
             }

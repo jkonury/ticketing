@@ -20,4 +20,9 @@ for i = 1, n do
 end
 redis.call('XADD', KEYS[2], 'MAXLEN', '~', '10000', '*',
   'seatIds', table.concat(ARGV, ',', 4), 'status', 'HELD', 'holdExpiresAt', tostring(exp), 'at', ARGV[3])
+-- 예열 회차의 스냅샷·Stream도 생성과 같은 Lua 안에서 만료시켜 비정상 종료에 대비한다.
+if string.sub(KEYS[1], 1, 15) == 'booking:warmup:' then
+  redis.call('PEXPIRE', KEYS[1], 30000)
+  redis.call('PEXPIRE', KEYS[2], 30000)
+end
 return {}

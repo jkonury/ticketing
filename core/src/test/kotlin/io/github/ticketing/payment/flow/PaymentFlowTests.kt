@@ -135,7 +135,7 @@ class PaymentFlowTests(
         "select status from event_publication where listener_id like ? and serialized_event like ?",
         String::class.java,
         "%$listener%",
-        "%\"orderId\":$id%",
+        "%\"orderId\":$id,%",
     ).firstOrNull()
 
     private fun awaitPayment(id: Long, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted {
@@ -402,7 +402,7 @@ class PaymentFlowTests(
         "select status from event_publication where listener_id like ? and serialized_event like ?",
         String::class.java,
         "%PaymentRequestListener%",
-        "%\"orderId\":$orderId%",
+        "%\"orderId\":$orderId,%",
     ).filterNotNull()
 
     // 같은 결제 요청 이벤트를 두 스레드가 동시에 다시 발행한다

@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.adapter.required.redis
 
+import io.github.ticketing.booking.adapter.provided.warmup.WarmupIo
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
@@ -36,6 +37,7 @@ internal class ScheduleSeatCache(private val redis: StringRedisTemplate, registr
     }
 
     private fun read(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> = try {
+        WarmupIo.redisCommand()
         val values = redis.opsForHash<String, String>().multiGet(key(scheduleId), seatIds.map { it.value.toString() })
         seatIds.zip(values).mapNotNull { (seatId, value) ->
             value?.let { decode(scheduleId, seatId, it) }
@@ -56,11 +58,17 @@ internal class ScheduleSeatCache(private val redis: StringRedisTemplate, registr
         }
     }
 
+    fun putForWarmup(scheduleId: ScheduleId, seats: List<ScheduleSeatCopy>) {
+        require(scheduleId.value < 0)
+        put(scheduleId, seats)
+    }
+
     private fun put(scheduleId: ScheduleId, seats: List<ScheduleSeatCopy>) {
-        val arguments = listOf(TTL_SECONDS.toString()) + seats.flatMap {
+        val arguments = listOf((if (scheduleId.value < 0) 30L else TTL_SECONDS).toString()) + seats.flatMap {
             listOf(it.seatId.value.toString(), mapper.writeValueAsString(SeatValue(it.grade, it.label, it.price)))
         }
         try {
+            WarmupIo.redisCommand()
             redis.execute(writeScript, listOf(key(scheduleId)), *arguments.toTypedArray())
         } catch (exception: DataAccessException) {
             logger.warn("좌석 사본 캐시 저장 실패, DB 원장 유지: scheduleId={}", scheduleId.value, exception)
@@ -81,6 +89,9 @@ internal class ScheduleSeatCache(private val redis: StringRedisTemplate, registr
     companion object {
         private const val TTL_SECONDS = 21600L
 
-        fun key(scheduleId: ScheduleId) = "booking:seat-copies:v1:{${scheduleId.value}}"
+        fun key(scheduleId: ScheduleId): String {
+            val prefix = if (scheduleId.value < 0) "booking:warmup" else "booking"
+            return "$prefix:seat-copies:v1:{${scheduleId.value}}"
+        }
     }
 }

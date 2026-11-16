@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.adapter.required.redis
 
+import io.github.ticketing.booking.adapter.provided.warmup.WarmupIo
 import io.github.ticketing.booking.application.port.required.HoldResult
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.application.port.required.SeatSnapshotReconcileException
@@ -53,7 +54,9 @@ class RedisSeatHoldAdapter(
 ) : SeatHoldPort {
     override fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult {
         require(seatIds.isNotEmpty()) { "seatIds must not be empty" }
-        val args = listOf(owner.value, ttl.toMillis().toString(), now.toEpochMilli().toString()) + ids(seatIds)
+        val effectiveTtl = if (scheduleId.value < 0) minOf(ttl.toMillis(), 30000L) else ttl.toMillis()
+        val args = listOf(owner.value, effectiveTtl.toString(), now.toEpochMilli().toString()) + ids(seatIds)
+        WarmupIo.redisCommand()
         val result = redis.execute(holdScript, keys(scheduleId, seatIds), *args.toTypedArray())
         return if (result.isNullOrEmpty()) {
             HoldResult.Held
@@ -65,6 +68,7 @@ class RedisSeatHoldAdapter(
     override fun release(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, now: Instant) {
         if (seatIds.isEmpty()) return
         val args = listOf(owner.value, now.toEpochMilli().toString()) + ids(seatIds)
+        WarmupIo.redisCommand()
         redis.execute(releaseScript, keys(scheduleId, seatIds), *args.toTypedArray())
     }
 
@@ -107,10 +111,12 @@ class RedisSeatHoldAdapter(
         listOf(snapshotKey(scheduleId), streamKey(scheduleId)) + seatIds.map { holdKey(scheduleId, it) }
 
     companion object {
-        fun holdKey(scheduleId: ScheduleId, seatId: SeatId) = "booking:hold:{${scheduleId.value}}:${seatId.value}"
+        private fun prefix(scheduleId: ScheduleId) = if (scheduleId.value < 0) "booking:warmup" else "booking"
 
-        fun snapshotKey(scheduleId: ScheduleId) = "booking:seats:{${scheduleId.value}}"
+        fun holdKey(scheduleId: ScheduleId, seatId: SeatId) = "${prefix(scheduleId)}:hold:{${scheduleId.value}}:${seatId.value}"
 
-        fun streamKey(scheduleId: ScheduleId) = "booking:seat-events:{${scheduleId.value}}"
+        fun snapshotKey(scheduleId: ScheduleId) = "${prefix(scheduleId)}:seats:{${scheduleId.value}}"
+
+        fun streamKey(scheduleId: ScheduleId) = "${prefix(scheduleId)}:seat-events:{${scheduleId.value}}"
     }
 }

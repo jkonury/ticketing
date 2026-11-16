@@ -29,12 +29,8 @@ class JwtAuthenticationFilter(private val decoder: ReactiveJwtDecoder, private v
         val request = exchange.request.mutate().headers { it.remove(MEMBER_HEADER) }.build()
         val sanitized = exchange.mutate().request(request).build()
         val authorization = request.headers.getFirst(HttpHeaders.AUTHORIZATION)
-        if (authorization == null ||
-            !(authorization.equals("Bearer", ignoreCase = true) || authorization.startsWith("Bearer ", ignoreCase = true))
-        ) {
-            return chain.filter(sanitized)
-        }
-        return authenticate(sanitized, chain, authorization.substringAfter(' ', "").trim())
+        val token = bearerToken(authorization) ?: return chain.filter(sanitized)
+        return authenticate(sanitized, chain, token)
     }
 
     private fun authenticate(sanitized: ServerWebExchange, chain: GatewayFilterChain, token: String): Mono<Void> {
@@ -51,4 +47,13 @@ class JwtAuthenticationFilter(private val decoder: ReactiveJwtDecoder, private v
             .switchIfEmpty(Mono.defer { sanitized.writeProblem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다.").thenReturn(false) })
             .then()
     }
+}
+
+internal fun bearerToken(authorization: String?): String? {
+    if (authorization == null ||
+        !(authorization.equals("Bearer", ignoreCase = true) || authorization.startsWith("Bearer ", ignoreCase = true))
+    ) {
+        return null
+    }
+    return authorization.substringAfter(' ', "").trim()
 }

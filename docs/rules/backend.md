@@ -100,6 +100,7 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 
 - 컨트롤러와 서비스는 `suspend` 함수와 `Flow`로 작성한다. `Mono`/`Flux`는 프레임워크 경계에서만 쓴다.
 - **블로킹 호출 금지.** `runBlocking`, `Thread.sleep`, 블로킹 Redis/HTTP 클라이언트를 쓰지 않는다. Redis는 reactive 클라이언트를 쓴다.
+- readiness 전 내부 예열을 수행하는 `ApplicationRunner`의 기동 스레드만 제한 시간 동안 Future 완료를 기다릴 수 있다([ADR 0029](../adr/0029-layered-startup-warmup.md)). 예열 HTTP·재시도·지연은 reactive 연산이며 요청 이벤트 루프에는 블로킹을 넣지 않는다.
 - `GlobalScope`를 쓰지 않는다. 구조화된 동시성을 지키고, `CancellationException`을 삼키지 않는다.
 - SSE는 `Flow<ServerSentEvent<T>>`로 내보낸다. 이벤트에 `id`를 붙여 `Last-Event-ID` 재연결을 지원하고, 주기적 heartbeat를 보낸다.
 - 클라이언트 연결이 끊기면 Redis 구독과 대기열 자원을 정리한다.

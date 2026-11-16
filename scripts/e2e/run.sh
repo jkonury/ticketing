@@ -68,7 +68,9 @@ start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_POR
 start gateway gateway/build/libs/gateway.jar
 health() {
   local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-120}))
-  until curl -fsS "http://localhost:$port/actuator/health" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
+  local health_path=/actuator/health
+  [[ $name != core && $name != gateway ]] || health_path=/actuator/health/readiness
+  until curl -fsS "http://localhost:$port$health_path" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
     if ((SECONDS >= deadline)) || ! kill -0 "$pid" 2>/dev/null; then
       printf '%s 기동 실패. 로그: %s/%s.log\n' "$name" "$LOG_DIR" "$name" >&2
       tail -n 30 "$LOG_DIR/$name.log" >&2

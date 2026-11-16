@@ -10,6 +10,7 @@ import io.github.ticketing.booking.application.port.provided.CreateBookingUseCas
 import io.github.ticketing.booking.application.port.provided.RequestPaymentUseCase
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotEmpty
+import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -78,7 +79,7 @@ class BookingController(
 
 data class PaymentRequestResponse(val bookingId: Long, val status: String)
 
-data class CreateBookingRequest(val scheduleId: Long, @field:NotEmpty @field:Size(min = 1, max = 4) val seatIds: List<Long>)
+data class CreateBookingRequest(@field:Positive val scheduleId: Long, @field:NotEmpty @field:Size(min = 1, max = 4) val seatIds: List<Long>)
 
 data class BookingSeatResponse(val seatId: Long, val label: String, val price: java.math.BigDecimal)
 

@@ -71,16 +71,18 @@ class AdmissionTokenFilter(
             .onErrorResume(DataBufferLimitException::class.java) { invalidBody(exchange).thenReturn(false) }
             .then()
 
-    private fun parseSchedule(bytes: ByteArray): Long? = try {
-        val value = jsonMapper.readTree(bytes).get("scheduleId")
-        if (value != null && value.isIntegralNumber && value.canConvertToLong()) value.longValue() else null
-    } catch (_: tools.jackson.core.JacksonException) {
-        null
-    }
+    private fun parseSchedule(bytes: ByteArray): Long? = admissionSchedule(jsonMapper, bytes)
 
     private fun invalidToken(exchange: ServerWebExchange): Mono<Void> =
         exchange.writeProblem(HttpStatus.FORBIDDEN, "ADMISSION_TOKEN_INVALID", "유효하지 않은 입장 토큰입니다.")
 
     private fun invalidBody(exchange: ServerWebExchange): Mono<Void> =
         exchange.writeProblem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST_BODY", "유효하지 않은 요청 본문입니다.")
+}
+
+internal fun admissionSchedule(jsonMapper: JsonMapper, bytes: ByteArray): Long? = try {
+    val value = jsonMapper.readTree(bytes).get("scheduleId")
+    if (value != null && value.isIntegralNumber && value.canConvertToLong()) value.longValue() else null
+} catch (_: tools.jackson.core.JacksonException) {
+    null
 }

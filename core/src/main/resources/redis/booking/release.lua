@@ -15,4 +15,9 @@ if #released > 0 then
   redis.call('XADD', KEYS[2], 'MAXLEN', '~', '10000', '*',
     'seatIds', table.concat(released, ','), 'status', 'AVAILABLE', 'at', ARGV[2])
 end
+-- 예열 회차의 스냅샷·Stream도 생성과 같은 Lua 안에서 만료시켜 비정상 종료에 대비한다.
+if string.sub(KEYS[1], 1, 15) == 'booking:warmup:' then
+  redis.call('PEXPIRE', KEYS[1], 30000)
+  redis.call('PEXPIRE', KEYS[2], 30000)
+end
 return released

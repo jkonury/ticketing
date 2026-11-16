@@ -10,10 +10,11 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
-            [--warmup [--warmup-rounds N]] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
+            [--warmup [--warmup-rounds N]] [--internal-warmup] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
             [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N] [--jvm-opts '-XX:옵션 ...']
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
+--internal-warmup은 core·gateway readiness 전 내부 예열을 켭니다. 외부 --warmup·--aot-cache와 함께 쓰지 않으며 별도 계열로 기록합니다.
 --warmup-rounds는 워밍업 횟수입니다(기본 5). Gatling 회차별 결과는 warmup-<n>/, settle은 warmup-settle-<n>.json에 남깁니다.
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
@@ -44,6 +45,7 @@ K6_CPUS=0-3
 APP_CPUS=4-15
 NO_SCOUTER=false
 WARMUP=false
+INTERNAL_WARMUP=false
 WARMUP_ROUNDS=5
 # 워밍업 한 회차의 비동기 처리 완료 대기 상한(초)과 대기열 정리 대기 상한(초). 넘으면 그 실행은 실패로 둔다
 WARMUP_SETTLE_TIMEOUT=120
@@ -72,6 +74,7 @@ while (($#)); do
     --keep) KEEP=true; shift ;;
     --no-scouter) NO_SCOUTER=true; shift ;;
     --warmup) WARMUP=true; shift ;;
+    --internal-warmup) INTERNAL_WARMUP=true; shift ;;
     --warmup-rounds) need_value "$@"; WARMUP_ROUNDS=$2; shift 2 ;;
     --no-rate-limit) NO_RATE_LIMIT=true; shift ;;
     --tool) need_value "$@"; TOOL=$2; shift 2 ;;
@@ -106,6 +109,9 @@ fi
 [[ $WARMUP_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--warmup-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $AOT_TRAIN_ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo '--aot-train-rounds에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 $AOT_CACHE && $WARMUP && { echo '--aot-cache와 --warmup은 함께 쓰지 않습니다(콜드 + AOT 조건).' >&2; exit 1; }
+if $INTERNAL_WARMUP && { $WARMUP || $AOT_CACHE; }; then
+  echo '--internal-warmup은 --warmup·--aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
+fi
 [[ -z $VUS || $VUS =~ ^[1-9][0-9]*$ ]] || { echo '--vus에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
 [[ $SCENARIO != seat-conflict-refund || -z $VUS ]] || { echo 'seat-conflict-refund는 규모(100쌍)를 고정하므로 --vus를 쓰지 않습니다.' >&2; exit 1; }
 
@@ -237,7 +243,9 @@ start() {
 
 health() {
   local name=$1 port=$2 pid=$3 dir=$4 deadline=$((SECONDS + 90))
-  until curl -fsS "http://localhost:$port/actuator/health" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
+  local health_path=/actuator/health
+  [[ $name != core && $name != gateway ]] || health_path=/actuator/health/readiness
+  until curl -fsS "http://localhost:$port$health_path" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
     if ((SECONDS >= deadline)) || ! kill -0 "$pid" 2>/dev/null; then
       printf '%s 기동 실패. 로그: %s/%s.log\n' "$name" "$dir" "$name" >&2
       tail -n 30 "$dir/$name.log" >&2
@@ -255,6 +263,7 @@ write_env() {
     printf 'cpu: %s (논리 코어 %s)\n' "$(LC_ALL=C lscpu | awk -F: '/Model name/ {gsub(/^ +/, "", $2); print $2}')" "$(nproc)"
     printf 'memory: %s\n' "$(LC_ALL=C free -h | awk '/^Mem:/ {print $2}')"
     printf 'booking-p95-ms: %s\n' "${BOOKING_P95_MS:-VU별 기본}"
+    printf 'internal-warmup: %s\n' "$INTERNAL_WARMUP"
     printf 'jvm-opts(core·gateway): %s\n' "${JVM_OPTS:-없음}"
     printf 'generator-warmup: 매회 새 JVM, 외부 warmup 비활성\n'
     printf 'tool: %s\n' "$TOOL"
@@ -305,15 +314,19 @@ start_apps() {
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
     FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
-  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar "${obs[@]}"
+  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" "${obs[@]}"
   start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"
   local gw_env=()
   if $NO_RATE_LIMIT; then gw_env=(TICKETING_GATEWAY_RATE_LIMIT_ENABLED=false); fi
-  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar "${gw_env[@]}" "${obs[@]}"
+  start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" "${gw_env[@]}" "${obs[@]}"
   health fake-pg 18090 "${PIDS[0]}" "$dir" || return 1
   health core 18080 "${PIDS[1]}" "$dir" || return 1
   health realtime 18081 "${PIDS[2]}" "$dir" || return 1
   health gateway 18000 "${PIDS[3]}" "$dir" || return 1
+  if $INTERNAL_WARMUP; then
+    printf '\n내부 예열 결과(기동 로그, timeout 시 취소 시점 호출 수):\n' >> "$dir/env.txt"
+    rg 'startup-warmup outcome=' "$dir/core.log" "$dir/gateway.log" >> "$dir/env.txt"
+  fi
 }
 
 psql_q() { # booking 스키마 조회용. 스키마를 넘는 조인은 하지 않는다

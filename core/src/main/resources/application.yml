@@ -37,6 +37,10 @@ spring:
       republish-outstanding-events-on-restart: true
 
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:
@@ -69,6 +73,10 @@ server:
   port: 18080
 
 ticketing:
+  startup-warmup:
+    enabled: ${STARTUP_WARMUP_ENABLED:false}
+    max-duration: ${STARTUP_WARMUP_MAX_DURATION:30s}
+    local-iterations: ${STARTUP_WARMUP_LOCAL_ITERATIONS:10000}
   jwt:
     secret: ${TICKETING_JWT_SECRET}
   payment:
