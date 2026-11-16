@@ -10,7 +10,7 @@ usage() {
   cat >&2 <<'USAGE'
 사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
-            [--warmup [--warmup-rounds N]] [--internal-warmup] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
+            [--warmup [--warmup-rounds N]] [--internal-warmup] [--codelist] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
             [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N] [--jvm-opts '-XX:옵션 ...']
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
@@ -19,6 +19,7 @@ usage() {
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
 --aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
+--codelist는 진단 전용으로 본 부하 직전과 CODELIST_DELAY초(기본 52, 예매 폭주 직전) 뒤에 core·gateway의 jcmd Compiler.codelist를 codelist-<서비스>-<pre|burst>.txt로 남깁니다.
 --jvm-opts는 core·gateway JVM에만 추가하는 -XX 옵션입니다(예: '-XX:CompileThresholdScaling=0.25'). 컴파일 임계 대조용이며 env.txt에 기록합니다.
 SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
@@ -37,6 +38,8 @@ SCENARIO=
 RUNS=1
 FAILURE_INJECT=false
 JFR=false
+CODELIST=false
+CODELIST_DELAY=52
 JVM_OPTS=
 OBSERVABILITY=false
 KEEP=false
@@ -69,6 +72,7 @@ while (($#)); do
     --app-cpus) need_value "$@"; APP_CPUS=$2; shift 2 ;;
     --failure-inject) FAILURE_INJECT=true; shift ;;
     --jfr) JFR=true; shift ;;
+    --codelist) CODELIST=true; shift ;;
     --jvm-opts) need_value "$@"; JVM_OPTS=$2; shift 2 ;;
     --observability) OBSERVABILITY=true; shift ;;
     --keep) KEEP=true; shift ;;
@@ -340,6 +344,16 @@ start_apps() {
   fi
 }
 
+# dump_codelist <디렉터리> <pre|burst>: core·gateway의 컴파일된 메서드 목록(진단 전용, 실패해도 실행에 영향 없음)
+dump_codelist() {
+  local dir=$1 tag=$2 name pid
+  for name in core gateway; do
+    pid=${PIDS[$([[ $name == core ]] && echo 1 || echo 3)]}
+    date +%s.%N > "$dir/codelist-$name-$tag.time"
+    jcmd "$pid" Compiler.codelist > "$dir/codelist-$name-$tag.txt" 2>"$dir/codelist-$name-$tag.err" || true
+  done
+}
+
 psql_q() { # booking 스키마 조회용. 스키마를 넘는 조인은 하지 않는다
   docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt -c "$1"' sh "$1"
 }
@@ -597,6 +611,8 @@ run_once() {
   } >> "$dir/env.txt"
   k6_from=$(date +%s)
   printf 'k6_start_unix_seconds: %s\n' "$k6_from" > "$dir/measurement.txt"
+  local codelist_pid=
+  $CODELIST && dump_codelist "$dir" pre
   if [[ $TOOL == gatling ]]; then
     launch_gatling "$dir" "$schedule_file" "${scenario_env[@]}"
   else
@@ -606,6 +622,10 @@ run_once() {
   fi
   local k6_pid=$!
   [[ $TOOL != gatling ]] || k6_pid=$GATLING_PID
+  if $CODELIST; then
+    (sleep "$CODELIST_DELAY"; dump_codelist "$dir" burst) &
+    codelist_pid=$!
+  fi
   python3 "$ROOT/scripts/loadtest/sample-resources.py" "$k6_pid" "$dir/resources.csv" > "$dir/resource-sampler.log" 2>&1 &
   SAMPLER_PID=$!
   python3 "$ROOT/scripts/loadtest/tcp-probe.py" sample "$k6_pid" "$dir/tcp-samples.csv" 0.15 >> "$dir/tcp-probe.log" 2>&1 &
@@ -614,6 +634,7 @@ run_once() {
   PG_SAMPLER_PID=$!
   LOAD_PID=$k6_pid
   wait "$k6_pid" || k6_status=$?
+  if [[ -n $codelist_pid ]]; then kill "$codelist_pid" 2>/dev/null || true; wait "$codelist_pid" 2>/dev/null || true; fi
   LOAD_PID=
   python3 "$ROOT/scripts/loadtest/tcp-probe.py" snapshot "$dir/tcp-post.json" >> "$dir/tcp-probe.log" 2>&1 || true
   if [[ $TOOL == gatling ]]; then
