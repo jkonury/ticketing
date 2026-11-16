@@ -147,13 +147,16 @@ internal class GatewayWarmupRunner(
             // 만료(TTL)가 최종 방어선이다. 기동 스레드를 막지 않도록 비동기로 지운다.
             redis.delete(admissionKey).subscribe({}, {})
             logger.info(
-                "startup-warmup outcome={} elapsedMs={} local={} rounds={} remote={} winners={} dbStatements={} redisCommands={}",
+                "startup-warmup outcome={} elapsedMs={} local={} rounds={} remote={} winners={} payments={} details={} retries={} dbStatements={} redisCommands={}",
                 outcome,
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
                 local.get(),
                 traffic.rounds.get(),
                 traffic.completed.get(),
                 traffic.winners.get(),
+                traffic.payments.get(),
+                traffic.details.get(),
+                traffic.retries.get(),
                 traffic.db.get(),
                 traffic.redis.get(),
             )

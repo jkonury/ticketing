@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 private const val DEFAULT_MAX_SECONDS = 30L
 private const val MAX_LOCAL_ITERATIONS = 100000
 private const val MAX_ADAPTER_ITERATIONS = 1000
+private const val MAX_SEATS = 4
 
 @ConfigurationProperties("ticketing.startup-warmup")
 internal data class BookingWarmupProperties(
@@ -61,7 +62,7 @@ internal class BookingWarmupRunner(private val work: BookingWarmupWork, private 
                     }
                     for (index in worker until properties.adapterIterations step 2) {
                         if (shouldStop(deadline)) break
-                        if (work.exercise(index % 20 != 0)) wins.incrementAndGet()
+                        if (work.exercise(index % 20 != 0, 1 + index % MAX_SEATS)) wins.incrementAndGet()
                         attempts.incrementAndGet()
                         TimeUnit.MILLISECONDS.sleep(50)
                     }

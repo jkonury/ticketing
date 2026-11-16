@@ -38,7 +38,7 @@ internal class StartupWarmupAuthentication :
 
 /**
  * 예열 자격 헤더가 있는 요청만 이 체인으로 보낸다. 헤더가 없는 운영 요청은 기존 체인을 그대로 탄다.
- * 서버 역할(STARTUP_WARMUP) JWT와 기동 시 비밀을 모두 확인한 뒤에만 USER 권한을 주며, 허용 경로는 예매 생성 하나다.
+ * 서버 역할(STARTUP_WARMUP) JWT와 기동 시 비밀을 모두 확인한 뒤에만 USER 권한을 주며, 허용 경로는 예매 생성·결제 요청·상세 조회의 고정 템플릿 셋뿐이다.
  */
 internal class StartupWarmupFilter(private val credential: StartupWarmupCredential) : OncePerRequestFilter() {
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, chain: FilterChain) {
@@ -82,7 +82,11 @@ internal class StartupWarmupSecurityConfig {
         http.securityMatcher(RequestMatcher { it.getHeader(STARTUP_WARMUP_HEADER) != null })
             .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
-            .authorizeHttpRequests { it.requestMatchers(HttpMethod.POST, "/api/v1/bookings").authenticated().anyRequest().denyAll() }
+            .authorizeHttpRequests {
+                it.requestMatchers(HttpMethod.POST, "/api/v1/bookings", "/api/v1/bookings/$WARMUP_BOOKING_ID/payments").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/bookings/$WARMUP_BOOKING_ID").authenticated()
+                    .anyRequest().denyAll()
+            }
             .oauth2ResourceServer {
                 it.jwt { jwt ->
                     jwt.decoder(jwtDecoder).jwtAuthenticationConverter(

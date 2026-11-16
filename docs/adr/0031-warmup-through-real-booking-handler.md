@@ -4,6 +4,8 @@
 
 수락 (2026-11-16). 사용자가 [ADR 0030](0030-startup-warmup-burst-volume.md) 이후에도 JFR OFF p95가 741·843·853ms로 남은 상황에서, 예열이 별도 컨트롤러가 아닌 실제 `BookingController`·Security 체인을 거치도록 요청했다. ADR 0029·0030의 예열 전용 경로(`/internal/startup-warmup`)와 서버 JWT 역할만으로 호출하는 방식을 대체한다. 데이터 격리 정책(음수 회차·전용 Redis 키·TTL·DB 롤백·호출 상한)은 유지한다.
 
+확장 (2026-11-16): [ADR 0032](0032-warmup-traffic-mix.md)가 전용 체인의 허용 경로를 결제 요청·상세 조회 고정 템플릿으로 넓히고 예매 생성 좌석 수를 1~4로 늘렸다. 아래 "허용 경로는 `POST /api/v1/bookings` 하나", "고정 템플릿(회차 1·좌석 [1])"은 ADR 0032의 세 경로·좌석 `[1..n]` 템플릿으로 바뀌었고 나머지 보안 경계는 그대로다.
+
 ## 맥락
 
 ADR 0030 이후 JFR(`build/loadtest/runs/20261116-132736-hot-seats/1/core.jfr`)의 예매 구간에서 `jdk.Deoptimization`을 집계했다. core 198건(외부 예열 `20261115-221926-hot-seats/1`은 1건), Gateway 46건(외부 0건)이다. 사유는 class_check 65·bimorphic_or_optimized_type_check 62·unstable_if 47·unreached 16이며 상위 메서드는 `AopUtils.invokeJoinpointUsingReflection`, Kotlin `ReflectJvmMapping.getJavaMethod`, `AnnotatedMethodParameter.getParameterAnnotations`, Jackson 직렬화, Micrometer 핸들러다. 예열은 `BookingWarmupController`로, 본 요청은 `BookingController`로 들어와 공통 프레임워크 호출 지점의 타입 프로파일이 예열 전용 호출자로 굳었다가 본 부하에서 깨졌을 가능성이 있다. 이 인과는 확정이 아니며 이번 변경으로 검증한다.

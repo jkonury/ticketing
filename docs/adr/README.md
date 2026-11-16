@@ -43,3 +43,5 @@
 | [0028](0028-cold-definition-internal-warmup.md) | 부하 측정의 "콜드" 정의: readiness 전 내부 예열 허용 | 수락 |
 | [0029](0029-layered-startup-warmup.md) | 선택 가능한 계층형 내부 예열과 DB·Redis·SSE 격리 | 일부 대체됨 (0030) |
 | [0030](0030-startup-warmup-burst-volume.md) | 내부 예열 HTTP 호출량·동시성을 외부 예열 기준으로 확대 | 수락 |
+| [0031](0031-warmup-through-real-booking-handler.md) | 내부 예열을 실제 예매 핸들러와 보안 체인 경유로 변경 | 수락 (일부 확장: 0032) |
+| [0032](0032-warmup-traffic-mix.md) | 내부 예열을 실제 예매 구간 트래픽 구성(예매·결제·상세·웹훅·PG 조회)으로 혼합 | 수락 |

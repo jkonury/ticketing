@@ -17,6 +17,8 @@ internal const val STARTUP_WARMUP_HEADER = "X-Startup-Warmup-Key"
 internal const val STARTUP_WARMUP_IO_HEADER = "X-Startup-Warmup-Io"
 internal const val WARMUP_WINNER_KEY = "startup-warmup:winner"
 internal const val WARMUP_CONFLICT_KEY = "startup-warmup:conflict"
+internal const val WARMUP_PAYMENT_KEY = "startup-warmup:payment"
+internal const val WARMUP_BOOKING_ID = -1L
 private val WINDOW: Duration = Duration.ofMinutes(3)
 
 /** core가 기동 때 발급한 예열 자격을 메모리에만 보관한다. 로그·저장소에 남기지 않으며 설치 후 [WINDOW] 동안만 유효하다. */

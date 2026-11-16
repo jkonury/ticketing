@@ -5,9 +5,13 @@ import io.github.ticketing.booking.adapter.provided.web.BookingSeatResponse
 import io.github.ticketing.booking.adapter.provided.web.CreateBookingRequest
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter
 import io.github.ticketing.booking.adapter.required.redis.ScheduleSeatCache
+import io.github.ticketing.booking.application.port.provided.BookingDetailView
+import io.github.ticketing.booking.application.port.provided.BookingQueryUseCase
 import io.github.ticketing.booking.application.port.provided.CreateBookingCommand
 import io.github.ticketing.booking.application.port.provided.CreateBookingResult
 import io.github.ticketing.booking.application.port.provided.CreateBookingUseCase
+import io.github.ticketing.booking.application.port.provided.PaymentRequestResult
+import io.github.ticketing.booking.application.port.provided.RequestPaymentUseCase
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.application.service.SeatAlreadyHeldException
 import io.github.ticketing.booking.domain.BookedSeat
@@ -29,6 +33,8 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 import ticketing.jooq.booking.tables.references.BOOKING_
+import ticketing.jooq.booking.tables.references.SCHEDULE
+import ticketing.jooq.booking.tables.references.SCHEDULE_SEAT
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.time.Clock
@@ -36,10 +42,13 @@ import java.time.Duration
 import java.util.UUID
 
 private const val WARMUP_TTL_SECONDS = 30L
+private const val MAX_SEATS = 4
 
 @Component
 internal class BookingWarmupWork(
     @Qualifier("createBookingService") private val createBooking: CreateBookingUseCase,
+    @Qualifier("bookingQueryService") private val queries: BookingQueryUseCase,
+    @Qualifier("requestPaymentService") private val payments: RequestPaymentUseCase,
     private val cache: ScheduleSeatCache,
     private val holds: SeatHoldPort,
     private val redis: StringRedisTemplate,
@@ -89,8 +98,8 @@ internal class BookingWarmupWork(
     }
 
     /** 직접 호출 예열(러너)용이다. 승자는 응답 직렬화까지 거치고 패자는 선점 충돌 예외를 삼킨다. */
-    fun exercise(conflict: Boolean): Boolean = try {
-        val result = create(conflict)
+    fun exercise(conflict: Boolean, seatCount: Int = 1): Boolean = try {
+        val result = create(conflict, seatCount)
         mapper.writeValueAsString(BookingResponse.from(result.booking))
         true
     } catch (_: SeatAlreadyHeldException) {
@@ -100,46 +109,85 @@ internal class BookingWarmupWork(
     /**
      * 음수 회차 격리 환경에서 실제 예매 생성 유스케이스를 호출한다. 승자는 항상 DB 롤백하고, 패자는
      * [SeatAlreadyHeldException]을 그대로 던진다. 컨트롤러 아래(HTTP 경유 예열)에서도 같은 격리를 쓴다.
+     * 실제 요청의 좌석 수(1~4)를 따라 [seatCount]장을 잡는다.
      */
-    fun create(conflict: Boolean): CreateBookingResult {
+    fun create(conflict: Boolean, seatCount: Int = 1): CreateBookingResult = isolated(seatCount) { schedule, seats ->
+        if (conflict) {
+            holds.hold(schedule, seats, HoldToken("startup-holder"), Duration.ofSeconds(WARMUP_TTL_SECONDS), clock.instant())
+            createBooking.create(command(schedule, seats))
+            error("예열 경합 요청이 성공했습니다.")
+        } else {
+            rolledBack { createBooking.create(command(schedule, seats)).also { check(it.created) } }
+        }
+    }
+
+    /** 예매 상세 조회 예열이다. 롤백 트랜잭션 안에서 만든 예매를 실제 조회 유스케이스로 읽는다. */
+    fun detail(): BookingDetailView = isolated(1) { schedule, seats ->
+        rolledBack {
+            insertSchedule(schedule, seats)
+            val created = createBooking.create(command(schedule, seats)).also { check(it.created) }
+            queries.detail(schedule.value, created.booking.bookingId)
+        }
+    }
+
+    /**
+     * 결제 요청 예열이다. 롤백 트랜잭션 안에서 만든 예매에 실제 결제 요청 유스케이스를 호출한다. 발행되는 [PaymentRequested]는
+     * 트랜잭션과 함께 사라져 AFTER_COMMIT 리스너(실제 PG 요청)가 실행되지 않는다.
+     */
+    fun requestPayment(): PaymentRequestResult = isolated(1) { schedule, seats ->
+        rolledBack {
+            val created = createBooking.create(command(schedule, seats)).also { check(it.created) }
+            payments.request(schedule.value, created.booking.bookingId)
+        }
+    }
+
+    private fun command(schedule: ScheduleId, seats: List<SeatId>) =
+        CreateBookingCommand(schedule.value, UUID.randomUUID().toString(), schedule.value, seats.map { it.value })
+
+    // 회차가 음수라 실제 데이터와 겹치지 않는다. 롤백 트랜잭션 안에서만 보이는 행이다.
+    private fun insertSchedule(schedule: ScheduleId, seats: List<SeatId>) {
+        val now = clock.instant().atOffset(java.time.ZoneOffset.UTC)
+        dsl.insertInto(SCHEDULE)
+            .set(SCHEDULE.SCHEDULE_ID, schedule.value)
+            .set(SCHEDULE.PERFORMANCE_ID, schedule.value)
+            .set(SCHEDULE.PERFORMANCE_TITLE, "warmup")
+            .set(SCHEDULE.ORGANIZER_ID, schedule.value)
+            .set(SCHEDULE.STARTS_AT, now.plusDays(1))
+            .set(SCHEDULE.RECEIVED_AT, now)
+            .execute()
+        seats.forEach { seat ->
+            dsl.insertInto(SCHEDULE_SEAT)
+                .set(SCHEDULE_SEAT.SCHEDULE_ID, schedule.value)
+                .set(SCHEDULE_SEAT.SEAT_ID, seat.value)
+                .set(SCHEDULE_SEAT.GRADE, "VIP")
+                .set(SCHEDULE_SEAT.LABEL, "W-${seat.value}")
+                .set(SCHEDULE_SEAT.PRICE, BigDecimal.TEN.toLong())
+                .execute()
+        }
+    }
+
+    private fun <T> rolledBack(action: () -> T): T = checkNotNull(
+        rollback.execute { status ->
+            try {
+                action()
+            } finally {
+                status.setRollbackOnly()
+            }
+        },
+    )
+
+    private fun <T> isolated(seatCount: Int, action: (ScheduleId, List<SeatId>) -> T): T {
+        require(seatCount in 1..MAX_SEATS)
         val schedule = ScheduleId(-((UUID.randomUUID().mostSignificantBits and Long.MAX_VALUE).coerceAtLeast(1)))
-        val seat = SeatId(1)
+        val seats = (1..seatCount).map { SeatId(it.toLong()) }
         val keys =
-            listOf(
-                ScheduleSeatCache.key(schedule),
-                RedisSeatHoldAdapter.holdKey(schedule, seat),
-                RedisSeatHoldAdapter.snapshotKey(schedule),
-                RedisSeatHoldAdapter.streamKey(schedule),
-            )
+            listOf(ScheduleSeatCache.key(schedule), RedisSeatHoldAdapter.snapshotKey(schedule), RedisSeatHoldAdapter.streamKey(schedule)) +
+                seats.map { RedisSeatHoldAdapter.holdKey(schedule, it) }
         return try {
             ensureActive()
-            cache.putForWarmup(schedule, listOf(ScheduleSeatCopy(schedule, seat, "VIP", "W-1", BigDecimal.TEN)))
+            cache.putForWarmup(schedule, seats.map { ScheduleSeatCopy(schedule, it, "VIP", "W-${it.value}", BigDecimal.TEN) })
             ensureActive()
-            if (conflict) {
-                holds.hold(
-                    schedule,
-                    listOf(seat),
-                    HoldToken("startup-holder"),
-                    Duration.ofSeconds(WARMUP_TTL_SECONDS),
-                    clock.instant(),
-                )
-            }
-            val command = CreateBookingCommand(schedule.value, UUID.randomUUID().toString(), schedule.value, listOf(seat.value))
-            ensureActive()
-            if (conflict) {
-                createBooking.create(command)
-                error("예열 경합 요청이 성공했습니다.")
-            } else {
-                checkNotNull(
-                    rollback.execute { status ->
-                        try {
-                            createBooking.create(command).also { check(it.created) }
-                        } finally {
-                            status.setRollbackOnly()
-                        }
-                    },
-                )
-            }
+            action(schedule, seats)
         } finally {
             WarmupIo.redisCommand()
             redis.delete(keys)
