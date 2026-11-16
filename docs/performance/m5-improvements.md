@@ -103,6 +103,7 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 | [17-warmup-through-real-handler.md](m5/17-warmup-through-real-handler.md) | 예열을 실제 예매 핸들러·보안 체인 경유로 변경, 탈최적화 core 203·Gateway 13, JFR OFF 3회 p95 709·1,458·816ms 미달 |
 | [18-warmup-traffic-mix.md](m5/18-warmup-traffic-mix.md) | 예열을 예매·결제·상세·웹훅·PG 조회 혼합으로 확장, 탈최적화 core 203→52, JFR OFF 3회 p95 760·772·750ms 미달 |
 | [19-warmup-tcp-diagnosis.md](m5/19-warmup-tcp-diagnosis.md) | TCP 계측 보강, 외부 2회 p95 435·436ms·폭주 시 overflow/SYN 재전송 0, 사용자 요청으로 외부 3회차 예열 중 중단·내부 비교 미실행 |
+| [20-warmup-rounds-dose-response.md](m5/20-warmup-rounds-dose-response.md) | 외부 예열 1·3회 각 2회: p50 1회 648~707→3회 444~461ms, p95는 편차 큼(593~1,599ms), 전부 미달 |
 | [내부·외부 예열 격차 실험 계획](../plans/hot-seats-internal-warmup-gap-experiments.md) | 기존 산출물로 격차를 서비스·단계별로 분해, 추가 실험 E1~E4와 결과별 대응 방안(계획만, 미실행) |
 
 새 측정이나 변경은 해당 단계 파일에 이어 적거나 새 파일을 만들고, 이 허브의 현재 상태와 표를 함께 갱신한다. `phases/m5-2-improvement/`의 step 지시서는 이 문서를 결과 인계처로 지정하고 있다. 그 지시는 과거 실행 기록으로 읽는다.
