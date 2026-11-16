@@ -19,10 +19,9 @@
 ## 2. 기동·종료·초기화
 
 ```bash
-./gradlew :fake-pg:bootJar          # fake-pg 코드를 바꿨거나 최초 기동일 때
-docker compose up -d --wait --build # 인프라 기동
+docker compose up -d --wait         # 인프라(PostgreSQL, Redis) 기동
+./scripts/dev/run.sh --fake-pg      # fake-pg는 호스트 jar로 기동(로그: build/dev/logs/fake-pg.log)
 docker compose ps                   # 상태
-docker compose logs -f fake-pg      # 로그
 docker compose down                 # 종료 (데이터 유지)
 docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이터 전부 사라짐)
 ```
@@ -46,10 +45,9 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 
 결제는 이벤트 기반이다. core가 fake-pg에 요청하고 fake-pg가 웹훅으로 결과를 돌려준다.
 
-1. `docker compose logs fake-pg`에서 요청이 도착했고 웹훅을 보냈는지 본다.
-2. 웹훅이 닿지 않으면 core가 18080에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://host.docker.internal:18080/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다.
+1. `build/dev/logs/fake-pg.log`(E2E는 `build/e2e/logs/fake-pg.log`)에서 요청이 도착했고 웹훅을 보냈는지 본다.
+2. 웹훅이 닿지 않으면 core가 18080에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://localhost:18080/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다.
 3. 웹훅이 거절되면 core와 fake-pg의 `FAKE_PG_WEBHOOK_SECRET`이 같은지 본다. 서명 검증이 이 값을 쓴다.
-   Linux에서 연결이 시간 초과되면 `ip -br addr show br-ticketing`으로 브릿지 이름이 적용됐는지, `sudo ufw status numbered`에 `br-ticketing`의 18080 허용 규칙이 있는지 본다. 없으면 `sudo ./scripts/setup-firewall.sh`를 실행한다. 이전에 서브넷 기준으로 추가한 규칙(`from 172.19.0.0/16 …`)은 `sudo ufw delete <번호>`로 지운다.
 4. 웹훅은 중복 도착할 수 있다. 멱등 키로 걸러지므로 중복 로그 자체는 정상이다.
 5. 결제 기록과 PG 거래의 불일치는 `paymentReconciliationJob`(4절)으로 검출한다. 자동 보정은 하지 않는다.
 6. 만료된 예매에 결제 성공이 늦게 도착하면 자동 환불 경로로 처리된다. 흐름은 [flows.md §6.4](./architecture/flows.md#64-결제-이벤트-기반)를 본다.
@@ -173,7 +171,7 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 
 - 주요 옵션: `--runs N`(반복 횟수), `--vus N`, `--k6-cpus 0-3`·`--app-cpus 4-15`(CPU 분리), `--keep`(앱만 정리하고 Compose 인프라는 남긴다), `-h`(전체 옵션).
 - 결과는 `build/loadtest/runs/<타임스탬프>-<시나리오>/<N>/`에 저장된다. `k6-summary.json`, `k6.log`, `prometheus.json`, 앱별 `core.log`·`realtime.log`·`gateway.log`·`fake-pg.log`가 있다. git에는 넣지 않는다.
-- 18090을 compose의 `ticketing-fake-pg-1` 컨테이너가 점유하면 측정 전 `docker stop ticketing-fake-pg-1`, 끝나면 `docker start ticketing-fake-pg-1`로 복구한다(E2E가 다시 띄우므로 부하 전에 재중지). 결과 해석은 [M5 최종 보고서](performance/m5/11-step8-final-report.md)를 따른다.
+- fake-pg는 러너가 호스트 jar로 띄우므로 18090을 다른 프로세스(`scripts/dev/run.sh --fake-pg` 등)가 점유하지 않게 한다. 결과 해석은 [M5 최종 보고서](performance/m5/11-step8-final-report.md)를 따른다.
 - 부하 테스트는 `build`·`check`에 포함되지 않는다. Gradle 작업과 동시에 실행하지 않는다. 측정은 다른 검사가 끝난 뒤 단독으로 돌린다.
 
 정합성 검증이 실패하면(`정합성 위반`, 종료 코드 1) 다음을 본다.

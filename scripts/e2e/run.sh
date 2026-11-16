@@ -20,7 +20,7 @@ for command in docker curl java; do
   command -v "$command" >/dev/null || { printf '필요한 도구가 없습니다: %s\n' "$command" >&2; exit 1; }
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
-ports=(18000 18080 18081 "$REALTIME_B_PORT")
+ports=(18000 18080 18081 18090 "$REALTIME_B_PORT")
 if $WEB; then ports+=(13000); fi
 if command -v ss >/dev/null; then
   for port in "${ports[@]}"; do
@@ -55,13 +55,16 @@ if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:boot
   tail -n 30 "$LOG_DIR/build.log" >&2
   exit 1
 fi
-docker compose up -d --build --wait > "$LOG_DIR/compose.log" 2>&1 || { echo "Compose 기동 실패: $LOG_DIR/compose.log" >&2; tail -n 30 "$LOG_DIR/compose.log" >&2; exit 1; }
+docker compose up -d --wait > "$LOG_DIR/compose.log" 2>&1 || { echo "Compose 기동 실패: $LOG_DIR/compose.log" >&2; tail -n 30 "$LOG_DIR/compose.log" >&2; exit 1; }
 start() {
   local name=$1 jar=$2
   shift 2
   java -jar "$jar" "$@" > "$LOG_DIR/$name.log" 2>&1 &
   PIDS+=("$!")
 }
+# fake-pg는 .env의 웹훅 비밀(FAKE_PG_WEBHOOK_SECRET)이 필요하다. 다른 앱은 자체적으로 .env를 읽는다.
+(set -a; source .env; set +a; exec java -jar fake-pg/build/libs/fake-pg.jar) > "$LOG_DIR/fake-pg.log" 2>&1 &
+PIDS+=("$!")
 start core core/build/libs/core.jar
 start realtime-a realtime/build/libs/realtime.jar
 start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_PORT"
@@ -79,10 +82,11 @@ health() {
     sleep 1
   done
 }
-health core 18080 "${PIDS[0]}"
-health realtime-a 18081 "${PIDS[1]}"
-health realtime-b "$REALTIME_B_PORT" "${PIDS[2]}"
-health gateway 18000 "${PIDS[3]}"
+health fake-pg 18090 "${PIDS[0]}"
+health core 18080 "${PIDS[1]}"
+health realtime-a 18081 "${PIDS[2]}"
+health realtime-b "$REALTIME_B_PORT" "${PIDS[3]}"
+health gateway 18000 "${PIDS[4]}"
 if $WEB; then
   if [[ ! -d web/node_modules ]]; then
     (cd web && pnpm install --frozen-lockfile) > "$LOG_DIR/web.log" 2>&1 || { echo "web 설치 실패: $LOG_DIR/web.log" >&2; exit 1; }
@@ -92,7 +96,7 @@ if $WEB; then
   PIDS+=("$!")
   deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   until curl -s -o /dev/null http://localhost:13000; do
-    if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[4]}" 2>/dev/null; then
+    if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[5]}" 2>/dev/null; then
       echo "web 기동 실패: $LOG_DIR/web.log" >&2
       exit 1
     fi

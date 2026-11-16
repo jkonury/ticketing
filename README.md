@@ -68,12 +68,11 @@ flowchart LR
 
 개발 Java 앱은 Scouter를 연결한다. `.env` 또는 환경 변수의 `SCOUTER_AGENT_DIR`에 에이전트 디렉터리 절대 경로를 지정한다. 개발·부하 테스트 모두 코어는 `deploy/scouter/ticketing.conf`, Gateway는 `deploy/scouter/ticketing-gateway.conf`, realtime은 `deploy/scouter/ticketing-realtime.conf`를 사용한다. Gateway·realtime은 SSE 계측 비용을 줄이기 위해 Reactor 훅을 끄므로 WebFlux HTTP XLog·요청 TPS·응답시간을 수집하지 않는다. HTTP 관측은 Micrometer 지표·추적을 사용한다.
 
-fake-pg 컨테이너는 빌드된 jar를 복사하므로 먼저 bootJar를 만든 뒤 Compose를 올린다.
+fake-pg는 컨테이너가 아니라 `./scripts/dev/run.sh --fake-pg`(또는 e2e·부하 테스트 스크립트)가 호스트에서 jar로 기동한다. Compose는 PostgreSQL·Redis만 올린다.
 
 ```bash
 cp .env.example .env                 # 최초 1회. FAKE_PG_WEBHOOK_SECRET은 코어와 같은 값으로 맞춘다
-./gradlew :fake-pg:bootJar
-docker compose up -d                 # PostgreSQL, Redis, fake-pg
+docker compose up -d                 # PostgreSQL, Redis
 ```
 
 시드 데이터(공연장 2곳, 공연 3편, 회차 각 3개)는 `SPRING_PROFILES_ACTIVE=seed ./gradlew :core:bootRun`으로 넣는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)이고, 다시 실행해도 늘지 않는다.

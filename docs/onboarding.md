@@ -11,7 +11,7 @@
 | 도구 | 용도 |
 |---|---|
 | JDK 25 | 백엔드 빌드·실행 (버전 상세는 [architecture.md §2](./architecture.md#2-기술-스택) 참고) |
-| Docker | PostgreSQL·Redis·fake-pg, jOOQ 코드 생성, Testcontainers |
+| Docker | PostgreSQL·Redis, jOOQ 코드 생성, Testcontainers |
 | pnpm, Node.js | `web` |
 | `fd`, `rg` | 에이전트 스크립트 |
 | `lychee` | 문서 링크 검사 |
@@ -23,8 +23,7 @@ git clone <저장소> && cd ticketing
 ./scripts/setup-hooks.sh            # pre-commit(ktlint, detekt, web 검사) 활성화. 클론 후 1회
 sudo ./scripts/setup-firewall.sh      # Linux+UFW: compose 브릿지(br-ticketing)에서 호스트로의 웹훅·수집 허용. 1회
 cp .env.example .env                # 로컬 비밀 값. git 제외
-./gradlew :fake-pg:bootJar          # fake-pg 컨테이너가 빌드된 jar를 복사하므로 먼저 만든다
-docker compose up -d --wait         # PostgreSQL 15432, Redis 16379, fake-pg 18090
+docker compose up -d --wait         # PostgreSQL 15432, Redis 16379
 ./gradlew build                     # 전체 빌드 + 테스트
 ```
 
@@ -48,7 +47,7 @@ cd web && pnpm install && pnpm dev  # 13000
 
 시드 데이터는 공연장 2곳, 공연 3편, 회차 각 3개이며 다시 실행해도 늘지 않는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)다.
 
-fake-pg는 웹훅을 `host.docker.internal:18080`의 core로 보낸다. 그래서 core는 컨테이너가 아니라 호스트에서 `bootRun`으로 띄운다. `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 core와 fake-pg가 같아야 서명 검증이 통과한다.
+fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scripts/dev/run.sh --fake-pg`), 웹훅을 `localhost:18080`의 core로 보낸다. `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 core와 fake-pg가 같아야 서명 검증이 통과한다.
 
 ## 4. 저장소 지도
 
