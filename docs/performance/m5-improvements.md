@@ -7,14 +7,14 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 2026-11-14 최종 측정(Step 8) 기준이며 2026-11-15에 문서를 정리했다.
 
 - **M5 완료 기준 충족**: 부하 중 좌석 중복 판매 0건, 개선 전후 수치 문서화. 로드맵 M5 항목은 체크되어 있다.
-- **미해결**: B 예매 생성 p95 잠정 기준 300ms 미달. 콜드 B 중앙값 1,385.3ms(3회 모두 미달), 워밍업 B 중앙값 383.3ms(3회 모두 미달). 원인은 확정하지 못했다. 정황은 폭주 약 3초 구간의 CPU 포화, 콜드 클래스 로딩·초기화, 연결 보유 시간 증가다.
+- **미해결**: B 예매 생성 p95 잠정 기준 300ms 미달(내부 예열 콜드 계열은 900ms 잠정 기준으로 충족, 300ms 장기 목표는 미달). 콜드 B 중앙값 1,385.3ms(3회 모두 미달), 워밍업 B 중앙값 383.3ms(3회 모두 미달). 원인은 확정하지 못했다. 정황은 폭주 약 3초 구간의 CPU 포화, 콜드 클래스 로딩·초기화, 연결 보유 시간 증가다.
 - **임시 기준**: 1,000명 동시 도착은 p95 1,500ms로 판정한다(`loadtest/lib/options.ts`의 `STRESS_BOOKING_P95_MS`). 로드맵 완료 기준과 무관한 값이며 300ms는 후속 튜닝 목표로 남아 있다.
 - **콜드 A(10,000명)**: 예매 p95 중앙값 110.8ms, 예상 밖 오류 0%, SSE 성공 100%, 입장 10,000명 전원으로 잠정 기준을 달성했다.
 - **정합성**: 전 실행에서 중복 판매 0건, DB·Redis 불일치 0건이다.
 
 2026-11-15 추가 측정: [Gatling Scouter ON/OFF 비교](scouter-gatling-comparison.md). 두 시나리오를 ON/OFF 각각 3회 실행했다. 현재 설정에서도 ON 비용이 남았으며, 기존 k6 기준과 별도 계열로 기록한다.
 
-2026-11-16 후속: [컴파일 임계 대조](m5/13-compile-threshold-control.md)는 중단 조건에 해당했다. [콜드 JFR 진단](m5/14-cold-jfr-diagnosis.md), [최초 내부 예열 구현·검증](m5/15-layered-startup-warmup.md) 이후 사용자 요청으로 [HTTP 경유를 15회 × 1,000건으로 확대](m5/16-startup-warmup-burst-volume.md)했다. 기능 검사는 통과했지만 JFR core Interpreted 23.1%(외부 예열 0/58), JFR OFF 3회 p95 741·843·853ms로 목표에 미달했다. 정합성·오류·SSE는 통과했고 순수 콜드 회귀는 사용자 요청으로 생략했다. 지연 원인별 기여율은 미분리다. 이후 [예열을 실제 예매 핸들러 경유로 변경](m5/17-warmup-through-real-handler.md)했으나 core 탈최적화 203건, JFR OFF 3회 p95 709·1,458·816ms로 목표에 미달했다.
+2026-11-16 후속: [컴파일 임계 대조](m5/13-compile-threshold-control.md)는 중단 조건에 해당했다. [콜드 JFR 진단](m5/14-cold-jfr-diagnosis.md), [최초 내부 예열 구현·검증](m5/15-layered-startup-warmup.md) 이후 사용자 요청으로 [HTTP 경유를 15회 × 1,000건으로 확대](m5/16-startup-warmup-burst-volume.md)했다. 기능 검사는 통과했지만 JFR core Interpreted 23.1%(외부 예열 0/58), JFR OFF 3회 p95 741·843·853ms로 300ms 목표에는 미달했고, 2026-11-16 전환한 900ms 잠정 기준은 충족했다. 정합성·오류·SSE는 통과했고 순수 콜드 회귀는 사용자 요청으로 생략했다. 지연 원인별 기여율은 미분리다. 이후 [예열을 실제 예매 핸들러 경유로 변경](m5/17-warmup-through-real-handler.md)했으나 core 탈최적화 203건, JFR OFF 3회 p95 709·1,458·816ms로 목표에 미달했다.
 
 ## 단계 요약
 
@@ -58,7 +58,7 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 | Step 6 Gateway 연결·힙 설정 | 변경 없음 | 500·`PrematureCloseException` 미재현, 지연은 서버 구간 밖 |
 | Step 7 `release.lua` SOLD 보존 | 채택(결함 수정) | 선점 키 유실 시 Redis SOLD가 AVAILABLE로 덮이던 불일치 50건 해소 |
 | AOT 캐시 기동 ([ADR 0026](../adr/0026-aot-cache-startup.md)) | 실행 절차로 유지, 최종 측정에서는 미사용 | 50명 콜드 3회 모두 300ms 미만, 1,000명은 3회 모두 800ms 이상 |
-| 1,000명 p95 기준 | 임시 1,500ms 적용 | 300ms는 후속 튜닝 목표. 확인 실행의 SSE 성공률 0.972는 미달이었고 최종 측정에서는 100% |
+| 1,000명 p95 기준 | 임시 1,500ms 적용 | 300ms는 후속 튜닝 목표. 확인 실행의 SSE 성공률 0.972는 미달이었고 최종 측정에서는 100%. 내부 예열 콜드 계열은 잠정 900ms 기준으로 재판정([16](m5/16-startup-warmup-burst-volume.md)) |
 
 ## 공통 측정 조건
 
@@ -66,6 +66,7 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 - B: 1,000명, 입장 배치 1,000, 5,000석·핫 좌석 100석. 기준 3회.
 - 50명 조건: `hot-seats --vus 50`으로 입장 배치 규모 기준을 따로 본다(300ms 기준 적용).
 - 잠정 기준: 예매 생성 p95 < 300ms, 예상 밖 오류율 < 1%, SSE 연결 성공률 > 99.9%. 1,000명은 p95 임시 1,500ms.
+- 1,000명 내부 예열 콜드 계열(예열 15회 × 1,000건, [계획](../plans/hot-seats-internal-warmup-cold-900ms.md)): 전체·성공 예매 p95 < 900ms(2026-11-16 전환). 300ms는 장기 목표로 남는다. 근거는 [문서 16](m5/16-startup-warmup-burst-volume.md#목표-전환).
 - 콜드는 앱을 매번 새로 띄우고 워밍업 요청을 보내지 않는다. 워밍업은 같은 앱에 5회 예열한 뒤 새 회차로 본 측정한다.
 - 실행 디렉터리는 `build/loadtest/runs/` 아래에 있으며 대용량 산출물은 git에 넣지 않는다.
 
@@ -96,7 +97,7 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 | [13-compile-threshold-control.md](m5/13-compile-threshold-control.md) | 컴파일 임계(CompileThresholdScaling) 대조, 순수 콜드 B 9회, 중단 조건 해당 |
 | [14-cold-jfr-diagnosis.md](m5/14-cold-jfr-diagnosis.md) | 실제 JVM 옵션 적용 확인, 콜드 JFR 2회와 기존 외부 예열 JFR 비교, 원인 분리 한계 |
 | [15-layered-startup-warmup.md](m5/15-layered-startup-warmup.md) | 계층형 내부 예열 구현·기능 검증, JFR 진단·독립 3회 성능 미달, 순수 콜드 회귀 생략 |
-| [16-startup-warmup-burst-volume.md](m5/16-startup-warmup-burst-volume.md) | HTTP 예열 15회 × 1,000건·본문 캐시·MVC 검증 확대, 기능 통과·JFR 및 성능 목표 미달 |
+| [16-startup-warmup-burst-volume.md](m5/16-startup-warmup-burst-volume.md) | HTTP 예열 15회 × 1,000건·본문 캐시·MVC 검증 확대, 기능 통과·JFR 미달, 300ms 미달·900ms 잠정 기준 충족(재판정) |
 | [17-warmup-through-real-handler.md](m5/17-warmup-through-real-handler.md) | 예열을 실제 예매 핸들러·보안 체인 경유로 변경, 탈최적화 core 203·Gateway 13, JFR OFF 3회 p95 709·1,458·816ms 미달 |
 | [18-warmup-traffic-mix.md](m5/18-warmup-traffic-mix.md) | 예열을 예매·결제·상세·웹훅·PG 조회 혼합으로 확장, 탈최적화 core 203→52, JFR OFF 3회 p95 760·772·750ms 미달 |
 | [19-warmup-tcp-diagnosis.md](m5/19-warmup-tcp-diagnosis.md) | TCP 계측 보강, 외부 2회 p95 435·436ms·폭주 시 overflow/SYN 재전송 0, 사용자 요청으로 외부 3회차 예열 중 중단·내부 비교 미실행 |

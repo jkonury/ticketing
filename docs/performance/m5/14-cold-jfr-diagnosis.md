@@ -1,6 +1,6 @@
 # M5 콜드 B 진단: JVM 옵션 실제 적용과 폭주 구간 JFR
 
-> 허브: [M5-2 개선 및 측정 인계](../m5-improvements.md) · 이전: [컴파일 임계 대조](13-compile-threshold-control.md) · 계획: [내부 예열 계획](../../plans/hot-seats-internal-warmup-cold-300ms.md) 3.1.1
+> 허브: [M5-2 개선 및 측정 인계](../m5-improvements.md) · 이전: [컴파일 임계 대조](13-compile-threshold-control.md) · 계획: [내부 예열 계획](../../plans/hot-seats-internal-warmup-cold-900ms.md) 3.1.1
 
 ## 결론
 

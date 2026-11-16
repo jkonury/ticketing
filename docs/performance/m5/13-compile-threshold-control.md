@@ -1,6 +1,6 @@
 # M5-2 개선 및 측정 인계 (13) 컴파일 임계 대조(순수 콜드 B, Gatling)
 
-> 허브: [M5-2 개선 및 측정 인계](../m5-improvements.md) · 이전: [Gatling 외부 예열 최종 보고](12-gatling-hot-seats-p95-300ms-report.md) · 계획: [내부 예열 계획](../../plans/hot-seats-internal-warmup-cold-300ms.md) 3.1
+> 허브: [M5-2 개선 및 측정 인계](../m5-improvements.md) · 이전: [Gatling 외부 예열 최종 보고](12-gatling-hot-seats-p95-300ms-report.md) · 계획: [내부 예열 계획](../../plans/hot-seats-internal-warmup-cold-900ms.md) 3.1
 
 ## 결론
 

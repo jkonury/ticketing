@@ -1,6 +1,6 @@
 # M5 계층형 내부 예열 구현과 검증
 
-> 허브: [M5-2 개선 및 측정 인계](../m5-improvements.md) · 이전: [콜드 JFR 진단](14-cold-jfr-diagnosis.md) · 계획: [내부 예열 계획](../../plans/hot-seats-internal-warmup-cold-300ms.md) · 결정: [ADR 0029](../../adr/0029-layered-startup-warmup.md)
+> 허브: [M5-2 개선 및 측정 인계](../m5-improvements.md) · 이전: [콜드 JFR 진단](14-cold-jfr-diagnosis.md) · 계획: [내부 예열 계획](../../plans/hot-seats-internal-warmup-cold-900ms.md) · 결정: [ADR 0029](../../adr/0029-layered-startup-warmup.md)
 
 ## 결론
 

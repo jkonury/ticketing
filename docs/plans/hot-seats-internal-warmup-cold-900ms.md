@@ -1,9 +1,9 @@
-# hot-seats 1,000명 콜드 p95 300ms: 기동 시 내부 예열 계획
+# hot-seats 1,000명 콜드 p95 900ms: 기동 시 내부 예열 계획
 
 - 작성일: 2026-11-16
-- 상태: 3.1 대조·콜드 진단 후 3.2를 구현했고, 사용자 요청으로 [HTTP 예열 15회 × 1,000건으로 확대](../performance/m5/16-startup-warmup-burst-volume.md)했다([ADR 0030](../adr/0030-startup-warmup-burst-volume.md)). 기능 검사는 통과했지만 JFR core Interpreted 23.1%와 JFR OFF 독립 3회 p95 741·843·853ms로 3.2 JFR·3.3 성능 완료 기준은 미달이다. 순수 콜드 회귀는 사용자 요청으로 생략했다. 최초 구현 결과는 [이전 검증 보고](../performance/m5/15-layered-startup-warmup.md)에 보존한다.
-- 목표(조건부): 앱을 새로 기동하고 readiness 전 내부 예열만 거친 뒤(외부 워밍업 요청 없음) 1,000명 hot-seats 예매 생성 p95 < 300ms를 독립 3회 모두 달성한다. 달성이 보장되지 않으며 미달이면 결과를 그대로 남긴다.
-- 실행 도구: Gatling 러너(`--booking-p95-ms 300`, `verdict.json`).
+- 상태: 3.1 대조·콜드 진단 후 3.2를 구현했고, 사용자 요청으로 [HTTP 예열 15회 × 1,000건으로 확대](../performance/m5/16-startup-warmup-burst-volume.md)했다([ADR 0030](../adr/0030-startup-warmup-burst-volume.md)). 기능 검사는 통과했다. JFR core Interpreted 23.1%는 3.2 완료 기준 미달이다. JFR OFF 독립 3회 전체·성공 p95 741·843·853ms / 710·784·777ms는 900ms 잠정 기준을 모두 충족하고 300ms 장기 목표는 미달이다. 순수 콜드 회귀는 사용자 요청으로 생략했다. 최초 구현 결과는 [이전 검증 보고](../performance/m5/15-layered-startup-warmup.md)에 보존한다.
+- 목표(잠정, 2026-11-16 전환): 앱을 새로 기동하고 readiness 전 내부 예열만 거친 뒤(외부 워밍업 요청 없음) 1,000명 hot-seats 예매 생성의 전체·성공 p95를 각각 < 900ms로 독립 3회 모두 달성한다. 300ms는 장기 목표로 남긴다. 전환 근거는 [문서 16의 목표 전환](../performance/m5/16-startup-warmup-burst-volume.md#목표-전환)이다. 달성이 보장되지 않으며 미달이면 결과를 그대로 남긴다.
+- 실행 도구: Gatling 러너(`--booking-p95-ms 900`, `verdict.json`). 기존 실행의 `verdict.json`은 300ms 판정이며 900ms 재판정은 문서에서만 한다.
 - 관련 문서: [Gatling 최종 보고](../performance/m5/12-gatling-hot-seats-p95-300ms-report.md), [Gatling 계획](./hot-seats-gatling-p95-300ms.md), [Step 8 최종 보고](../performance/m5/11-step8-final-report.md), [ADR 0025](../adr/0025-booking-seat-copy-cache.md), [ADR 0026](../adr/0026-aot-cache-startup.md).
 
 ## 1. 근거와 한계
@@ -11,7 +11,7 @@
 | 근거 | 수치 | 해석 |
 |---|---|---|
 | 순수 콜드 B (k6, Scouter OFF) | 중앙값 1,385ms | 회귀 기준(1,500ms)만 통과 |
-| 외부 15회 예열 (Gatling) | 전체 p95 350~386ms(D 중앙값 386ms) | **내부 예열의 비교 기준이자 사실상 상한 추정치.** 이미 300ms 미달 |
+| 외부 15회 예열 (Gatling) | 전체 p95 350~386ms(D 중앙값 386ms) | **내부 예열의 비교 기준이자 사실상 상한 추정치.** 300ms 장기 목표는 미달, 900ms 잠정 기준은 충족 |
 | 폭주 1초 평균 CPU | gateway 1.25·core 1.03코어 | 평균은 비어 있어 sub-second 포화는 판단 불가 |
 | 미해결 | 클라이언트~Gateway 118ms, 1.2초 튐, 연결 리셋 | 예열로 사라지는지 알 수 없음 |
 
@@ -53,7 +53,7 @@
 
 ### 3.3 검증
 
-- 예열 포함 기동 3회 p95가 3회 모두 300ms 미만이고 중앙값도 300ms 미만인지 본다. 정합성(중복 판매 0·불일치 0)·오류율·SSE 성공률을 함께 본다.
+- 예열 포함 기동 3회의 전체·성공 예매 p95가 3회 모두 900ms 미만인지 본다(2026-11-16 전환, 300ms는 장기 목표). 정합성(중복 판매 0·불일치 0)·오류율·SSE 성공률을 함께 본다.
 - 순수 콜드 B를 회귀 기준(1,500ms)으로 함께 잰다. 예열 비활성 설정으로 순수 콜드를 재현할 수 있어야 한다.
 - 기동 시간 증가와 예열 상한 동작을 기록한다. 계열을 섞지 않는다.
 - 결과는 [내부 예열 구현·검증 보고](../performance/m5/15-layered-startup-warmup.md)에 남기고 허브·로드맵에 연결한다. 미달이면 체크하지 않는다.

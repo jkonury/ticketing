@@ -21,7 +21,7 @@
 
 AGENTS.md, backend 규칙을 따른다. 아키텍처·로드맵 확인 뒤 아래 자료와 현재 diff 범위부터 읽는다. 이전 전체 로그나 JFR을 먼저 다시 출력하지 않는다.
 
-- [구현 계획](hot-seats-internal-warmup-cold-300ms.md): 3.2 구현 승인과 기본 설정을 반영했다.
+- [구현 계획](hot-seats-internal-warmup-cold-900ms.md): 3.2 구현 승인과 기본 설정을 반영했다.
 - [ADR 0029](../adr/0029-layered-startup-warmup.md): 이번 구현 선택과 취소·격리·관측의 한계.
 - [이전 JFR 진단](../performance/m5/14-cold-jfr-diagnosis.md): 기준 1.0 / 0.1 콜드 p95 1,664 / 2,006ms. core 최상위 Interpreted 53.1% / 41.0%, 기존 외부 15회 예열 0/58. 서로 다른 계열을 합치지 않는다.
 
