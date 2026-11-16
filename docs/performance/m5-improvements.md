@@ -14,6 +14,8 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 
 2026-11-15 추가 측정: [Gatling Scouter ON/OFF 비교](scouter-gatling-comparison.md). 두 시나리오를 ON/OFF 각각 3회 실행했다. 현재 설정에서도 ON 비용이 남았으며, 기존 k6 기준과 별도 계열로 기록한다.
 
+2026-11-16 후속: [컴파일 임계 대조](m5/13-compile-threshold-control.md)는 중단 조건에 해당했다. 사용자 선택으로 [옵션 실제 적용 확인 + JFR 콜드 진단](m5/14-cold-jfr-diagnosis.md)을 추가했다. 실제 옵션 적용은 확인됐고, 콜드 core의 최상위 Interpreted 표본은 53.1%·41.0%(기존 외부 예열 0/58)였다. p95는 1,664·2,006ms로 미달이며, JIT·클래스 초기화·연결 대기의 기여율은 미분리다. 내부 예열 구현은 시작하지 않았다.
+
 ## 단계 요약
 
 | 단계 | 내용 | 결과 | 상세 |
@@ -92,5 +94,6 @@ M5-2(병목 개선과 전후 비교)의 허브 문서다. 단계별 측정·변�
 | [11-step8-final-report.md](m5/11-step8-final-report.md) | Step 8 최종 측정 A·B·워밍업 B, 계열 비교, JFR, 풀·정합성, 한계 |
 | [12-gatling-hot-seats-p95-300ms-report.md](m5/12-gatling-hot-seats-p95-300ms-report.md) | Gatling 외부 15회 예열 hot-seats p95 300ms 최종 판정(미달), 진단, Scouter ON/OFF, 회귀 |
 | [13-compile-threshold-control.md](m5/13-compile-threshold-control.md) | 컴파일 임계(CompileThresholdScaling) 대조, 순수 콜드 B 9회, 중단 조건 해당 |
+| [14-cold-jfr-diagnosis.md](m5/14-cold-jfr-diagnosis.md) | 실제 JVM 옵션 적용 확인, 콜드 JFR 2회와 기존 외부 예열 JFR 비교, 원인 분리 한계 |
 
 새 측정이나 변경은 해당 단계 파일에 이어 적거나 새 파일을 만들고, 이 허브의 현재 상태와 표를 함께 갱신한다. `phases/m5-2-improvement/`의 step 지시서는 이 문서를 결과 인계처로 지정하고 있다. 그 지시는 과거 실행 기록으로 읽는다.

@@ -87,7 +87,7 @@
   - **미해결**: B 예매 생성 p95 잠정 기준 300ms 미달(최종 콜드 1,385ms, 워밍업 383ms). 원인 미확정, 후속 과제
   - [ ] [Gatling hot-seats 1,000명 p95 300ms 후속 계획](./plans/hot-seats-gatling-p95-300ms.md): 15회 예열 후 독립 실행 5회 검증. 측정 기반·전용 대시보드 추가, 첫 예열 확인 후 중단. 본 측정·Scouter ON/OFF 비교 미완료([인계](./plans/hot-seats-gatling-handoff.md)). 콜드 목표와 분리
   - 콜드 재정의: readiness 전 내부 예열 허용([ADR 0028](./adr/0028-cold-definition-internal-warmup.md)). 외부 15회 예열도 350~386ms로 300ms 미달이라 달성 보장 없는 조건부 목표이며 구현은 새 계획 합의 후 진행([최종 보고](./performance/m5/12-gatling-hot-seats-p95-300ms-report.md))
-  - [ ] [콜드 p95 300ms: 기동 시 내부 예열 계획](./plans/hot-seats-internal-warmup-cold-300ms.md): 초안. 컴파일 임계 대조로 기대 효과를 먼저 확인하고 구현 여부를 정한다
+  - [ ] [콜드 p95 300ms: 기동 시 내부 예열 계획](./plans/hot-seats-internal-warmup-cold-300ms.md): 컴파일 임계 대조는 중단 조건 해당. 사용자 선택에 따른 [실제 옵션 확인·JFR 콜드 진단](./performance/m5/14-cold-jfr-diagnosis.md) 완료(p95 1,664·2,006ms 미달, core Interpreted 표본 53.1%·41.0%). 원인 기여율 미분리로 내부 예열 구현은 별도 결정 대기
   - [x] booking 불변 좌석 사본 캐시 구현·회귀 검증 ([ADR 0025](./adr/0025-booking-seat-copy-cache.md))
   - M5-2 계획: [병목 개선과 전후 비교](./plans/m5-2-improvements.md)
 - [x] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)

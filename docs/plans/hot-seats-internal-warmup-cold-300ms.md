@@ -1,7 +1,7 @@
 # hot-seats 1,000명 콜드 p95 300ms: 기동 시 내부 예열 계획
 
 - 작성일: 2026-11-16
-- 상태: 3.1 컴파일 임계 대조 완료, **중단 조건에 해당**([결과](../performance/m5/13-compile-threshold-control.md)). 3.2 구현은 사용자 결정 전까지 시작하지 않는다.
+- 상태: 3.1 컴파일 임계 대조 완료, **중단 조건에 해당**([결과](../performance/m5/13-compile-threshold-control.md)). 2026-11-16 사용자 선택에 따른 JVM 옵션 실제 적용 확인과 JFR 콜드 병목 진단도 완료했다([진단 보고](../performance/m5/14-cold-jfr-diagnosis.md)). 3.2 구현은 별도 결정 전까지 시작하지 않는다.
 - 목표(조건부): 앱을 새로 기동하고 readiness 전 내부 예열만 거친 뒤(외부 워밍업 요청 없음) 1,000명 hot-seats 예매 생성 p95 < 300ms를 독립 3회 모두 달성한다. 달성이 보장되지 않으며 미달이면 결과를 그대로 남긴다.
 - 실행 도구: Gatling 러너(`--booking-p95-ms 300`, `verdict.json`).
 - 관련 문서: [Gatling 최종 보고](../performance/m5/12-gatling-hot-seats-p95-300ms-report.md), [Gatling 계획](./hot-seats-gatling-p95-300ms.md), [Step 8 최종 보고](../performance/m5/11-step8-final-report.md), [ADR 0025](../adr/0025-booking-seat-copy-cache.md), [ADR 0026](../adr/0026-aot-cache-startup.md).
@@ -32,6 +32,15 @@
 - `-XX:CompileThresholdScaling` 1.0(기준)·0.25·0.1, `-XX:CICompilerCount`를 조합해 순수 콜드 B Gatling 3회씩. 기본값은 `java -XX:+PrintFlagsFinal`로 확인한다.
 - 기록: p95 변화 폭, 폭주 구간 JFR Interpreted 비율.
 - **중단 조건**: 최선 설정의 중앙값이 1,385ms 대비 의미 있게 줄지 않거나 외부 예열 계열(350~386ms)에 근접하지 못하면 내부 예열의 기대 효과가 작다고 보고 보고서를 남기고 멈춘다.
+
+### 3.1.1 중단 이후 추가 진단 (2026-11-16 합의)
+
+- 사용자가 선택한 후속 작업은 **JVM 옵션 실제 적용 확인 + JFR 콜드 병목 진단**이다. 내부 예열 구현 재개는 포함하지 않는다.
+- 기준 1.0과 낮춘 값 0.1을 각각 새 JVM에서 실행하고 `PrintFlagsFinal` 로그로 core·gateway의 실제 `CompileThresholdScaling`·`CICompilerCount`를 확인한다.
+- 기존과 같은 Gatling 1,000명·외부 예열 없음·Scouter OFF·관측 ON·CPU 배정으로 JFR을 수집한다. 각 설정 1회 진단이며, 기존 JFR OFF 3회 판정 계열과 합치지 않는다.
+- Gatling 원시 로그의 예매 요청 시작~마지막 응답 구간을 JFR 시각과 맞추고, `ExecutionSample`의 최상위 Java 프레임이 Interpreted인 표본 비율과 초기화·연결 관련 스택을 기록한다. 전체 프레임 비율은 보조 지표로만 쓴다.
+- 기존 외부 15회 예열 JFR도 같은 방식으로 집계한다. 표본·스택은 요청별 인과나 지연 기여율을 증명하지 않으며, 기본 profile에서 수집하지 않는 이벤트의 부재를 비용 0으로 해석하지 않는다.
+- 결과와 남은 진단 한계를 보고한 뒤 3.2 구현 여부는 다시 결정한다.
 
 ### 3.2 계층형 내부 예열 (합의 후 구현)
 
