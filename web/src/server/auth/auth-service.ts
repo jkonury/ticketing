@@ -23,7 +23,7 @@ type SignupInput = {
   email: string;
   password: string;
   name: string;
-  role: 'USER' | 'ORGANIZER';
+  role: 'USER' | 'ORGANIZER' | 'ADMIN';
 };
 export async function signup(input: SignupInput) {
   await gateway.call({

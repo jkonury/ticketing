@@ -18,7 +18,7 @@ export const memberSchema = z.object({
   id: z.number(),
   email: z.string(),
   name: z.string(),
-  role: z.enum(['USER', 'ORGANIZER']),
+  role: z.enum(['USER', 'ORGANIZER', 'ADMIN']),
 });
 export type CallOptions<T> = {
   method?: string;

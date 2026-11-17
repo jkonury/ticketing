@@ -20,6 +20,8 @@ async function UserMenu() {
       </span>
       {user.role === 'USER' ? (
         <Link href="/my">마이페이지</Link>
+      ) : user.role === 'ADMIN' ? (
+        <Link href="/admin/members">관리자</Link>
       ) : (
         <>
           <Link href="/organizer">주최자 대시보드</Link>

@@ -10,5 +10,10 @@ export function proxy(request: NextRequest) {
   return NextResponse.redirect(login);
 }
 export const config = {
-  matcher: ['/my/:path*', '/organizer/:path*', '/booking/:path*'],
+  matcher: [
+    '/my/:path*',
+    '/organizer/:path*',
+    '/booking/:path*',
+    '/admin/:path*',
+  ],
 };

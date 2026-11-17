@@ -6,7 +6,7 @@ import { z } from 'zod';
 const sessionSchema = z.object({
   memberId: z.number(),
   name: z.string(),
-  role: z.enum(['USER', 'ORGANIZER']),
+  role: z.enum(['USER', 'ORGANIZER', 'ADMIN']),
   accessToken: z.string(),
   accessExpiresAt: z.number(),
   refreshToken: z.string(),
