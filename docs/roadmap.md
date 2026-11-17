@@ -107,10 +107,10 @@
 
 ### M5.5-1. 관리자·감사
 
-- [ ] `member`: `Role.ADMIN` 추가, 가입 시 ADMIN 요청 400, `.env` 이메일 부트스트랩, 역할 변경 API(마지막 관리자 강등 금지, 변경 시 refresh 토큰 폐기), 회원 목록 조회
-- [ ] `audit` 모듈(계층형): `audit.admin_action`, `MemberRoleChanged` 구독(`source_event_id` 유니크로 멱등), 감사 로그 조회 API, 모듈 검증·다이어그램 갱신
-- [ ] web: ADMIN 역할, `/admin` 이중 가드(BFF·코어), `/admin/members`, `/admin/audit-logs`, Origin 검증
-- [ ] 테스트: 가입 ADMIN 거부, 부트스트랩 멱등, 마지막 관리자 강등 거부, 갱신 실패, 비관리자 403, 감사 로그 멱등, web 가드
+- [x] `member`: `Role.ADMIN` 추가, 가입 시 ADMIN 요청 400, `.env` 이메일 부트스트랩, 역할 변경 API(마지막 관리자 강등 금지, 변경 시 refresh 토큰 폐기), 회원 목록 조회
+- [x] `audit` 모듈(계층형): `audit.admin_action`, `MemberRoleChanged` 구독(`source_event_id` 유니크로 멱등), 감사 로그 조회 API, 모듈 검증·다이어그램 갱신
+- [x] web: ADMIN 역할, `/admin` 이중 가드(BFF·코어), `/admin/members`, `/admin/audit-logs`, Origin 검증
+- [x] 테스트: 가입 ADMIN 거부, 부트스트랩 멱등, 마지막 관리자 강등 거부, 갱신 실패, 비관리자 403, 감사 로그 멱등, web 가드
 
 ### M5.5-2. 쿠폰 적용 Saga
 
