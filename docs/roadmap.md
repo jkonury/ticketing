@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2·M3·M4 완료, M5 완료 기준(중복 판매 0건, 전후 수치 문서화) 충족, 단 B 예매 p95 300ms 잠정 기준 미달 잔존([최종 보고서](./performance/m5/11-step8-final-report.md)). 내부 예열 콜드 계열은 잠정 900ms 기준을 충족하고 300ms 장기 목표는 미달([문서 16](./performance/m5/16-startup-warmup-burst-volume.md)) (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
+- 상태: M0·M1·M2·M3·M4 완료, M5 완료 확정(아래 300ms 두 건은 장기 과제로 유지), M5.5 쿠폰 구현 0단계(문서 선행) 진행 중. M5 완료 기준(중복 판매 0건, 전후 수치 문서화) 충족, 단 B 예매 p95 300ms 잠정 기준 미달 잔존([최종 보고서](./performance/m5/11-step8-final-report.md)). 내부 예열 콜드 계열은 잠정 900ms 기준을 충족하고 300ms 장기 목표는 미달([문서 16](./performance/m5/16-startup-warmup-burst-volume.md)) (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -16,6 +16,7 @@
 | M3 | Gateway + 실시간 앱 | 대기열, 입장 토큰, SSE |
 | M4 | Next.js BFF | 토큰 관리, 조합 화면 |
 | M5 | 부하 테스트와 관측 | k6 결과, 개선 기록 |
+| M5.5 | 쿠폰 | 관리자·감사, 예매–쿠폰 Saga, 선착순 발급 |
 | M6 | MSA + k8s | 모듈 분리, Kafka, 배포 |
 
 ---
@@ -100,12 +101,45 @@
 
 ---
 
+## M5.5. 쿠폰
+
+계획서: [m5-5-coupon.md](./plans/m5-5-coupon.md). 결정 근거는 ADR 0034~0037이다.
+
+### M5.5-1. 관리자·감사
+
+- [ ] `member`: `Role.ADMIN` 추가, 가입 시 ADMIN 요청 400, `.env` 이메일 부트스트랩, 역할 변경 API(마지막 관리자 강등 금지, 변경 시 refresh 토큰 폐기), 회원 목록 조회
+- [ ] `audit` 모듈(계층형): `audit.admin_action`, `MemberRoleChanged` 구독(`source_event_id` 유니크로 멱등), 감사 로그 조회 API, 모듈 검증·다이어그램 갱신
+- [ ] web: ADMIN 역할, `/admin` 이중 가드(BFF·코어), `/admin/members`, `/admin/audit-logs`, Origin 검증
+- [ ] 테스트: 가입 ADMIN 거부, 부트스트랩 멱등, 마지막 관리자 강등 거부, 갱신 실패, 비관리자 403, 감사 로그 멱등, web 가드
+
+### M5.5-2. 쿠폰 적용 Saga
+
+- [ ] `coupon` 모듈(헥사고날): 정의·발급 쿠폰, 할인 계산(정액·정률), 수명주기 규칙, 관리자 API(생성·수정·중지·현황·직접 지급·회수), 사용자 받기·조회 API
+- [ ] 계약 이벤트 5종(예약 요청·예약됨·거부·해제 요청·사용 확정)과 멱등·조건부 UPDATE, 늦은 사용 확정 강제 반영과 불일치 기록
+- [ ] 고아 예약 정리 Job
+- [ ] `booking`: 금액 3종(`list`/`discount`/`payable`), 쿠폰 적용·해제·교체 API, 결제 요청 시 `COUPON_PENDING`, 복원 지점별 해제 요청, 확정 시 사용 확정
+- [ ] `settlement`: 정가 기준 집계와 `platformDiscountAmount` 기록
+- [ ] web: 결제 화면 쿠폰 적용, 내 쿠폰, 받기 페이지, `/admin/coupons`
+- [ ] 테스트: 도메인 경계, Saga 통합(USED·복원·소멸·늦은 Reserved·재전달·늦은 USED), 정리 Job, 정산 Job, E2E 세 경로, Playwright
+
+### M5.5-3. 선착순 발급
+
+- [ ] Redis Lua(재고 + 중복 Set) 뒤 동기 DB INSERT, 실패 시 보상, Redis–DB 보정
+- [ ] gateway: 쿠폰 받기 라우트와 rate limit 버킷(수치는 측정 후 결정)
+- [ ] 부하 테스트 `coupon-drop`(1만 VU, 100장)과 정합성 검증 스크립트
+- [ ] DB 조건부 UPDATE 방식 비교 실험과 결과 문서화
+- [ ] 회귀: hot-seats 중복 판매 0건 유지
+
+**완료 기준**: (1) 예매–쿠폰 E2E 세 경로(USED, 복원, 소멸) 통과 (2) 쿠폰을 쓴 예매의 정산이 정가 기준과 일치 (3) coupon-drop에서 초과·중복 발급 0건이고 Redis–DB 대사 일치 (4) hot-seats 중복 판매 0건 유지.
+
+---
+
 ## M6. MSA + k8s
 
 - [ ] `payment` 분리: 별도 배포 단위, 스키마를 별도 DB로 이전
 - [ ] `settlement` 분리
 - [ ] Modulith 이벤트 외부화로 Kafka 도입, 앱 간 Redis Streams 대체 범위 결정
-- [ ] 예매–결제 Saga 정리 (보상 흐름 재검증)
+- [ ] 예매–결제 Saga 정리 (보상 흐름 재검증, 쿠폰 보상(예약 해제·사용 확정) 포함)
 - [ ] 인증 구조 재검토 (Spring Authorization Server 도입 여부)
 - [ ] 컨테이너 이미지 빌드
 - [ ] k8s 매니페스트: Deployment, Service, Ingress, Batch는 CronJob
@@ -127,6 +161,7 @@
 | 실제 PG 연동 (테스트 모드) | 가짜 PG로 보상 흐름 검증 이후 |
 | 실제 이메일/SMS 알림 | 미정 |
 | 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |
-| 플랫폼 관리자 역할 | 미정 |
+| 플랫폼 실수익 리포트 (할인 부담 반영) | 미정 |
+| coupon MSA 분리 | M6에서는 분리하지 않음. 이후 검토 |
 | 등급별 수량제 좌석 | 미정 |
 | k8s 배포 | MSA 전환과 함께 |

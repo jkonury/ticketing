@@ -146,3 +146,79 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 - 재시작·명시적 이벤트 재제출 시 같은 키와 본문으로 재처리한다. 미완료 기록 자체가 즉시 재시도를 뜻하지 않으며, 주기적 스케줄러는 M1-5에 추가하지 않는다. 웹훅과 M2 대사는 별도 복구 경로다.
 - 웹훅 중복 기록·결제 상태 저장·결과 이벤트 발행은 한 트랜잭션이다. 오류 시 중복 기록도 롤백한다. 웹훅 선도착과 지연 PG 응답이 최신 상태를 되돌리지 않게 한다. 병렬 재처리의 HTTP 호출 횟수 대신 실제 거래·환불과 커밋된 상태 전이·이벤트의 중복 방지를 보장한다.
 - 설계 근거는 [ADR 0018](../adr/0018-payment-retry-boundaries.md), 별도 세션 지시서(`phases/3-payment`)는 완료 후 삭제되어 git 히스토리에만 남아 있다. `PaymentListenerTests`와 `PaymentFlowTests`에서 트랜잭션 경계, 실제 예매 연계와 원 발행 재제출을 검증한다.
+
+## 6.5 쿠폰 적용 Saga
+
+M5.5 설계다. 보상 대상은 좌석과 쿠폰 두 가지다. 쿠폰 계약 이벤트는 `coupon` 루트에 있고 booking이 요청·해제·사용 확정을 발행한다.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant B as booking
+    participant C as coupon
+
+    U->>B: PUT /api/v1/bookings/{id}/coupon (PENDING, 결제 요청 전)
+    B->>B: 쿠폰 상태 RESERVING
+    B-)C: CouponReservationRequested
+    alt 적용 가능
+        C->>C: ISSUED -> RESERVED (조건부 UPDATE, 할인액 계산)
+        C-)B: CouponReserved
+        B->>B: RESERVED, payable = list - discount
+        Note over B,C: 예매가 이미 PENDING이 아니면 B가 즉시 CouponReleaseRequested
+    else 거부
+        C-)B: CouponRejected
+        B->>B: 쿠폰 없이 PENDING 유지, 사유 저장
+    end
+
+    U->>B: POST /api/v1/bookings/{id}/payments
+    alt 쿠폰 RESERVING
+        B-->>U: 409 COUPON_PENDING
+    else 정상
+        B-->>U: 202 (PaymentRequested.amount = payable)
+    end
+
+    alt 결제 성공, 확정
+        B-)C: CouponUseConfirmed
+        C->>C: RESERVED -> USED
+    else 만료, 결제 실패, 시스템 취소
+        B-)C: CouponReleaseRequested
+        C->>C: RESERVED -> ISSUED (복원)
+    end
+```
+
+- 확정 후 환불은 쿠폰이 소멸하므로 해제를 보내지 않는다.
+- 모든 상태 전이는 조건부 UPDATE이고 `(orderId, issuedCouponId)`가 같은 재전달은 무시한다.
+- 늦게 온 사용 확정은 강제로 `USED`로 바꾸고 불일치를 기록한다. 해제되지 않은 고아 예약은 정리 Job이 해제한다.
+
+## 6.6 선착순 발급
+
+M5.5-3 설계다. 대기열과 입장 토큰은 쓰지 않고 Gateway rate limit만 건다. rate limit 수치와 Redis 키 상세는 측정 후 정한다.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant G as Gateway
+    participant C as coupon
+    participant R as Redis
+    participant D as PostgreSQL
+
+    U->>G: POST /api/v1/coupons/{definitionId}/claims
+    G->>G: rate limit
+    G->>C: 전달
+    C->>R: Lua (중복 Set 확인, 재고 확인, DECR + SADD)
+    alt 중복 또는 품절
+        R-->>C: DUPLICATE / SOLD_OUT
+        C-->>U: 409 / 품절
+    else 통과
+        C->>D: INSERT issued_coupon (UNIQUE(definition_id, member_id))
+        alt 성공
+            C-->>U: 발급 완료
+        else 유니크 위반 또는 DB 실패
+            C->>R: 보상 Lua (INCR, SREM)
+            C-->>U: 실패 응답
+        end
+    end
+```
+
+- 최종 방어선은 DB 유니크 제약이다. Redis만 믿고 발급을 확정하지 않는다.
+- Redis 유실·불일치는 DB 기준(재고 = total - 발급 수, Set = 발급 회원)으로 보정한다.

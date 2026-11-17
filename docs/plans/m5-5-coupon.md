@@ -1,7 +1,7 @@
 # M5.5 쿠폰 도입 계획
 
 - 작성일: 2026-11-17
-- 상태: 계획 합의 완료, 구현 미착수. 이번 작업은 계획 문서만 작성한다.
+- 상태: 계획 합의 완료, 구현 0단계(문서 선행) 진행 중
 - 결정 근거: 2026-11-17 설계 인터뷰(Q1~Q18). 구현 0단계에서 ADR 0034~0037로 남긴다.
 - 관련: [로드맵](../roadmap.md), [아키텍처](../architecture.md), [ADR 0017](../adr/0017-payment-owns-payment-events.md)
 
@@ -122,6 +122,7 @@
   - `CouponReleaseRequested(orderId, issuedCouponId, reason)`: booking이 발행
   - `CouponUseConfirmed(orderId, issuedCouponId, confirmedAt)`: booking이 확정 시 발행
   - 관리자 행위 이벤트(`CouponDefinitionCreated/Stopped`, `CouponRevoked`, `CouponsGranted`)는 audit가 구독한다.
+- V12: 스키마 `coupon`을 만들고 `coupon_definition`, `issued_coupon`(UNIQUE(definition_id, member_id)), `use_mismatch`를 추가한다. `JooqCodegen.kt`의 SCHEMAS에도 추가한다.
 - 상태 전이는 모두 조건부 UPDATE로 처리한다. `(orderId, issuedCouponId)`가 같은 재전달은 무시한다. 늦게 온 USED가 RELEASED/ISSUED 상태에 도착하면 강제로 USED로 바꾸고 불일치를 기록한다(WARN 로그와 `coupon.use_mismatch` 행).
 - 고아 예약 정리 Job `releaseStaleCouponReservationsJob`
   - 위치는 `coupon/adapter/provided/batch`이고 `@Profile("batch")`로 둔다.
@@ -134,7 +135,7 @@
   - `listAmount`: 기존 `totalPrice`. `total_amount` 컬럼을 그대로 쓴다.
   - `appliedCoupon: AppliedCoupon?`: issuedCouponId, state(RESERVING/RESERVED/REJECTED), discountAmount, rejectReason
   - `payableAmount = list − discount`: RESERVED일 때만 할인 반영
-- V12: `booking.booking`에 `coupon_issued_id`, `coupon_state`, `discount_amount`, `coupon_reject_reason`을 추가한다.
+- V13: `booking.booking`에 `coupon_issued_id`, `coupon_state`, `discount_amount`, `coupon_reject_reason`을 추가한다.
 - `PUT /api/v1/bookings/{id}/coupon` / `DELETE`
   - PENDING이고 결제 요청 전일 때만 가능하다. RESERVING 중에는 409를 반환한다.
   - 교체할 때는 이전 쿠폰에 `CouponReleaseRequested`를 보낸 뒤 새 쿠폰 예약을 요청한다.
@@ -153,7 +154,7 @@
 - `BookingWarmupWork`(`:77,82`)의 금액 검증을 새 필드에 맞춘다. 쿠폰 없는 경로라 동작은 같다.
 
 **settlement 변경 (정가 기준)**
-- V13: `booking_sale`에 `list_amount`, `discount_amount`를 추가하고 기존 행은 `amount`로 채운다. `daily_settlement`에는 `platform_discount_amount`를 추가한다.
+- V14: `booking_sale`에 `list_amount`, `discount_amount`를 추가하고 기존 행은 `amount`로 채운다. `daily_settlement`에는 `platform_discount_amount`를 추가한다.
 - `DailySettlementJooqAdapter.findPerformanceTotals`
   - 판매와 환불을 `list_amount`로 집계한다.
   - 판매분의 discount 합을 `platform_discount_amount`로 기록한다.
@@ -187,7 +188,7 @@
 ## M5.5-3 선착순 발급
 
 - Redis 초기화: LIMITED 정의를 열 때 `coupon:stock:{defId}`(남은 수량)와 `coupon:claimed:{defId}`(Set)를 만든다. 두 키는 해시 태그로 같은 슬롯에 둔다.
-- `core/src/main/resources/redis/coupon/claim.lua`(`redis/booking/*.lua`와 `RedisSeatHoldAdapter.kt` 패턴)
+- core/src/main/resources/redis/coupon/claim.lua (신규)(`redis/booking/*.lua`와 `RedisSeatHoldAdapter.kt` 패턴)
   - Set에 이미 있으면 DUPLICATE, 재고가 0이면 SOLD_OUT, 둘 다 아니면 DECR과 SADD를 수행한다.
   - 성공하면 동기로 `issued_coupon`에 INSERT한다.
   - 유니크 위반이나 DB 실패 시 `unclaim.lua`로 보상한다(INCR, SREM).
@@ -199,8 +200,8 @@
 - 부하 테스트
   - `loadtest/scenarios/coupon-drop.ts`: 1만 VU가 100장을 노린다. `hot-seats.ts`의 동시 시작 방식을 재사용한다.
   - `scripts/loadtest/run.sh:90`의 case와 `seed.sh coupon`을 추가한다.
-  - `scripts/loadtest/verify-coupon-integrity.sh`: 발급 수 ≤ total, `(def, member)` 중복 0, Redis 재고 + 발급 수 = total, Set = DB 회원 집합을 확인한다.
-- 비교 실험: 같은 시나리오를 DB 조건부 UPDATE(`remaining > 0`) 방식으로 측정한다(프로퍼티로 전환). 결과는 `docs/performance/m5.5/`에 기록한다.
+  - verify-coupon-integrity.sh (신규, scripts/loadtest): 발급 수 ≤ total, `(def, member)` 중복 0, Redis 재고 + 발급 수 = total, Set = DB 회원 집합을 확인한다.
+- 비교 실험: 같은 시나리오를 DB 조건부 UPDATE(`remaining > 0`) 방식으로 측정한다(프로퍼티로 전환). 결과는 docs/performance/m5.5 디렉터리(신규)에 기록한다.
 - 회귀: hot-seats 중복 판매 0건 유지(`verify-integrity.sh`)
 
 ## 검증 (하위 단계마다)

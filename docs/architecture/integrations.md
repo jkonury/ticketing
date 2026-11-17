@@ -11,10 +11,11 @@
 - 구현 세부 (M1-1):
   - access JWT는 HS256(대칭키, `TICKETING_JWT_SECRET` 환경 변수), 수명 15분, `sub`=회원 ID, `role` 클레임. 비대칭키(JWKS)는 MSA 전환 시 재검토한다.
   - refresh 토큰은 불투명 난수(수명 14일)이고 SHA-256 해시만 `member.refresh_token`에 저장한다. 갱신할 때마다 이전 토큰을 폐기(로테이션)하며, 폐기된 토큰이 재사용되면 그 회원의 모든 refresh 토큰을 폐기한다.
-  - 비밀번호는 BCrypt. 가입 시 역할을 직접 고를 수 있다(플랫폼 관리자가 없어 주최자 승인 절차를 두지 않는다).
+  - 비밀번호는 BCrypt. 가입 시 USER·ORGANIZER 중 역할을 고를 수 있다(주최자 승인 절차는 두지 않는다). ADMIN으로는 가입할 수 없다(M5.5).
 - Gateway는 `Authorization: Bearer`가 있으면 모든 경로에서 같은 HS256 비밀로 JWT 서명을 검증하고, 실패 시 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지우며 realtime 경로에만 검증된 회원 ID를 전달한다. 코어도 JWT를 자체 검증한다 ([ADR 0020](../adr/0020-gateway-verification-contracts.md)).
 - `POST /api/v1/sse-tickets`는 JWT 인증된 요청에서 코어 `member`가 티켓을 발급한다. 티켓은 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초이며, Gateway가 한 번 소비한다 ([ADR 0020](../adr/0020-gateway-verification-contracts.md)).
-- 역할: **일반 사용자**(예매), **주최자**(공연·회차 등록, 정산 조회). 역할 기반 인가 적용.
+- 역할: **일반 사용자**(예매), **주최자**(공연·회차 등록, 정산 조회), **관리자**(ADMIN, M5.5: 역할 변경, 쿠폰 관리, 감사 로그 조회). 역할 기반 인가 적용.
+- ADMIN은 가입으로 만들 수 없고 `.env`의 부트스트랩 이메일 회원을 기동 시 승격한다(멱등). 이후 관리자가 역할 변경 API로 승격·강등하며 마지막 관리자는 강등할 수 없다. `/admin`은 BFF(서버 가드)와 코어(`hasRole('ADMIN')`)에서 이중으로 막는다. 역할이 바뀌면 그 회원의 refresh 토큰을 모두 폐기해 새 역할이 갱신 시점에 반영되게 한다(ADR 0034).
 - SSE는 BFF를 거치지 않는다. BFF가 발급한 **단기 SSE 티켓**으로 브라우저가 Gateway에 직접 연결한다. (Node 프로세스가 장기 연결을 붙드는 것을 피하기 위함)
 
 ## 8. BFF (Next.js)

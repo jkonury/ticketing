@@ -110,6 +110,8 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 | `booking` | 좌석 선점, 예매 생성·확정·만료·취소 | 헥사고날 |
 | `payment` | 결제 요청, 웹훅 처리, 환불, 결제 대사 (Batch) | 헥사고날 |
 | `settlement` | 정산 (Batch). M2에서 구현 | 헥사고날 |
+| `coupon` | 쿠폰 정의·발급·예약·사용 확정, 선착순 발급 (M5.5) | 헥사고날 |
+| `audit` | 관리자 행위 감사 로그 (M5.5) | 계층형 |
 | `notification` | 알림 (초기에는 로그 출력). M1-6에서 구현 | 계층형 |
 
 대기열(`queue`)은 코어가 아니라 `realtime` 앱 소유다. 코어는 대기열의 존재를 모른다.
@@ -149,7 +151,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 - [전체 모듈 의존](./modulith/components.puml)
 - 모듈별: [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
 
-의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트), `settlement → booking`(정산 사본 이벤트)이다.
+의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트), `settlement → booking`(정산 사본 이벤트)이다. M5.5에서 `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → coupon`(관리자 행위 이벤트)을 추가한다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다([ADR 0017](./adr/0017-payment-owns-payment-events.md)과 같은 방식, 근거는 ADR 0035).
 
 ### 이벤트 목록
 
@@ -165,8 +167,15 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `PaymentRefunded` | payment | booking | `paymentId`, `orderId`, `refundedAt` |
 | `BookingConfirmed` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `seatIds`, `amount`, `confirmedAt` |
 | `BookingCancelled` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `reason`, `refundRequired`, `cancelledAt` |
+| `CouponReservationRequested` | booking | coupon | `orderId`, `memberId`, `issuedCouponId`, `performanceId`, `listAmount`, `requestedAt` |
+| `CouponReserved` | coupon | booking | `orderId`, `issuedCouponId`, `discountAmount` |
+| `CouponRejected` | coupon | booking | `orderId`, `issuedCouponId`, `reason` |
+| `CouponReleaseRequested` | booking | coupon | `orderId`, `issuedCouponId`, `reason` |
+| `CouponUseConfirmed` | booking | coupon | `orderId`, `issuedCouponId`, `confirmedAt` |
+| `MemberRoleChanged` | member | audit | `actorId`, `memberId`, `from`, `to`, `changedAt` |
 | `BookingExpired` | booking | 없음(notification) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
+- 쿠폰 관련 행은 M5.5 구현 전 설계다. 쿠폰 관리자 행위 이벤트(정의 생성·중지, 회수, 직접 지급)는 audit가 구독한다. 상세는 [계획서](./plans/m5-5-coupon.md)를 본다.
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 모듈이 소유한다. 발행자는 위 표와 같지만 클래스는 `payment` 루트 패키지에 있다.
 - 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.
 
@@ -185,10 +194,12 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 - [6.2.1 예매 흐름 시퀀스](./architecture/flows.md#621-예매-흐름-시퀀스-대기열-제외)
 - [6.3 예매 상태 전이](./architecture/flows.md#63-예매-상태-전이)
 - [6.4 결제(이벤트 기반)](./architecture/flows.md#64-결제-이벤트-기반): 가짜 PG, 자동 환불 조건, 트랜잭션 구조
+- [6.5 쿠폰 적용 Saga](./architecture/flows.md#65-쿠폰-적용-saga): 예약·거부·해제·사용 확정 (M5.5)
+- [6.6 선착순 발급](./architecture/flows.md#66-선착순-발급): Redis Lua + DB 유니크 (M5.5)
 
 ## 7. 인증·인가
 
-`member` 모듈이 JWT를 발급하고 BFF가 토큰을 보관·갱신한다. SSE는 BFF를 거치지 않고 단기 SSE 티켓으로 Gateway에 직접 연결한다. 상세는 [integrations.md](./architecture/integrations.md)를 본다.
+`member` 모듈이 JWT를 발급하고 BFF가 토큰을 보관·갱신한다. SSE는 BFF를 거치지 않고 단기 SSE 티켓으로 Gateway에 직접 연결한다. 역할은 USER·ORGANIZER·ADMIN이며 ADMIN은 `.env` 이메일 부트스트랩으로만 만들어진다(M5.5). 상세는 [integrations.md](./architecture/integrations.md)를 본다.
 
 ## 8. BFF (Next.js)
 
