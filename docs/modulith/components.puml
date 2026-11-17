@@ -19,6 +19,7 @@ System_Boundary("TicketingApplication_boundary", "TicketingApplication", $tags="
   Container_Boundary("TicketingApplication.TicketingApplication_boundary", "TicketingApplication", $tags="") {
     Component(TicketingApplication.TicketingApplication.Settlement, "Settlement", $techn="Module", $descr="", $tags="", $link="")
     Component(TicketingApplication.TicketingApplication.Catalog, "Catalog", $techn="Module", $descr="", $tags="", $link="")
+    Component(TicketingApplication.TicketingApplication.Coupon, "Coupon", $techn="Module", $descr="", $tags="", $link="")
     Component(TicketingApplication.TicketingApplication.Member, "Member", $techn="Module", $descr="", $tags="", $link="")
     Component(TicketingApplication.TicketingApplication.Payment, "Payment", $techn="Module", $descr="", $tags="", $link="")
     Component(TicketingApplication.TicketingApplication.Audit, "Audit", $techn="Module", $descr="", $tags="", $link="")
@@ -28,11 +29,12 @@ System_Boundary("TicketingApplication_boundary", "TicketingApplication", $tags="
 
 }
 
+Rel(TicketingApplication.TicketingApplication.Notification, TicketingApplication.TicketingApplication.Booking, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Payment, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Catalog, "listens to", $techn="", $tags="", $link="")
-Rel(TicketingApplication.TicketingApplication.Audit, TicketingApplication.TicketingApplication.Member, "listens to", $techn="", $tags="", $link="")
-Rel(TicketingApplication.TicketingApplication.Notification, TicketingApplication.TicketingApplication.Booking, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Settlement, TicketingApplication.TicketingApplication.Booking, "listens to", $techn="", $tags="", $link="")
+Rel(TicketingApplication.TicketingApplication.Audit, TicketingApplication.TicketingApplication.Coupon, "listens to", $techn="", $tags="", $link="")
+Rel(TicketingApplication.TicketingApplication.Audit, TicketingApplication.TicketingApplication.Member, "listens to", $techn="", $tags="", $link="")
 
 SHOW_LEGEND(true)
 hide stereotypes
