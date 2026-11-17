@@ -16,6 +16,7 @@
 | rate limit | SCG `RedisRateLimiter` 내부 키 | Gateway |
 | 조회 캐시 | 공연·회차 정보 | 코어 `catalog` |
 | 불변 좌석 사본 캐시 | 회차별 Hash, TTL 6시간 | 코어 `booking` |
+| 선착순 쿠폰 재고·중복 방지 | `coupon:{<definitionId>}:stock`(String, 남은 수량), `coupon:{<definitionId>}:claimed`(Set, 받은 회원 ID). Lua로 원자 처리 | 코어 `coupon` |
 | BFF 세션 | `bff:session:<sessionId>` String(JSON), TTL 14일 | `web` BFF |
 | BFF 토큰 갱신 락 | `bff:refresh-lock:<sessionId>` String, `SET NX PX` | `web` BFF |
 
@@ -60,3 +61,16 @@ realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`
 hit은 TTL을 연장하지 않는다. 빈 결과는 저장하지 않고 Redis 오류는 DB로 fallback한다.
 좌석 단위 hit/miss는 `ticketing.booking.seat.copy.cache` 카운터의 `result` 태그로 기록한다.
 자세한 대안과 불변 조건은 [ADR 0025](../adr/0025-booking-seat-copy-cache.md)를 본다.
+
+### 선착순 쿠폰 키 (코어 `coupon`)
+
+두 키는 `{definitionId}` 해시 태그로 같은 슬롯에 둔다. 스크립트는 `core/src/main/resources/redis/coupon/`에 있다.
+
+| 스크립트 | 동작 |
+|---|---|
+| `claim.lua` | 재고 키가 없으면 `NOT_INITIALIZED`, 이미 받았으면 `DUPLICATE`, 재고가 0이면 `SOLD_OUT`, 아니면 `DECR` + `SADD` 후 `OK` |
+| `unclaim.lua` | DB INSERT 실패나 유니크 위반 시 재고 복원과 Set 제거(보상) |
+| `init.lua` | 재고 키가 없을 때만 초기화 |
+| `reconcile.lua` | DB 기준 남은 수량과 발급 회원으로 두 키를 재구성 (`reconcileCouponStockJob`) |
+
+Redis는 빠른 거름망이고 최종 방어선은 DB `(definition_id, member_id)` 유니크 제약이다. `limited-claim.strategy`가 `redis`가 아니면 DB 조건부 UPDATE(`remaining_quantity`)로 발급하며 이 키를 쓰지 않는다. [ADR 0037](../adr/0037-limited-coupon-claim-redis-lua.md)과 [flows.md](./flows.md#66-선착순-발급)를 본다.

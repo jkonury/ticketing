@@ -5,7 +5,7 @@
 
 ## PostgreSQL
 
-- 인스턴스 하나, **모듈별 스키마 분리**: `member`, `catalog`, `booking`, `payment`, `settlement`, `batch`
+- 인스턴스 하나, **모듈별 스키마 분리**: `member`, `catalog`, `booking`, `payment`, `settlement`, `coupon`, `audit`, `batch`
 - **모듈 간 외래 키·조인 금지**
 - `settlement`의 집계에 필요한 타 모듈 데이터는 이벤트로 받아 자기 스키마에 사본으로 쌓는다.
 - 스키마 관리는 Flyway, jOOQ 코드는 Flyway가 만든 스키마에서 생성한다.
@@ -120,6 +120,10 @@ erDiagram
         timestamptz confirmed_at
         timestamptz cancelled_at
         varchar cancel_reason
+        bigint coupon_issued_id "coupon 값 참조, FK 없음"
+        varchar coupon_state "RESERVING, RESERVED, REJECTED"
+        numeric discount_amount "기본 0"
+        varchar coupon_reject_reason
         timestamptz created_at
         bigint version "낙관적 락"
     }
@@ -196,7 +200,9 @@ erDiagram
         bigint performance_id
         bigint organizer_id
         bigint schedule_id
-        numeric(12,0) amount
+        numeric(12,0) amount "결제 금액"
+        numeric(12,0) list_amount "정가"
+        numeric(12,0) discount_amount "쿠폰 할인액"
         timestamptz confirmed_at
         timestamptz received_at
     }
@@ -213,14 +219,81 @@ erDiagram
         bigint performance_id PK
         bigint organizer_id
         integer sale_count
-        numeric sale_amount
+        numeric sale_amount "정가(list_amount) 합계"
         integer refund_count
-        numeric refund_amount
+        numeric refund_amount "환불 건의 정가 합계"
         numeric net_amount
         numeric(5,4) fee_rate
         numeric fee_amount
         numeric payout_amount
+        numeric platform_discount_amount "판매 건 discount_amount 합계, ADR 0036"
         timestamptz calculated_at
+    }
+```
+
+### coupon
+
+`issued_coupon`의 `(definition_id, member_id)` 유니크 제약이 중복 발급의 최종 방어선이다(ADR 0037). `booking`은 발급 쿠폰 ID만 값으로 보관하고 이 스키마를 참조하지 않는다.
+
+```mermaid
+erDiagram
+    coupon_definition ||--o{ issued_coupon : "definition_id"
+    coupon_definition {
+        bigint id PK
+        varchar name
+        varchar description
+        varchar discount_type "FIXED, RATE"
+        numeric discount_value
+        numeric max_discount
+        numeric min_order_amount
+        bigint performance_id "catalog 값 참조, FK 없음"
+        timestamptz valid_from
+        timestamptz valid_until
+        varchar issue_mode "UNLIMITED, LIMITED, DIRECT"
+        integer total_quantity
+        integer remaining_quantity "DB 조건부 UPDATE 전략 전용"
+        varchar status "ACTIVE, STOPPED"
+        timestamptz issue_started_at
+        timestamptz created_at
+        bigint version "낙관적 락"
+    }
+    issued_coupon {
+        bigint id PK
+        bigint definition_id FK
+        bigint member_id "member 값 참조 UK(definition_id, member_id)"
+        varchar status "ISSUED, RESERVED, USED, REVOKED, EXPIRED"
+        bigint order_id "booking 값 참조"
+        numeric discount_amount
+        timestamptz reserved_until
+        timestamptz issued_at
+        timestamptz used_at
+        bigint version "낙관적 락"
+    }
+    use_mismatch {
+        bigint id PK
+        bigint issued_coupon_id
+        bigint order_id
+        varchar previous_status
+        timestamptz detected_at
+        varchar detail
+    }
+```
+
+`use_mismatch`는 늦은 사용 확정을 강제 반영할 때 이전 상태를 남기는 기록이다.
+
+### audit
+
+```mermaid
+erDiagram
+    admin_action {
+        bigint id PK
+        bigint actor_id "member 값 참조"
+        varchar action
+        varchar target_type
+        varchar target_id
+        jsonb detail
+        timestamptz occurred_at
+        uuid source_event_id "UK, 이벤트 재전달 멱등"
     }
 ```
 

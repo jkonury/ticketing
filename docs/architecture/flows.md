@@ -17,7 +17,7 @@ Gateway 규칙 ([ADR 0020](../adr/0020-gateway-verification-contracts.md)):
 - 예매 생성 본문의 크기 상한은 `ticketing.gateway.booking-body-max-bytes`로 설정하며 기본값은 16KB다. 상한 초과나 잘못된 본문은 400 `INVALID_REQUEST_BODY`로 응답한다.
 - SSE 티켓은 `/api/v1/streams/**`에서 `?ticket=`으로 받아 한 번 소비한다. 검증 실패 시 401 `SSE_TICKET_INVALID`로 응답한다.
 - 스트림 CORS는 `/api/v1/streams/**`에만 설정된 web origin(기본 `http://localhost:13000`)과 GET을 허용하며 자격 증명은 허용하지 않는다.
-- rate limit은 `core-api`와 `realtime-queues`에 `default`(초당 보충 20, 버스트 40), 예매 생성에 `booking-create`(2, 5), 쿠폰 받기에 `coupon-claim`(1, 3, 임시값이며 부하 측정 후 조정), 스트림에 `streams`(5, 10) 설정을 적용한다. 키는 검증된 회원의 `member:<id>` 또는 비회원의 `ip:<주소>`이며, `X-Forwarded-For`는 설정된 신뢰 프록시 홉 수(기본 1)만 사용한다. 초과 시 429 `RATE_LIMITED`와 `X-RateLimit-*` 헤더를 반환한다. Redis 오류 시 Spring Cloud Gateway `RedisRateLimiter`의 기본 동작에 따라 요청을 허용한다.
+- rate limit은 `core-api`와 `realtime-queues`에 `default`(초당 보충 20, 버스트 40), 예매 생성에 `booking-create`(2, 5), 쿠폰 받기에 `coupon-claim`(1, 3. coupon-drop 측정에서 회원당 1회라 429를 검증하지 못한 임시값을 확정), 스트림에 `streams`(5, 10) 설정을 적용한다. 키는 검증된 회원의 `member:<id>` 또는 비회원의 `ip:<주소>`이며, `X-Forwarded-For`는 설정된 신뢰 프록시 홉 수(기본 1)만 사용한다. 초과 시 429 `RATE_LIMITED`와 `X-RateLimit-*` 헤더를 반환한다. Redis 오류 시 Spring Cloud Gateway `RedisRateLimiter`의 기본 동작에 따라 요청을 허용한다.
 - 다운스트림 연결 풀은 elastic(무제한)이고, core 호스트에만 상한(`GATEWAY_CORE_POOL_MAX_CONNECTIONS`, 기본 100)을 둔다. realtime SSE는 장시간 연결이라 상한을 걸지 않는다. 상한은 core Tomcat accept 큐 넘침을 막기 위한 것으로, 초과 요청은 Gateway 안에서 대기하며(대기 수 무제한) `GATEWAY_CORE_POOL_ACQUIRE_TIMEOUT_MS`(기본 45000) 안에 연결을 얻지 못하면 실패한다.
 
 realtime 규칙 ([ADR 0021](../adr/0021-realtime-queue-and-sse-contracts.md)):
@@ -150,7 +150,7 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 ## 6.5 쿠폰 적용 Saga
 
-M5.5 설계다. 보상 대상은 좌석과 쿠폰 두 가지다. 쿠폰 계약 이벤트는 `coupon` 루트에 있고 booking이 요청·해제·사용 확정을 발행한다.
+보상 대상은 좌석과 쿠폰 두 가지다. 쿠폰 계약 이벤트는 `coupon` 루트에 있고 booking이 요청·해제·사용 확정을 발행한다.
 
 ```mermaid
 sequenceDiagram
@@ -194,7 +194,7 @@ sequenceDiagram
 
 ## 6.6 선착순 발급
 
-M5.5-3 설계다. 대기열과 입장 토큰은 쓰지 않고 Gateway rate limit만 건다. rate limit 수치와 Redis 키 상세는 측정 후 정한다.
+대기열과 입장 토큰은 쓰지 않고 Gateway rate limit(`coupon-claim`)만 건다. Redis 키 형식은 [redis.md](./redis.md#선착순-쿠폰-키-코어-coupon)를 본다. 발급 방식은 `ticketing.coupon.limited-claim.strategy`(`COUPON_LIMITED_CLAIM_STRATEGY`, 기본 `redis`)로 고르고, `db`는 비교 실험용 조건부 UPDATE 방식이다. 실행 중 전략 전환은 지원하지 않는다.
 
 ```mermaid
 sequenceDiagram
@@ -210,7 +210,7 @@ sequenceDiagram
     C->>R: Lua (중복 Set 확인, 재고 확인, DECR + SADD)
     alt 중복 또는 품절
         R-->>C: DUPLICATE / SOLD_OUT
-        C-->>U: 409 / 품절
+        C-->>U: 409 COUPON_ALREADY_CLAIMED / COUPON_SOLD_OUT
     else 통과
         C->>D: INSERT issued_coupon (UNIQUE(definition_id, member_id))
         alt 성공
@@ -224,3 +224,4 @@ sequenceDiagram
 
 - 최종 방어선은 DB 유니크 제약이다. Redis만 믿고 발급을 확정하지 않는다.
 - Redis 유실·불일치는 DB 기준(재고 = total - 발급 수, Set = 발급 회원)으로 보정한다.
+- 유니크 위반(이미 받음)이면 Set만 유실된 것이므로 재고만 되돌리고 회원 표시는 남긴다. DB 예외는 재고와 회원 표시를 모두 되돌린 뒤 전파한다. 보정은 `reconcileCouponStockJob`이 맡는다.

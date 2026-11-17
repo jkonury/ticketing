@@ -20,6 +20,7 @@
 | `/api/v1/queues/**` | realtime | JWT 필수, 회원 ID를 `X-Member-Id`로 전달, rate limit |
 | `/api/v1/streams/**` | realtime | SSE 티켓 소비, rate limit |
 | `POST /api/v1/bookings` | 코어 | JWT 필수, 입장 토큰 검증, rate limit |
+| `POST /api/v1/coupons/*/claims` | 코어 | 전용 rate limit 버킷(`coupon-claim`, 보충 1·버스트 3. 회원당 1회 시나리오라 429는 검증하지 못한 임시값 확정, [coupon-drop.md](../performance/m5.5/coupon-drop.md)) |
 | `/api/v1/**` 그 외 | 코어 | rate limit |
 
 ## 2. 기본 규칙
@@ -102,6 +103,10 @@
 | 409 | `SEAT_ALREADY_HELD` | 좌석이 이미 선점·판매됨 |
 | 409 | `INVALID_BOOKING_STATE`, `BOOKING_EXPIRED` | 현재 예매 상태에서 불가능한 동작 |
 | 409 | `EMAIL_ALREADY_EXISTS`, `DUPLICATE_SCHEDULE` | 중복 |
+| 409 | `COUPON_PENDING` | 쿠폰 예약 응답을 기다리는 중이라 결제 요청 불가 |
+| 404 | `COUPON_NOT_FOUND` | 쿠폰 없음 |
+| 409 | `COUPON_NOT_ISSUABLE`, `COUPON_ALREADY_CLAIMED`, `COUPON_SOLD_OUT` | 쿠폰 받기 실패(발급 불가·중복·품절) |
+| 409 | `COUPON_NOT_REVOCABLE`, `COUPON_DEFINITION_LOCKED`, `COUPON_VALID_UNTIL_SHORTENED`, `INVALID_COUPON_STATE`, `COUPON_ORDER_MISMATCH` | 쿠폰 회수·수정·상태 전이 규칙 위반 |
 | 409 | `CONCURRENT_MODIFICATION` | 낙관적 락 충돌. 다시 시도하면 된다 |
 | 429 | `RATE_LIMITED` | 요청 한도 초과(Gateway) |
 
@@ -140,12 +145,27 @@
 | `POST /api/v1/bookings` | USER | 예매 생성. `Idempotency-Key`, `X-Admission-Token` 필요 |
 | `GET /api/v1/bookings/me` | USER | 내 예매 목록(커서, `performanceId` 필터) |
 | `GET /api/v1/bookings/{id}` | USER | 예매 상세 |
+| `PUT /api/v1/bookings/{id}/coupon` | USER | 쿠폰 적용·교체 |
+| `DELETE /api/v1/bookings/{id}/coupon` | USER | 쿠폰 해제 |
 | `POST /api/v1/bookings/{id}/cancel` | USER | 예매 취소 |
 | `POST /api/v1/bookings/{id}/payments` | USER | 결제 요청(202) |
 | `GET /api/v1/payments/me?bookingIds=` | USER | 내 결제 상태 |
 | `POST /api/v1/payments/webhooks/fake-pg` | 서명 | PG 웹훅 |
 | `GET /api/v1/organizer/sales` | ORGANIZER | 판매 현황 |
 | `GET /api/v1/settlements` | ORGANIZER | 정산 조회 |
+| `GET /api/v1/coupons` | 로그인 | 받을 수 있는 쿠폰 목록 |
+| `POST /api/v1/coupons/{definitionId}/claims` | 로그인 | 쿠폰 받기(선착순 포함, ADR 0037) |
+| `GET /api/v1/me/coupons` | 로그인 | 내 쿠폰 |
+| `GET /api/v1/admin/members` | ADMIN | 회원 목록 |
+| `PUT /api/v1/admin/members/{id}/role` | ADMIN | 역할 변경(ADR 0034) |
+| `GET /api/v1/admin/audit-logs` | ADMIN | 감사 로그 조회 |
+| `POST /api/v1/admin/coupons` | ADMIN | 쿠폰 정의 생성 |
+| `PATCH /api/v1/admin/coupons/{id}` | ADMIN | 쿠폰 정의 수정 |
+| `POST /api/v1/admin/coupons/{id}/stop` | ADMIN | 쿠폰 정의 중지 |
+| `GET /api/v1/admin/coupons`, `GET /api/v1/admin/coupons/{id}` | ADMIN | 쿠폰 정의 목록·상세(현황) |
+| `GET /api/v1/admin/coupons/{id}/issued` | ADMIN | 발급 내역 |
+| `POST /api/v1/admin/coupons/{id}/grants` | ADMIN | 직접 지급 |
+| `POST /api/v1/admin/issued-coupons/{issuedCouponId}/revoke` | ADMIN | 발급 쿠폰 회수 |
 
 ### realtime
 

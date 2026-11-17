@@ -31,9 +31,16 @@
 | `PaymentSucceeded` | `payment` | payment | booking | PG 승인 웹훅(`PAYMENT_APPROVED`) 처리 |
 | `PaymentFailed` | `payment` | payment | booking | PG 실패 웹훅(`PAYMENT_FAILED`) 처리 또는 PG 접수 거절 |
 | `PaymentRefunded` | `payment` | payment | booking | PG 환불 완료 웹훅(`REFUND_COMPLETED`) 처리 |
-| `BookingConfirmed` | `booking` | booking | notification, settlement | 결제 성공으로 예매 확정 |
+| `BookingConfirmed` | `booking` | booking | notification, settlement | 결제 성공으로 예매 확정(정가·할인액 포함) |
 | `BookingCancelled` | `booking` | booking | notification, settlement | 예매 취소 |
 | `BookingExpired` | `booking` | booking | notification | 미결제 예매 만료 |
+| `CouponReservationRequested` | `coupon` | booking | coupon | 결제 요청 시 쿠폰 적용 예약 요청 |
+| `CouponReserved` | `coupon` | coupon | booking | 쿠폰 예약 성공 |
+| `CouponRejected` | `coupon` | coupon | booking | 쿠폰 예약 거부. 사유 `NOT_FOUND`, `NOT_OWNER`, `NOT_AVAILABLE`와 할인 정책 위반(`OUT_OF_VALID_PERIOD`, `PERFORMANCE_MISMATCH`, `BELOW_MIN_ORDER_AMOUNT`, `AMOUNT_BELOW_MINIMUM`) |
+| `CouponReleaseRequested` | `coupon` | booking | coupon | 예매 복원 지점에서 쿠폰 예약 해제 |
+| `CouponUseConfirmed` | `coupon` | booking | coupon | 예매 확정 시 쿠폰 사용 확정 |
+| `MemberRoleChanged` | `member` | member | audit | 관리자 역할 변경 |
+| `CouponDefinitionCreated`, `CouponDefinitionUpdated`, `CouponDefinitionStopped`, `CouponsGranted`, `CouponRevoked` | `coupon` | coupon | audit | 쿠폰 관리자 행위 |
 
 페이로드는 [architecture.md §4 이벤트 목록](../architecture.md#이벤트-목록)이 기준이다. 이 문서에는 구독 측 처리 규칙을 정리한다.
 
@@ -46,13 +53,16 @@
 | payment `RefundRequestListener` | `RefundRequested` | 환불 전이 후 PG에 환불 요청(트랜잭션 밖) | 이미 `REFUNDED`면 건너뜀 |
 | booking `PaymentResultListener` | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` | 예매 확정·실패 처리. `PaymentRefunded`는 로그만 | 예매 상태 전이 검사. 이미 `CONFIRMED`면 `AlreadyConfirmed`로 무시하고, `EXPIRED`·`CANCELLED`면 환불 경로로 보낸다 |
 | settlement `BookingEventListener` | `BookingConfirmed`, `BookingCancelled` | `BookingConfirmed`는 `booking_sale`에 적재. `BookingCancelled`는 `refundRequired=true`일 때만 `booking_refund`에 적재 | `ON CONFLICT (booking_id) DO NOTHING` |
+| coupon `CouponReservationListener` | `CouponReservationRequested`, `CouponReleaseRequested`, `CouponUseConfirmed` | 발급 쿠폰 상태를 조건부 UPDATE로 전이(예약·해제·사용 확정). 예약 결과는 `CouponReserved`·`CouponRejected`로 응답 | 조건부 UPDATE와 `order_id` 일치 검사. 늦은 사용 확정은 강제 반영하고 `coupon.use_mismatch`에 기록 |
+| booking `CouponResultListener` | `CouponReserved`, `CouponRejected` | `CouponReserved`는 예매의 `coupon_state`·할인액에 반영한다. 예매가 없거나 교체·해제·종료 뒤 늦게 온 응답, 무효 할인액이면 `CouponReleaseRequested`로 즉시 해제를 요청한다. `CouponRejected`는 쿠폰 없이 진행하고 사유를 저장한다 | 이미 반영한 같은 예약은 무시. 낙관적 락 충돌은 던져 이벤트 발행 레지스트리가 재시도 |
+| audit `MemberAuditListener`, `CouponAuditListener` | `MemberRoleChanged`, 쿠폰 관리자 행위 5종 | `audit.admin_action`에 기록 | `source_event_id` 유니크 |
 | notification `BookingNotificationListener` | `BookingConfirmed`, `BookingCancelled` (`BookingExpired`) | 로그 출력 | 없음. 재전달 시 로그가 중복될 수 있음 |
 
 상태 전이와 환불 조건은 [flows.md §6.3, §6.4](./flows.md#63-예매-상태-전이)를 본다.
 
 ### 의존 방향
 
-`booking → catalog`, `booking → payment`, `notification → booking`, `settlement → booking`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. `payment`는 예매를 모르고 `orderId`(=예매 ID)만 안다.
+`booking → catalog`, `booking → payment`, `booking → coupon`, `notification → booking`, `settlement → booking`, `audit → member`, `audit → coupon`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. `payment`는 예매를 모르고 `orderId`(=예매 ID)만 안다.
 
 ## 3. 좌석 변경 스트림 (Redis Streams)
 

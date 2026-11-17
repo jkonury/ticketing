@@ -68,7 +68,7 @@
 
 ### 빌드 구조 메모
 
-- 공통 빌드 설정은 `build-logic/`의 convention plugin(`ticketing.kotlin-conventions`, `ticketing.spring-conventions`, `ticketing.jpa-conventions`)에 둔다.
+- 공통 빌드 설정은 `build-logic/`의 convention plugin(`ticketing.kotlin-conventions`, `ticketing.kotlin-quality`(ktlint·detekt), `ticketing.spring-conventions`, `ticketing.jpa-conventions`, `ticketing.no-database`(DB 의존성 금지 검증))에 둔다. DB가 없어야 하는 모듈(`realtime`, `gateway` 등)은 `no-database`를 적용한다.
 - jOOQ 생성 코드의 패키지는 `ticketing.jooq`다. Modulith는 `io.github.ticketing`의 직계 하위 패키지를 모두 모듈로 보므로 루트 밖에 둔다.
 - Modulith 모듈 선언은 Kotlin에 `package-info`가 없어 `core/src/main/java/.../<모듈>/package-info.java`에 둔다 (Java 파일은 이것뿐).
 - Modulith 이벤트 발행 레지스트리 테이블(`event_publication`)은 `public` 스키마에 둔다.
@@ -109,10 +109,10 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 | `catalog` | 공연, 회차, 공연장, 좌석 배치 | 계층형 |
 | `booking` | 좌석 선점, 예매 생성·확정·만료·취소 | 헥사고날 |
 | `payment` | 결제 요청, 웹훅 처리, 환불, 결제 대사 (Batch) | 헥사고날 |
-| `settlement` | 정산 (Batch). M2에서 구현 | 헥사고날 |
-| `coupon` | 쿠폰 정의·발급·예약·사용 확정, 선착순 발급 (M5.5) | 헥사고날 |
-| `audit` | 관리자 행위 감사 로그 (M5.5) | 계층형 |
-| `notification` | 알림 (초기에는 로그 출력). M1-6에서 구현 | 계층형 |
+| `settlement` | 정산 (Batch). 정가 기준 집계와 플랫폼 할인 부담 기록 | 헥사고날 |
+| `coupon` | 쿠폰 정의·발급·예약·사용 확정, 선착순 발급 | 헥사고날 |
+| `audit` | 관리자 행위 감사 로그 | 계층형 |
+| `notification` | 알림 (현재는 로그 출력) | 계층형 |
 
 대기열(`queue`)은 코어가 아니라 `realtime` 앱 소유다. 코어는 대기열의 존재를 모른다.
 
@@ -149,9 +149,9 @@ io.github.ticketing.booking
 Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulith/`). 모듈 의존을 바꾸면 테스트를 다시 실행해 바뀐 `.puml`을 함께 커밋한다.
 
 - [전체 모듈 의존](./modulith/components.puml)
-- 모듈별: [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
+- 모듈별: [audit](./modulith/module-audit.puml), [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [coupon](./modulith/module-coupon.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
 
-의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트), `settlement → booking`(정산 사본 이벤트)이다. M5.5에서 `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → coupon`(관리자 행위 이벤트)을 추가한다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다([ADR 0017](./adr/0017-payment-owns-payment-events.md)과 같은 방식, 근거는 ADR 0035).
+의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림 이벤트), `settlement → booking`(정산 사본 이벤트)이다. `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → coupon`(관리자 행위 이벤트)도 있다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다([ADR 0017](./adr/0017-payment-owns-payment-events.md)과 같은 방식, 근거는 ADR 0035).
 
 ### 이벤트 목록
 
@@ -165,7 +165,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `PaymentSucceeded` | payment | booking | `paymentId`, `orderId`, `amount`, `paidAt` |
 | `PaymentFailed` | payment | booking | `paymentId`, `orderId`, `reason`, `failedAt` |
 | `PaymentRefunded` | payment | booking | `paymentId`, `orderId`, `refundedAt` |
-| `BookingConfirmed` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `seatIds`, `amount`, `confirmedAt` |
+| `BookingConfirmed` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `seatIds`, `amount`(결제 금액 = `listAmount` − `discountAmount`), `listAmount`(정가), `discountAmount`(쿠폰 할인액), `confirmedAt` |
 | `BookingCancelled` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `reason`, `refundRequired`, `cancelledAt` |
 | `CouponReservationRequested` | booking | coupon | `orderId`, `memberId`, `issuedCouponId`, `performanceId`, `listAmount`, `requestedAt` |
 | `CouponReserved` | coupon | booking | `orderId`, `issuedCouponId`, `discountAmount` |
@@ -173,16 +173,22 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `CouponReleaseRequested` | booking | coupon | `orderId`, `issuedCouponId`, `reason` |
 | `CouponUseConfirmed` | booking | coupon | `orderId`, `issuedCouponId`, `confirmedAt` |
 | `MemberRoleChanged` | member | audit | `actorId`, `memberId`, `from`, `to`, `changedAt` |
+| `CouponDefinitionCreated` | coupon | audit | `eventId`, `actorId`, `definitionId`, `name`, `occurredAt` |
+| `CouponDefinitionUpdated` | coupon | audit | `eventId`, `actorId`, `definitionId`, `changedFields`, `occurredAt` |
+| `CouponDefinitionStopped` | coupon | audit | `eventId`, `actorId`, `definitionId`, `occurredAt` |
+| `CouponsGranted` | coupon | audit | `eventId`, `actorId`, `definitionId`, `memberIds`, `occurredAt` |
+| `CouponRevoked` | coupon | audit | `eventId`, `actorId`, `issuedCouponId`, `definitionId`, `memberId`, `occurredAt` |
 | `BookingExpired` | booking | 없음(notification) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
-- 쿠폰 관련 행은 M5.5 구현 전 설계다. 쿠폰 관리자 행위 이벤트(정의 생성·중지, 회수, 직접 지급)는 audit가 구독한다. 상세는 [계획서](./plans/m5-5-coupon.md)를 본다.
+- 쿠폰 관리자 행위 이벤트 5종(정의 생성·수정·중지, 직접 지급, 회수)과 `MemberRoleChanged`는 audit가 구독해 `audit.admin_action`에 `eventId`(`source_event_id` 유니크)로 멱등하게 기록한다. 설계 근거는 [계획서](./plans/m5-5-coupon.md)와 ADR 0034·0035를 본다.
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 모듈이 소유한다. 발행자는 위 표와 같지만 클래스는 `payment` 루트 패키지에 있다.
 - 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.
 
 ## 5. 데이터
 
-- PostgreSQL은 인스턴스 하나에 모듈별 스키마(`member`, `catalog`, `booking`, `payment`, `settlement`, `batch`)를 두고 모듈 간 외래 키·조인을 금지한다. 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
+- PostgreSQL은 인스턴스 하나에 모듈별 스키마(`member`, `catalog`, `booking`, `payment`, `settlement`, `coupon`, `audit`, `batch`)를 두고 모듈 간 외래 키·조인을 금지한다. 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
 - booking의 불변 좌석 사본은 요청 좌석 단위 Redis 캐시로 읽고 누락·장애 시 DB에서 조회한다. 캐시는 커밋 후 채운다([ADR 0025](./adr/0025-booking-seat-copy-cache.md)).
+- 선착순 쿠폰 발급은 Redis Lua로 재고와 회원 중복 Set을 원자적으로 처리한 뒤 동기 DB INSERT를 하고, 최종 방어선은 DB `(정의, 회원)` 유니크 제약이다. Redis–DB 불일치는 `reconcileCouponStockJob`이 DB 기준으로 보정한다([ADR 0037](./adr/0037-limited-coupon-claim-redis-lua.md)).
 - Redis는 좌석 선점·스냅샷·Streams, 대기열, 입장 토큰, SSE 티켓, rate limit, 조회 캐시에 쓴다. 용도와 키 형식은 [redis.md](./architecture/redis.md)를 본다.
 
 ## 6. 핵심 흐름
@@ -219,9 +225,9 @@ Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJ
 - 통합 테스트: Testcontainers
 - 모듈 테스트: Modulith 모듈 단위 테스트(`@ApplicationModuleTest`)
 - 동시성 테스트: 같은 좌석에 대한 동시 선점·확정
-- E2E: `e2e` 모듈과 `scripts/e2e/run.sh`가 Compose 스택과 core·gateway·realtime 두 프로세스를 띄워 대기열 → 입장 → 예매 확정 → 다른 사용자 좌석 SSE 도달 및 입장 토큰 차단을 검증한다. `./scripts/e2e/run.sh --web`은 여기에 web(Playwright)을 추가해 전체 예매 시나리오와 JWT 비노출을 검사한다. `build`·`check`에는 포함되지 않는다.
+- E2E: `e2e` 모듈과 `scripts/e2e/run.sh`가 Compose 스택과 fake-pg·core·realtime 두 인스턴스(A, B)·gateway, 총 다섯 개의 JVM 프로세스를 띄워 대기열 → 입장 → 예매 확정 → 다른 사용자 좌석 SSE 도달 및 입장 토큰 차단을 검증한다. `./scripts/e2e/run.sh --web`은 여기에 web(Playwright)을 추가해 전체 예매 시나리오와 JWT 비노출을 검사한다. `build`·`check`에는 포함되지 않는다.
 - 다중 인스턴스: realtime 통합 테스트는 같은 Redis를 사용하는 컨텍스트 두 개에서 순번·입장 락·좌석 push·`Last-Event-ID` 재연결을 검증한다. E2E에서는 Gateway가 realtime 한 인스턴스를 가리키고 두 번째에는 직접 연결한다. 부하 분산은 M6의 k8s Service에서 한다.
-- 부하 테스트: k6(xk6-sse 빌드)가 Gateway(18000)를 직접 호출한다. 시나리오는 `queue-surge`(1만 명이 대기열 등록부터 예매 확정까지)와 `hot-seats`(1,000명이 앞줄 100석을 동시 선점)이고, `scripts/loadtest/run.sh --scenario <이름>`으로 실행한다. 결과는 `build/loadtest/runs/`에 저장하고 git에 넣지 않는다. 기준 측정 결과는 [m5-baseline.md](performance/m5-baseline.md)에 있다. [ADR 0024](adr/0024-observability-and-load-test.md) 참고.
+- 부하 테스트: k6(xk6-sse 빌드)가 Gateway(18000)를 직접 호출한다. k6 시나리오는 `queue-surge`(1만 명이 대기열 등록부터 예매 확정까지)와 `hot-seats`(1,000명이 앞줄 100석을 동시 선점)이고, `scripts/loadtest/run.sh --scenario <이름>`으로 실행한다. 결과는 `build/loadtest/runs/`에 저장하고 git에 넣지 않는다. Gatling 하네스(`loadtest-gatling` 모듈)는 hot-seats와 선착순 쿠폰 `coupon-drop`(1만 VU, 100장)을 측정하며 결과는 [coupon-drop.md](performance/m5.5/coupon-drop.md)에 있다. 기준 측정 결과는 [m5-baseline.md](performance/m5-baseline.md)에 있다. [ADR 0024](adr/0024-observability-and-load-test.md) 참고.
 - 관측: Micrometer + Prometheus 지표(`/actuator/prometheus`), Micrometer Tracing(OTel 브리지) → OTLP(HTTP) → Tempo 분산 추적, Grafana에서 지표와 trace를 연결한다. `compose.observability.yaml`(Prometheus, Tempo, Grafana)로 띄우며 Grafana는 13001 포트를 쓴다(13000은 web). span 내보내기는 `TRACING_EXPORT_ENABLED`(기본 `false`)와 `TRACING_SAMPLING_PROBABILITY`로 켜고 조절한다. [ADR 0024](adr/0024-observability-and-load-test.md) 참고.
 - Gatling 후속 측정의 [전용 Grafana 대시보드와 스크립트 지표](./performance/gatling-hot-seats-dashboard.md)는 기존 Overview와 별도로 프로비저닝한다. 관측 스택의 읽기 전용 exporter가 러너의 수치 지표 파일을 Prometheus에 노출한다. 앱의 메트릭 태그에 요청 ID나 실행 ID를 추가하지 않는다.
 - APM(선택): Scouter 에이전트를 `SCOUTER_AGENT_DIR`로 연결한다. WebFlux 앱(gateway·realtime)은 txid 전파를 Reactor 자동 컨텍스트 전파에 맡기는 패치 에이전트를 쓴다. [ADR 0027](adr/0027-scouter-reactive-txid-context-propagation.md) 참고.
