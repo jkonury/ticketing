@@ -134,9 +134,8 @@ def judge(directory, scenario, limit, exit_code, warmup=False, check_server=Fals
             check('integrity', read('integrity.json')['ok'])
             if check_server:
                 delta = read('server-delta.json')
-                check('serverDelta', delta['valid'])
-                controlled = delta['controlledInputChecks']
-                check('controlledInputs', len(controlled) == 2 and all(c.get('ok') is True for c in controlled))
+                # coupon-drop에는 통제 입력(실패 주입·웹훅 중복)이 없어 controlledInputChecks가 비어 있다
+                check('serverDelta', delta['valid'] and not delta['controlledInputChecks'])
             result = {'passed': bool(checks) and all(v is True for v in checks.values()), 'warmup': warmup, 'bookingP95LimitMs': limit, 'toolExitCode': exit_code, 'checks': checks}
             (directory / 'verdict.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
             return result
