@@ -1,4 +1,9 @@
-import { expect, type BrowserContext, type Response } from '@playwright/test';
+import {
+  expect,
+  type APIResponse,
+  type BrowserContext,
+  type Response,
+} from '@playwright/test';
 
 const jwt = /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/;
 
@@ -8,6 +13,8 @@ export async function attachJwtGuard(context: BrowserContext) {
   const inspect = (value: string, source: string) => {
     if (jwt.test(value)) violations.push(source);
   };
+  // route.fulfill로 내려준 문서는 주소 공간이 불명확해 loopback(Gateway) 호출이 막히므로 허용한다.
+  await context.grantPermissions(['local-network-access']);
   await context.exposeFunction('__inspectSseData', (data: string) => {
     inspect(data, 'SSE 데이터');
   });
@@ -32,21 +39,70 @@ export async function attachJwtGuard(context: BrowserContext) {
       },
     );
   });
-  context.on('response', (response: Response) => {
-    const task = (async () => {
-      const headers = await response.allHeaders();
+  const isStream = (url: string, accept: string | undefined) =>
+    (accept ?? '').includes('text/event-stream') ||
+    new URL(url).pathname.includes('/api/v1/streams/');
+  // 본문을 응답 이벤트에서 읽으면 페이지 이동으로 본문이 사라지는 race가 있어,
+  // route로 직접 받아 검사한 뒤 넘긴다. SSE는 fetch가 전체를 버퍼링하므로 route에 넣지 않는다
+  // (교차 출처 EventSource는 가로채기만 해도 연결이 실패한다).
+  await context.route(
+    (url) => !isStream(url.href, undefined),
+    async (route) => {
+      const request = route.request();
+      if (
+        ['image', 'font', 'media', 'websocket'].includes(
+          request.resourceType(),
+        ) ||
+        isStream(request.url(), request.headers().accept)
+      ) {
+        await route.fallback();
+        return;
+      }
+      let response: APIResponse;
+      let body: Buffer;
+      try {
+        // 3xx는 따라가지 않고 그대로 브라우저에 넘긴다.
+        response = await route.fetch({ maxRedirects: 0 });
+        body = await response.body();
+      } catch {
+        // 페이지 닫힘·이동으로 요청이 취소된 경우이며 JWT 노출이 아니므로 위반으로 집계하지 않는다.
+        await route.abort().catch(() => undefined);
+        return;
+      }
+      const headers = response.headers();
       inspect(JSON.stringify(headers), `응답 헤더 ${response.url()}`);
       const type = headers['content-type'] ?? '';
       if (
-        !type.includes('text/event-stream') &&
         /text|json|javascript|xml|html|x-www-form-urlencoded/i.test(type) &&
         !(response.status() >= 300 && response.status() < 400)
       ) {
-        inspect(await response.text(), `응답 본문 ${response.url()}`);
+        inspect(body.toString('utf8'), `응답 본문 ${response.url()}`);
       }
-    })().catch((error: unknown) => {
-      violations.push(`응답 검사 실패 ${response.url()}: ${String(error)}`);
-    });
+      // body()는 이미 압축이 풀려 있으므로 인코딩·길이 헤더는 넘기지 않는다.
+      const passthrough = Object.fromEntries(
+        Object.entries(headers).filter(
+          ([name]) =>
+            ![
+              'content-encoding',
+              'content-length',
+              'transfer-encoding',
+            ].includes(name),
+        ),
+      );
+      await route
+        .fulfill({ response, body, headers: passthrough })
+        .catch(() => undefined);
+    },
+  );
+  // 통과시킨 SSE 응답은 본문을 읽지 않고 헤더만 검사한다.
+  context.on('response', (response: Response) => {
+    if (!isStream(response.url(), response.request().headers().accept)) return;
+    const task = response
+      .allHeaders()
+      .then((headers) => {
+        inspect(JSON.stringify(headers), `응답 헤더 ${response.url()}`);
+      })
+      .catch(() => undefined);
     pending.add(task);
     void task.finally(() => pending.delete(task));
   });
