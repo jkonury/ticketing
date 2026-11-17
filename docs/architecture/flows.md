@@ -18,6 +18,7 @@ Gateway 규칙 ([ADR 0020](../adr/0020-gateway-verification-contracts.md)):
 - SSE 티켓은 `/api/v1/streams/**`에서 `?ticket=`으로 받아 한 번 소비한다. 검증 실패 시 401 `SSE_TICKET_INVALID`로 응답한다.
 - 스트림 CORS는 `/api/v1/streams/**`에만 설정된 web origin(기본 `http://localhost:13000`)과 GET을 허용하며 자격 증명은 허용하지 않는다.
 - rate limit은 `core-api`와 `realtime-queues`에 `default`(초당 보충 20, 버스트 40), 예매 생성에 `booking-create`(2, 5), 쿠폰 받기에 `coupon-claim`(1, 3, 임시값이며 부하 측정 후 조정), 스트림에 `streams`(5, 10) 설정을 적용한다. 키는 검증된 회원의 `member:<id>` 또는 비회원의 `ip:<주소>`이며, `X-Forwarded-For`는 설정된 신뢰 프록시 홉 수(기본 1)만 사용한다. 초과 시 429 `RATE_LIMITED`와 `X-RateLimit-*` 헤더를 반환한다. Redis 오류 시 Spring Cloud Gateway `RedisRateLimiter`의 기본 동작에 따라 요청을 허용한다.
+- 다운스트림 연결 풀은 `fixed`(최대 `GATEWAY_POOL_MAX_CONNECTIONS`, 기본 100)로 상한을 두어 코어 Tomcat accept 큐 넘침을 막는다. 상한을 넘는 요청은 Gateway 안에서 대기하며(대기 수 무제한), `GATEWAY_POOL_ACQUIRE_TIMEOUT_MS`(기본 45000) 안에 연결을 얻지 못하면 실패한다.
 
 realtime 규칙 ([ADR 0021](../adr/0021-realtime-queue-and-sse-contracts.md)):
 
