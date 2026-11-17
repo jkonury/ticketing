@@ -53,7 +53,7 @@ abstract class VerifyNoDatabaseDependencies : DefaultTask() {
     }
 }
 
-val verifyNoDatabaseDependencies by tasks.registering(VerifyNoDatabaseDependencies::class) {
+val verifyNoDatabaseDependencies = tasks.register<VerifyNoDatabaseDependencies>("verifyNoDatabaseDependencies") {
     runtimeModules.set(runtimeModulesProvider)
 }
 tasks.named("check") { dependsOn(verifyNoDatabaseDependencies) }

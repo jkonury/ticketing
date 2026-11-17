@@ -5,7 +5,7 @@ plugins {
 val libs = the<VersionCatalogsExtension>().named("libs")
 
 // jOOQ 코드 생성기. 애플리케이션 클래스패스와 분리해 Flyway·Testcontainers 같은 도구 의존성이 새어 들어가지 않게 한다.
-val jooqGenerator: SourceSet by sourceSets.creating
+val jooqGenerator = sourceSets.create("jooqGenerator")
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
@@ -48,7 +48,7 @@ dependencies {
 val jooqOutputDir = layout.buildDirectory.dir("generated-sources/jooq")
 val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
 
-val generateJooq by tasks.registering(JavaExec::class) {
+val generateJooq = tasks.register<JavaExec>("generateJooq") {
     group = "build"
     description = "Flyway 마이그레이션을 임시 PostgreSQL에 적용하고 jOOQ 코드를 생성한다."
     classpath = jooqGenerator.runtimeClasspath
