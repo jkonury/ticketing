@@ -50,3 +50,4 @@
 | [0035](0035-coupon-module-reservation-saga.md) | coupon 모듈과 예약 Saga | 합의 |
 | [0036](0036-settlement-list-price-platform-discount.md) | 정산 정가 기준과 플랫폼 할인 부담 | 합의 |
 | [0037](0037-limited-coupon-claim-redis-lua.md) | 선착순 쿠폰 발급 방식(Redis Lua + 동기 DB INSERT) | 합의 |
+| [0038](0038-queue-stays-on-redis-not-kafka.md) | 대기열 저장소는 Redis를 유지하고 Kafka로 옮기지 않는다 | 제안 |
