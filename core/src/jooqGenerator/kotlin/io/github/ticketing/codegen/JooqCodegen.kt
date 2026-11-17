@@ -13,7 +13,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import java.io.File
 
 // 모듈별 스키마. db/migration의 V1과 같이 유지한다.
-private val SCHEMAS = listOf("member", "catalog", "booking", "payment", "settlement")
+private val SCHEMAS = listOf("member", "catalog", "booking", "payment", "settlement", "audit")
 
 /**
  * 사용법: JooqCodegenKt <마이그레이션 디렉터리> <출력 디렉터리>

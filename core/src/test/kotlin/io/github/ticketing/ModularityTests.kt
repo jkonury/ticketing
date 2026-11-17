@@ -17,8 +17,8 @@ class ModularityTests {
     }
 
     @Test
-    fun `설계한 6개 모듈이 모두 인식된다`() {
+    fun `설계한 7개 모듈이 모두 인식된다`() {
         val names = modules.map { it.identifier.toString() }.toSet()
-        kotlin.test.assertEquals(setOf("member", "catalog", "booking", "payment", "settlement", "notification"), names)
+        kotlin.test.assertEquals(setOf("member", "catalog", "booking", "payment", "settlement", "notification", "audit"), names)
     }
 }
