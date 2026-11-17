@@ -54,7 +54,7 @@ class AdmissionTokenFilter(
                 val limitedExchange = exchange.mutate().request(limitedRequest).build()
                 ServerWebExchangeUtils.cacheRequestBody(limitedExchange) { cachedRequest ->
                     val cached = limitedExchange.getAttribute<DataBuffer>(ServerWebExchangeUtils.CACHED_REQUEST_BODY_ATTR)
-                    val bytes = cached?.toByteBuffer()?.let { byteBuffer -> ByteArray(byteBuffer.remaining()).also(byteBuffer::get) }
+                    val bytes = cached?.let(::readBytes)
                     val requestedSchedule = bytes?.let(::parseSchedule)
                     when {
                         requestedSchedule == null -> invalidBody(exchange)
@@ -78,6 +78,20 @@ class AdmissionTokenFilter(
 
     private fun invalidBody(exchange: ServerWebExchange): Mono<Void> =
         exchange.writeProblem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST_BODY", "유효하지 않은 요청 본문입니다.")
+}
+
+// readPosition을 옮기지 않도록 readableByteBuffers로 복사해, 뒤 필터가 같은 버퍼를 다시 읽을 수 있게 한다.
+private fun readBytes(buffer: DataBuffer): ByteArray {
+    val bytes = ByteArray(buffer.readableByteCount())
+    var offset = 0
+    buffer.readableByteBuffers().use { buffers ->
+        buffers.forEach { byteBuffer ->
+            val length = byteBuffer.remaining()
+            byteBuffer.get(bytes, offset, length)
+            offset += length
+        }
+    }
+    return bytes
 }
 
 internal fun admissionSchedule(jsonMapper: JsonMapper, bytes: ByteArray): Long? = try {
