@@ -164,6 +164,7 @@ Kotlin, Spring Boot 4.x, Java 25. 설계 근거는 `docs/architecture.md`.
 - Spring 생성자 주입을 사용하는 모듈의 테스트 리소스에 `junit-platform.properties`를 두고 `spring.test.constructor.autowire.mode=all`을 설정한다. 생성자마다 `@Autowired`를 반복하지 않는다.
 - `ApplicationEvents`는 테스트 메서드 범위의 의존성이므로 필요한 테스트 메서드의 매개변수로 주입한다.
 - `@MockitoBean` 필드는 Spring 빈 대체를 선언하므로 `lateinit var`를 유지할 수 있다. 일반 빈의 필드 주입과 구분한다.
+- HTTP 테스트는 `MockMvc` 대신 `MockMvcTester`를 주입받아 `mockMvcTester.get()` 등으로 요청을 만들고, `assertThat(result).hasStatus(...)`·`bodyJson()`으로 검증한다.
 
 ### Spring 컨텍스트 재사용
 

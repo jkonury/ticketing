@@ -1,42 +1,44 @@
 package io.github.ticketing.coupon
 
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.expectStatus
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLContext) : IntegrationTestSupport() {
+class CouponApiIntegrationTests(private val mockMvcTester: MockMvcTester, private val dsl: DSLContext) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
 
     private class Account(val id: Long, val token: String)
 
+    private fun get(path: String) = mockMvcTester.get().uri(path)
+    private fun post(path: String) = mockMvcTester.post().uri(path)
+    private fun patch(path: String) = mockMvcTester.patch().uri(path)
+
     private fun account(role: String): Account {
         val email = "coupon-${UUID.randomUUID()}@example.com"
-        mvc.perform(
-            post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동"))),
-        ).andExpect(status().isCreated)
+        mockMvcTester.post().uri("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동")))
+            .exchange()
+            .expectStatus(HttpStatus.CREATED)
         dsl.execute("UPDATE member.member SET role = ? WHERE email = ?", role, email)
         val id = dsl.fetchOne("SELECT id FROM member.member WHERE email = ?", email)!!.get("id", Long::class.java)
-        val body = mvc.perform(
-            post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123"))),
-        ).andExpect(status().isOk).andReturn().response.contentAsString
+        val body = mockMvcTester.post().uri("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123")))
+            .exchange()
+            .expectStatus(HttpStatus.OK)
+            .response.contentAsString
         return Account(id, json.readValue(body, Map::class.java)["accessToken"].toString())
     }
 
@@ -59,30 +61,26 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         "totalQuantity" to totalQuantity,
     )
 
-    private fun send(
-        token: String,
-        request: org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder,
-        body: Any? = null,
-    ) = mvc.perform(
-        request.header("Authorization", "Bearer $token").apply {
-            if (body != null) contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))
-        },
-    )
+    private fun send(token: String, request: MockMvcTester.MockMvcRequestBuilder, body: Any? = null): MvcTestResult {
+        request.header("Authorization", "Bearer $token")
+        if (body != null) request.contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))
+        return request.exchange()
+    }
 
     private fun createDefinition(admin: Account, body: Map<String, Any?> = definitionBody()): Long {
         val response = send(
             admin.token,
             post("/api/v1/admin/coupons"),
             body,
-        ).andExpect(status().isCreated).andReturn().response.contentAsString
+        ).expectStatus(HttpStatus.CREATED).response.contentAsString
         return (json.readValue(response, Map::class.java)["id"] as Number).toLong()
     }
 
-    private fun grant(admin: Account, definitionId: Long, vararg memberIds: Long): ResultActions =
+    private fun grant(admin: Account, definitionId: Long, vararg memberIds: Long): MvcTestResult =
         send(admin.token, post("/api/v1/admin/coupons/$definitionId/grants"), mapOf("memberIds" to memberIds.toList()))
 
     private fun claimable(member: Account): List<Map<*, *>> {
-        val body = send(member.token, get("/api/v1/coupons")).andExpect(status().isOk).andReturn().response.contentAsString
+        val body = send(member.token, get("/api/v1/coupons")).expectStatus(HttpStatus.OK).response.contentAsString
         return json.readValue(body, List::class.java).filterIsInstance<Map<*, *>>()
     }
 
@@ -98,32 +96,40 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
 
         val id = createDefinition(admin)
 
-        send(admin.token, get("/api/v1/admin/coupons/$id")).andExpect(status().isOk)
-            .andExpect(jsonPath("$.id").value(id))
-            .andExpect(jsonPath("$.status").value("ACTIVE"))
-            .andExpect(jsonPath("$.discountType").value("RATE"))
-            .andExpect(jsonPath("$.issueStartedAt").value(null as Any?))
-            .andExpect(jsonPath("$.stats.issued").value(0))
-        send(admin.token, get("/api/v1/admin/coupons?size=1")).andExpect(status().isOk)
-            .andExpect(jsonPath("$.items[0].id").value(id))
-            .andExpect(jsonPath("$.items[0].stats.used").value(0))
-        send(admin.token, get("/api/v1/admin/coupons?size=101")).andExpect(status().isBadRequest)
-        send(
-            admin.token,
-            get("/api/v1/admin/coupons/0"),
-        ).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("COUPON_NOT_FOUND"))
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id")))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.id").convertTo(Long::class.java).isEqualTo(id)
+                extractingPath("$.status").isEqualTo("ACTIVE")
+                extractingPath("$.discountType").isEqualTo("RATE")
+                extractingPath("$.issueStartedAt").isNull()
+                extractingPath("$.stats.issued").isEqualTo(0)
+            }
+        assertThat(send(admin.token, get("/api/v1/admin/coupons?size=1")))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.items[0].id").convertTo(Long::class.java).isEqualTo(id)
+                extractingPath("$.items[0].stats.used").isEqualTo(0)
+            }
+        assertThat(send(admin.token, get("/api/v1/admin/coupons?size=101"))).hasStatus(HttpStatus.BAD_REQUEST)
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/0")))
+            .hasStatus(HttpStatus.NOT_FOUND)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_NOT_FOUND")
     }
 
     @Test
     fun `잘못된 정의 요청은 400이다`() {
         val admin = account("ADMIN")
 
-        send(admin.token, post("/api/v1/admin/coupons"), definitionBody() + ("name" to " "))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-        send(admin.token, post("/api/v1/admin/coupons"), definitionBody(issueMode = "LIMITED"))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-        send(admin.token, post("/api/v1/admin/coupons"), definitionBody(validUntil = Instant.now().minus(2, ChronoUnit.DAYS)))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        assertThat(send(admin.token, post("/api/v1/admin/coupons"), definitionBody() + ("name" to " ")))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_REQUEST")
+        assertThat(send(admin.token, post("/api/v1/admin/coupons"), definitionBody(issueMode = "LIMITED")))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_REQUEST")
+        assertThat(send(admin.token, post("/api/v1/admin/coupons"), definitionBody(validUntil = Instant.now().minus(2, ChronoUnit.DAYS))))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_REQUEST")
     }
 
     @Test
@@ -132,19 +138,35 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         val member = account("USER")
         val id = createDefinition(admin)
 
-        send(admin.token, patch("/api/v1/admin/coupons/$id"), mapOf("discountValue" to 20)).andExpect(status().isOk)
-            .andExpect(jsonPath("$.discountValue").value(20))
-        grant(admin, id, member.id).andExpect(status().isOk)
+        assertThat(send(admin.token, patch("/api/v1/admin/coupons/$id"), mapOf("discountValue" to 20)))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.discountValue").isEqualTo(20)
+        grant(admin, id, member.id).expectStatus(HttpStatus.OK)
 
-        send(admin.token, patch("/api/v1/admin/coupons/$id"), mapOf("discountValue" to 30))
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("COUPON_DEFINITION_LOCKED"))
-        send(admin.token, patch("/api/v1/admin/coupons/$id"), mapOf("validUntil" to Instant.now().plus(10, ChronoUnit.DAYS).toString()))
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("COUPON_VALID_UNTIL_SHORTENED"))
-        send(
-            admin.token,
-            patch("/api/v1/admin/coupons/$id"),
-            mapOf("name" to "새 이름", "validUntil" to Instant.now().plus(60, ChronoUnit.DAYS).toString()),
-        ).andExpect(status().isOk).andExpect(jsonPath("$.name").value("새 이름")).andExpect(jsonPath("$.issueStartedAt").isNotEmpty)
+        assertThat(send(admin.token, patch("/api/v1/admin/coupons/$id"), mapOf("discountValue" to 30)))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_DEFINITION_LOCKED")
+        assertThat(
+            send(
+                admin.token,
+                patch("/api/v1/admin/coupons/$id"),
+                mapOf("validUntil" to Instant.now().plus(10, ChronoUnit.DAYS).toString()),
+            ),
+        )
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_VALID_UNTIL_SHORTENED")
+        assertThat(
+            send(
+                admin.token,
+                patch("/api/v1/admin/coupons/$id"),
+                mapOf("name" to "새 이름", "validUntil" to Instant.now().plus(60, ChronoUnit.DAYS).toString()),
+            ),
+        )
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.name").isEqualTo("새 이름")
+                extractingPath("$.issueStartedAt").isNotEmpty()
+            }
         await().atMost(10, TimeUnit.SECONDS).untilAsserted { assertThat(auditCount("COUPON_DEFINITION_UPDATED", id)).isEqualTo(2) }
     }
 
@@ -155,15 +177,17 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         val id = createDefinition(admin)
 
         repeat(2) {
-            send(
-                admin.token,
-                post("/api/v1/admin/coupons/$id/stop"),
-            ).andExpect(status().isOk).andExpect(jsonPath("$.status").value("STOPPED"))
+            assertThat(send(admin.token, post("/api/v1/admin/coupons/$id/stop")))
+                .hasStatus(HttpStatus.OK)
+                .bodyJson().extractingPath("$.status").isEqualTo("STOPPED")
         }
 
-        grant(admin, id, member.id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("COUPON_NOT_ISSUABLE"))
-        send(member.token, post("/api/v1/coupons/$id/claims")).andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("COUPON_NOT_ISSUABLE"))
+        assertThat(grant(admin, id, member.id))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_NOT_ISSUABLE")
+        assertThat(send(member.token, post("/api/v1/coupons/$id/claims")))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_NOT_ISSUABLE")
         await().atMost(10, TimeUnit.SECONDS).untilAsserted { assertThat(auditCount("COUPON_DEFINITION_STOPPED", id)).isEqualTo(1) }
     }
 
@@ -173,19 +197,26 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         val first = account("USER")
         val second = account("USER")
         val id = createDefinition(admin, definitionBody(issueMode = "DIRECT"))
-        grant(admin, id, first.id).andExpect(status().isOk)
+        grant(admin, id, first.id).expectStatus(HttpStatus.OK)
 
-        grant(admin, id, first.id, second.id).andExpect(status().isOk)
-            .andExpect(jsonPath("$.granted[0]").value(second.id))
-            .andExpect(jsonPath("$.alreadyClaimed[0]").value(first.id))
+        assertThat(grant(admin, id, first.id, second.id))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.granted[0]").convertTo(Long::class.java).isEqualTo(second.id)
+                extractingPath("$.alreadyClaimed[0]").convertTo(Long::class.java).isEqualTo(first.id)
+            }
 
-        send(admin.token, get("/api/v1/admin/coupons/$id")).andExpect(jsonPath("$.stats.issued").value(2))
-        send(admin.token, get("/api/v1/admin/coupons/$id/issued?size=1")).andExpect(status().isOk)
-            .andExpect(jsonPath("$.items.length()").value(1))
-            .andExpect(jsonPath("$.items[0].memberId").value(second.id))
-            .andExpect(jsonPath("$.nextCursor").isNotEmpty)
-        send(admin.token, get("/api/v1/admin/coupons/$id/issued?status=REVOKED")).andExpect(jsonPath("$.items.length()").value(0))
-        grant(admin, id).andExpect(status().isBadRequest)
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id"))).bodyJson().extractingPath("$.stats.issued").isEqualTo(2)
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id/issued?size=1")))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.items.length()").isEqualTo(1)
+                extractingPath("$.items[0].memberId").convertTo(Long::class.java).isEqualTo(second.id)
+                extractingPath("$.nextCursor").isNotEmpty()
+            }
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id/issued?status=REVOKED")))
+            .bodyJson().extractingPath("$.items.length()").isEqualTo(0)
+        assertThat(grant(admin, id)).hasStatus(HttpStatus.BAD_REQUEST)
         await().atMost(10, TimeUnit.SECONDS).untilAsserted { assertThat(auditCount("COUPONS_GRANTED", id)).isEqualTo(2) }
     }
 
@@ -194,21 +225,23 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         val admin = account("ADMIN")
         val member = account("USER")
         val id = createDefinition(admin)
-        grant(admin, id, member.id).andExpect(status().isOk)
+        grant(admin, id, member.id).expectStatus(HttpStatus.OK)
         val issuedId = (
             json.readValue(
-                send(admin.token, get("/api/v1/admin/coupons/$id/issued")).andReturn().response.contentAsString,
+                send(admin.token, get("/api/v1/admin/coupons/$id/issued")).response.contentAsString,
                 Map::class.java,
             )["items"] as List<*>
             ).let { ((it.single() as Map<*, *>)["id"] as Number).toLong() }
 
-        send(admin.token, post("/api/v1/admin/issued-coupons/$issuedId/revoke")).andExpect(status().isOk)
-            .andExpect(jsonPath("$.status").value("REVOKED"))
-        send(admin.token, post("/api/v1/admin/issued-coupons/$issuedId/revoke")).andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("COUPON_NOT_REVOCABLE"))
-        send(admin.token, post("/api/v1/admin/issued-coupons/0/revoke")).andExpect(status().isNotFound)
+        assertThat(send(admin.token, post("/api/v1/admin/issued-coupons/$issuedId/revoke")))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.status").isEqualTo("REVOKED")
+        assertThat(send(admin.token, post("/api/v1/admin/issued-coupons/$issuedId/revoke")))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_NOT_REVOCABLE")
+        assertThat(send(admin.token, post("/api/v1/admin/issued-coupons/0/revoke"))).hasStatus(HttpStatus.NOT_FOUND)
 
-        send(admin.token, get("/api/v1/admin/coupons/$id")).andExpect(jsonPath("$.stats.revoked").value(1))
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id"))).bodyJson().extractingPath("$.stats.revoked").isEqualTo(1)
         await().atMost(10, TimeUnit.SECONDS).untilAsserted { assertThat(auditCount("COUPON_REVOKED", issuedId)).isEqualTo(1) }
     }
 
@@ -216,10 +249,11 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
     fun `비관리자는 관리자 API를 호출할 수 없다`() {
         val member = account("USER")
 
-        send(member.token, post("/api/v1/admin/coupons"), definitionBody()).andExpect(status().isForbidden)
-        send(member.token, get("/api/v1/admin/coupons")).andExpect(status().isForbidden)
-        send(member.token, post("/api/v1/admin/coupons/1/grants"), mapOf("memberIds" to listOf(1))).andExpect(status().isForbidden)
-        mvc.perform(get("/api/v1/admin/coupons")).andExpect(status().isUnauthorized)
+        assertThat(send(member.token, post("/api/v1/admin/coupons"), definitionBody())).hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(send(member.token, get("/api/v1/admin/coupons"))).hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(send(member.token, post("/api/v1/admin/coupons/1/grants"), mapOf("memberIds" to listOf(1))))
+            .hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(get("/api/v1/admin/coupons")).hasStatus(HttpStatus.UNAUTHORIZED)
     }
 
     @Test
@@ -229,18 +263,26 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         val id = createDefinition(admin)
 
         assertThat(claimed(member, id)).isFalse()
-        send(member.token, post("/api/v1/coupons/$id/claims")).andExpect(status().isCreated)
-            .andExpect(jsonPath("$.status").value("ISSUED")).andExpect(jsonPath("$.memberId").value(member.id))
-        send(member.token, post("/api/v1/coupons/$id/claims")).andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("COUPON_ALREADY_CLAIMED"))
+        assertThat(send(member.token, post("/api/v1/coupons/$id/claims")))
+            .hasStatus(HttpStatus.CREATED)
+            .bodyJson().apply {
+                extractingPath("$.status").isEqualTo("ISSUED")
+                extractingPath("$.memberId").convertTo(Long::class.java).isEqualTo(member.id)
+            }
+        assertThat(send(member.token, post("/api/v1/coupons/$id/claims")))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_ALREADY_CLAIMED")
 
         assertThat(claimed(member, id)).isTrue()
-        send(member.token, get("/api/v1/me/coupons")).andExpect(status().isOk)
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].definitionId").value(id))
-            .andExpect(jsonPath("$[0].definition.id").value(id))
-            .andExpect(jsonPath("$[0].definition.name").value("신규 가입 쿠폰"))
-        send(admin.token, get("/api/v1/admin/coupons/$id")).andExpect(jsonPath("$.issueStartedAt").isNotEmpty)
+        assertThat(send(member.token, get("/api/v1/me/coupons")))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.length()").isEqualTo(1)
+                extractingPath("$[0].definitionId").convertTo(Long::class.java).isEqualTo(id)
+                extractingPath("$[0].definition.id").convertTo(Long::class.java).isEqualTo(id)
+                extractingPath("$[0].definition.name").isEqualTo("신규 가입 쿠폰")
+            }
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id"))).bodyJson().extractingPath("$.issueStartedAt").isNotEmpty()
     }
 
     @Test
@@ -250,10 +292,11 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
         val direct = createDefinition(admin, definitionBody(issueMode = "DIRECT"))
         val limited = createDefinition(admin, definitionBody(issueMode = "LIMITED", totalQuantity = 10))
 
-        send(member.token, post("/api/v1/coupons/$direct/claims")).andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("COUPON_NOT_ISSUABLE"))
-        send(member.token, post("/api/v1/coupons/$limited/claims")).andExpect(status().isCreated)
-        send(member.token, post("/api/v1/coupons/0/claims")).andExpect(status().isNotFound)
+        assertThat(send(member.token, post("/api/v1/coupons/$direct/claims")))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("COUPON_NOT_ISSUABLE")
+        assertThat(send(member.token, post("/api/v1/coupons/$limited/claims"))).hasStatus(HttpStatus.CREATED)
+        assertThat(send(member.token, post("/api/v1/coupons/0/claims"))).hasStatus(HttpStatus.NOT_FOUND)
 
         val listedIds = claimable(member).map { (it["id"] as Number).toLong() }
         assertThat(listedIds).contains(limited).doesNotContain(direct)
@@ -269,11 +312,13 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
             validUntil = Instant.now().minus(1, ChronoUnit.DAYS),
         )
         val id = createDefinition(admin, expired)
-        grant(admin, id, member.id).andExpect(status().isOk)
+        grant(admin, id, member.id).expectStatus(HttpStatus.OK)
 
-        send(member.token, get("/api/v1/me/coupons")).andExpect(jsonPath("$[0].status").value("EXPIRED"))
-        send(admin.token, get("/api/v1/admin/coupons/$id/issued?status=EXPIRED")).andExpect(jsonPath("$.items.length()").value(1))
-        send(admin.token, get("/api/v1/admin/coupons/$id/issued?status=ISSUED")).andExpect(jsonPath("$.items.length()").value(0))
+        assertThat(send(member.token, get("/api/v1/me/coupons"))).bodyJson().extractingPath("$[0].status").isEqualTo("EXPIRED")
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id/issued?status=EXPIRED")))
+            .bodyJson().extractingPath("$.items.length()").isEqualTo(1)
+        assertThat(send(admin.token, get("/api/v1/admin/coupons/$id/issued?status=ISSUED")))
+            .bodyJson().extractingPath("$.items.length()").isEqualTo(0)
     }
 
     @Test

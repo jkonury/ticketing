@@ -4,16 +4,13 @@ import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
-import org.hamcrest.Matchers.hasSize
+import org.assertj.core.api.Assertions.assertThat
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
 import ticketing.jooq.booking.tables.references.BOOKING_SEAT
 import ticketing.jooq.booking.tables.references.SOLD_SEAT
 import tools.jackson.databind.json.JsonMapper
@@ -24,7 +21,7 @@ import java.util.UUID
 import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 
 class BookingReadApiIntegrationTests(
-    private val mvc: MockMvc,
+    private val mockMvcTester: MockMvcTester,
     private val dsl: DSLContext,
     private val clock: MutableClock,
     private val register: RegisterScheduleSeatsUseCase,
@@ -39,16 +36,16 @@ class BookingReadApiIntegrationTests(
 
     private fun member(role: String = "USER"): Pair<Long, String> {
         val email = "booking-read-${UUID.randomUUID()}@example.com"
-        val signup = mvc.perform(
-            post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "회원", "role" to role))),
-        ).andExpect(status().isCreated).andReturn().response.contentAsString
-        val login = mvc.perform(
-            post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123"))),
-        ).andExpect(status().isOk).andReturn().response.contentAsString
-        return (json.readValue(signup, Map::class.java)["id"] as Number).toLong() to
-            (json.readValue(login, Map::class.java)["accessToken"] as String)
+        val signup = mockMvcTester.post().uri("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "회원", "role" to role)))
+            .exchange()
+        assertThat(signup).hasStatus(HttpStatus.CREATED)
+        val login = mockMvcTester.post().uri("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123")))
+            .exchange()
+        assertThat(login).hasStatus(HttpStatus.OK)
+        return (json.readValue(signup.response.contentAsString, Map::class.java)["id"] as Number).toLong() to
+            (json.readValue(login.response.contentAsString, Map::class.java)["accessToken"] as String)
     }
 
     private fun schedule(performanceId: Long, organizerId: Long): Long {
@@ -93,11 +90,16 @@ class BookingReadApiIntegrationTests(
         booking(1, scheduleId, 4, "PENDING", now.minusSeconds(60), payment = true)
         booking(1, scheduleId, 5, "PENDING", now.minusSeconds(1800), payment = true)
 
-        mvc.perform(get("/api/v1/schedules/availability").param("scheduleIds", "$scheduleId,${scheduleId + 1}"))
-            .andExpect(status().isOk).andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].totalSeats").value(6)).andExpect(jsonPath("$[0].availableSeats").value(3))
-        mvc.perform(get("/api/v1/schedules/availability").param("scheduleIds", (1..51).joinToString(",")))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        assertThat(mockMvcTester.get().uri("/api/v1/schedules/availability").param("scheduleIds", "$scheduleId,${scheduleId + 1}"))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.length()").isEqualTo(1)
+                extractingPath("$[0].totalSeats").isEqualTo(6)
+                extractingPath("$[0].availableSeats").isEqualTo(3)
+            }
+        assertThat(mockMvcTester.get().uri("/api/v1/schedules/availability").param("scheduleIds", (1..51).joinToString(",")))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_REQUEST")
     }
 
     @Test
@@ -109,9 +111,17 @@ class BookingReadApiIntegrationTests(
         val id = booking(memberId, first, 1, "PENDING", now.plusSeconds(60))
         booking(memberId, second, 1, "PENDING", now.plusSeconds(60))
 
-        mvc.perform(get("/api/v1/bookings/me").param("performanceId", "$firstPerformance").header("Authorization", "Bearer $token"))
-            .andExpect(status().isOk).andExpect(jsonPath("$.items.length()").value(1))
-            .andExpect(jsonPath("$.items[0].bookingId").value(id)).andExpect(jsonPath("$.items[0].performanceId").value(firstPerformance))
+        assertThat(
+            mockMvcTester.get().uri(
+                "/api/v1/bookings/me",
+            ).param("performanceId", "$firstPerformance").header("Authorization", "Bearer $token"),
+        )
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.items.length()").isEqualTo(1)
+                extractingPath("$.items[0].bookingId").convertTo(Long::class.java).isEqualTo(id)
+                extractingPath("$.items[0].performanceId").convertTo(Long::class.java).isEqualTo(firstPerformance)
+            }
     }
 
     @Test
@@ -127,14 +137,20 @@ class BookingReadApiIntegrationTests(
 
         // 다른 테스트가 고정 organizerId로 등록한 회차와 생성된 회원 id가 겹칠 수 있어 건수 대신 회차 id로 검증한다
         val mineRow = "$[?(@.scheduleId == $mine)]"
-        mvc.perform(get("/api/v1/organizer/sales").header("Authorization", "Bearer $organizer"))
-            .andExpect(status().isOk).andExpect(jsonPath(mineRow, hasSize<Any>(1)))
-            .andExpect(jsonPath("$[?(@.scheduleId == $others)]").isEmpty)
-            .andExpect(jsonPath("$mineRow.totalSeats").value(6))
-            .andExpect(jsonPath("$mineRow.soldSeats").value(1)).andExpect(jsonPath("$mineRow.confirmedAmount").value(100))
-        mvc.perform(get("/api/v1/organizer/sales").header("Authorization", "Bearer $user"))
-            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("FORBIDDEN"))
-        mvc.perform(get("/api/v1/organizer/sales"))
-            .andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        assertThat(mockMvcTester.get().uri("/api/v1/organizer/sales").header("Authorization", "Bearer $organizer"))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath(mineRow).asArray().hasSize(1)
+                extractingPath("$[?(@.scheduleId == $others)]").isEmpty()
+                extractingPath("$mineRow.totalSeats").asArray().containsExactly(6)
+                extractingPath("$mineRow.soldSeats").asArray().containsExactly(1)
+                extractingPath("$mineRow.confirmedAmount").asArray().containsExactly(100)
+            }
+        assertThat(mockMvcTester.get().uri("/api/v1/organizer/sales").header("Authorization", "Bearer $user"))
+            .hasStatus(HttpStatus.FORBIDDEN)
+            .bodyJson().extractingPath("$.code").isEqualTo("FORBIDDEN")
+        assertThat(mockMvcTester.get().uri("/api/v1/organizer/sales"))
+            .hasStatus(HttpStatus.UNAUTHORIZED)
+            .bodyJson().extractingPath("$.code").isEqualTo("UNAUTHORIZED")
     }
 }

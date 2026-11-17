@@ -7,19 +7,18 @@ import io.github.ticketing.e2e.support.FlowSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
 
 class BookingFlowE2ETests(
-    mvc: MockMvc,
+    mockMvcTester: MockMvcTester,
     jdbc: JdbcTemplate,
     redis: StringRedisTemplate,
     pg: TestPg,
     clock: MutableClock,
     collector: EventCollector,
-) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
+) : FlowSupport(mockMvcTester, jdbc, redis, pg, clock, collector) {
 
     @Test
     fun `공연 등록부터 두 좌석 결제 확정까지 진행한다`() {
@@ -34,8 +33,9 @@ class BookingFlowE2ETests(
         webhook(id, "PAYMENT_APPROVED", 200000)
         awaitStatus(user, id, "CONFIRMED")
 
-        val list =
-            parse(mvc.perform(get("/api/v1/bookings/me").header("Authorization", "Bearer $user")).andExpect(status().isOk).andReturn())
+        val listResult = mockMvcTester.get().uri("/api/v1/bookings/me").header("Authorization", "Bearer $user").exchange()
+        assertThat(listResult).hasStatus(HttpStatus.OK)
+        val list = parse(listResult)
 
         assertThat((list["items"] as List<*>).map { (it as Map<*, *>)["bookingId"] }).contains(id.toInt())
         eventually {

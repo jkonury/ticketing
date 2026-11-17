@@ -11,28 +11,28 @@ import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.MvcResult
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class SeatHoldConcurrencyTests(
-    mvc: MockMvc,
+    mockMvcTester: MockMvcTester,
     jdbc: JdbcTemplate,
     redis: StringRedisTemplate,
     pg: TestPg,
     clock: MutableClock,
     collector: EventCollector,
-) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
+) : FlowSupport(mockMvcTester, jdbc, redis, pg, clock, collector) {
 
-    private fun concurrent(requests: List<() -> MvcResult>): List<MvcResult> {
+    private fun concurrent(requests: List<() -> MvcTestResult>): List<MvcTestResult> {
         val ready = CountDownLatch(requests.size)
         val start = CountDownLatch(1)
 
         Executors.newVirtualThreadPerTaskExecutor().use { executor ->
             val futures = requests.map { request ->
-                executor.submit<MvcResult> {
+                executor.submit<MvcTestResult> {
                     ready.countDown()
                     check(start.await(20, TimeUnit.SECONDS))
                     request()

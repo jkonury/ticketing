@@ -26,6 +26,7 @@ import io.github.ticketing.coupon.domain.IssuedCoupon
 import io.github.ticketing.coupon.domain.IssuedCouponId
 import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import io.github.ticketing.coupon.domain.MemberId
+import io.github.ticketing.expectStatus
 import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
@@ -34,14 +35,11 @@ import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
@@ -52,7 +50,7 @@ import java.util.UUID
 
 /** booking과 coupon의 실제 리스너를 모두 거치는 쿠폰 예약 Saga 통합 테스트. 쿠폰은 정액 30000원 할인이다. */
 class BookingCouponSagaTests(
-    private val mvc: MockMvc,
+    private val mockMvcTester: MockMvcTester,
     private val register: RegisterScheduleSeatsUseCase,
     private val expire: ExpireBookingUseCase,
     private val reserveUseCase: ReserveCouponUseCase,
@@ -68,6 +66,10 @@ class BookingCouponSagaTests(
     private val json = JsonMapper.builder().build()
 
     private class Member(val id: Long, val token: String)
+
+    private fun get(path: String) = mockMvcTester.get().uri(path)
+    private fun post(path: String) = mockMvcTester.post().uri(path)
+    private fun put(path: String) = mockMvcTester.put().uri(path)
 
     private fun newSchedule(): Long {
         val scheduleId = System.nanoTime()
@@ -86,14 +88,15 @@ class BookingCouponSagaTests(
 
     private fun member(): Member {
         val email = "u-${UUID.randomUUID()}@example.com"
-        mvc.perform(
-            post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to "USER"))),
-        ).andExpect(status().isCreated)
-        val res = mvc.perform(
-            post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123"))),
-        ).andExpect(status().isOk).andReturn().response.contentAsString
+        post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to "USER")))
+            .exchange()
+            .expectStatus(HttpStatus.CREATED)
+        val res = post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123")))
+            .exchange()
+            .expectStatus(HttpStatus.OK)
+            .response.contentAsString
         val token = json.readValue(res, Map::class.java)["accessToken"] as String
         val id = requireNotNull(jdbc.queryForObject("SELECT id FROM member.member WHERE email = ?", Long::class.java, email))
         return Member(id, token)
@@ -122,30 +125,35 @@ class BookingCouponSagaTests(
     }
 
     private fun book(m: Member, scheduleId: Long, seatIds: List<Long> = listOf(1, 2)): Long {
-        val res = mvc.perform(
-            post("/api/v1/bookings").header("Authorization", "Bearer ${m.token}").header("Idempotency-Key", UUID.randomUUID().toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("scheduleId" to scheduleId, "seatIds" to seatIds))),
-        ).andExpect(status().isCreated).andReturn().response.contentAsString
+        val res = post(
+            "/api/v1/bookings",
+        ).header("Authorization", "Bearer ${m.token}").header("Idempotency-Key", UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("scheduleId" to scheduleId, "seatIds" to seatIds)))
+            .exchange()
+            .expectStatus(HttpStatus.CREATED)
+            .response.contentAsString
         return (json.readValue(res, Map::class.java)["bookingId"] as Number).toLong()
     }
 
-    private fun applyCoupon(m: Member, bookingId: Long, issuedCouponId: Long): ResultActions = mvc.perform(
+    private fun applyCoupon(m: Member, bookingId: Long, issuedCouponId: Long): MvcTestResult =
         put("/api/v1/bookings/$bookingId/coupon").header("Authorization", "Bearer ${m.token}")
-            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(mapOf("issuedCouponId" to issuedCouponId))),
-    )
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(mapOf("issuedCouponId" to issuedCouponId)))
+            .exchange()
 
-    private fun pay(m: Member, bookingId: Long): ResultActions = mvc.perform(
+    private fun pay(m: Member, bookingId: Long): MvcTestResult =
         post("/api/v1/bookings/$bookingId/payments").header("Authorization", "Bearer ${m.token}")
-            .header("Idempotency-Key", UUID.randomUUID().toString()),
-    )
+            .header("Idempotency-Key", UUID.randomUUID().toString())
+            .exchange()
 
-    private fun cancel(m: Member, bookingId: Long): ResultActions =
-        mvc.perform(post("/api/v1/bookings/$bookingId/cancel").header("Authorization", "Bearer ${m.token}"))
+    private fun cancel(m: Member, bookingId: Long): MvcTestResult =
+        post("/api/v1/bookings/$bookingId/cancel").header("Authorization", "Bearer ${m.token}").exchange()
 
     private fun detail(m: Member, bookingId: Long): Map<*, *> {
-        val res = mvc.perform(get("/api/v1/bookings/$bookingId").header("Authorization", "Bearer ${m.token}"))
-            .andExpect(status().isOk).andReturn().response.contentAsString
+        val res = get("/api/v1/bookings/$bookingId").header("Authorization", "Bearer ${m.token}")
+            .exchange()
+            .expectStatus(HttpStatus.OK)
+            .response.contentAsString
         return json.readValue(res, Map::class.java)
     }
 
@@ -169,7 +177,7 @@ class BookingCouponSagaTests(
     private fun reservedBooking(m: Member, scheduleId: Long, seatIds: List<Long> = listOf(1, 2)): Pair<Long, Long> {
         val couponId = issueCoupon(m.id)
         val id = book(m, scheduleId, seatIds)
-        applyCoupon(m, id, couponId).andExpect(status().isOk)
+        applyCoupon(m, id, couponId).expectStatus(HttpStatus.OK)
         awaitCouponState(m, id, "RESERVED")
         awaitCoupon(couponId, IssuedCouponStatus.RESERVED)
         return id to couponId
@@ -180,7 +188,7 @@ class BookingCouponSagaTests(
         val m = member()
         val (id, couponId) = reservedBooking(m, newSchedule())
 
-        pay(m, id).andExpect(status().isAccepted)
+        pay(m, id).expectStatus(HttpStatus.ACCEPTED)
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }.single().amount).isEqualByComparingTo(BigDecimal(170000))
         succeed(id, BigDecimal(170000))
 
@@ -198,7 +206,7 @@ class BookingCouponSagaTests(
     fun `결제가 실패하면 쿠폰이 ISSUED로 복원된다`() {
         val m = member()
         val (id, couponId) = reservedBooking(m, newSchedule())
-        pay(m, id).andExpect(status().isAccepted)
+        pay(m, id).expectStatus(HttpStatus.ACCEPTED)
 
         tx.executeWithoutResult { publisher.publishEvent(PaymentFailed(1, id, "카드 한도 초과", Instant.now())) }
 
@@ -227,8 +235,8 @@ class BookingCouponSagaTests(
         val (bookingA, couponId) = reservedBooking(a, schedule)
         redis.delete(listOf(holdKey(ScheduleId(schedule), SeatId(1)), holdKey(ScheduleId(schedule), SeatId(2))))
         val bookingB = book(b, schedule, listOf(2, 3))
-        pay(a, bookingA).andExpect(status().isAccepted)
-        pay(b, bookingB).andExpect(status().isAccepted)
+        pay(a, bookingA).expectStatus(HttpStatus.ACCEPTED)
+        pay(b, bookingB).expectStatus(HttpStatus.ACCEPTED)
         succeed(bookingB, BigDecimal(200000))
         awaitStatus(b, bookingB, "CONFIRMED")
 
@@ -244,7 +252,7 @@ class BookingCouponSagaTests(
         val m = member()
         val (id, couponId) = reservedBooking(m, newSchedule())
 
-        cancel(m, id).andExpect(status().isOk)
+        cancel(m, id).expectStatus(HttpStatus.OK)
 
         awaitCoupon(couponId, IssuedCouponStatus.ISSUED)
         assertThat(releases(id).map { it.reason }).containsExactly("USER_CANCELLED")
@@ -254,12 +262,12 @@ class BookingCouponSagaTests(
     fun `확정 후 사용자가 취소해 환불해도 쿠폰은 USED로 남고 해제 요청이 없다`() {
         val m = member()
         val (id, couponId) = reservedBooking(m, newSchedule())
-        pay(m, id).andExpect(status().isAccepted)
+        pay(m, id).expectStatus(HttpStatus.ACCEPTED)
         succeed(id, BigDecimal(170000))
         awaitStatus(m, id, "CONFIRMED")
         awaitCoupon(couponId, IssuedCouponStatus.USED)
 
-        cancel(m, id).andExpect(status().isOk)
+        cancel(m, id).expectStatus(HttpStatus.OK)
 
         await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
             assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.USED)
@@ -289,12 +297,12 @@ class BookingCouponSagaTests(
         val couponId = issueCoupon(m.id, minOrderAmount = 1_000_000)
         val id = book(m, newSchedule())
 
-        applyCoupon(m, id, couponId).andExpect(status().isOk)
+        applyCoupon(m, id, couponId).expectStatus(HttpStatus.OK)
 
         awaitCouponState(m, id, "REJECTED")
         assertThat(detail(m, id)["status"]).isEqualTo("PENDING")
         assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.ISSUED)
-        pay(m, id).andExpect(status().isAccepted)
+        pay(m, id).expectStatus(HttpStatus.ACCEPTED)
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }.single().amount).isEqualByComparingTo(BigDecimal(200000))
         assertThat(releases(id)).isEmpty()
     }

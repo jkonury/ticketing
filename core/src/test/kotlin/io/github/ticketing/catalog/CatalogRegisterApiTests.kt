@@ -3,45 +3,43 @@ package io.github.ticketing.catalog
 import io.github.ticketing.IntegrationTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.util.UUID
 
 @RecordApplicationEvents
-class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport() {
+class CatalogRegisterApiTests(private val mockMvcTester: MockMvcTester) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
 
     private fun accessToken(role: String): String {
         val email = "$role-${UUID.randomUUID()}@example.com".lowercase()
-        mvc.perform(
-            post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to role))),
-        ).andExpect(status().isCreated)
-        val body = mvc.perform(
-            post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123"))),
-        ).andExpect(status().isOk).andReturn().response.contentAsString
-        return json.readTree(body)["accessToken"].asString()
+        val signUp = mockMvcTester.post().uri("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to role)))
+            .exchange()
+        assertThat(signUp).hasStatus(HttpStatus.CREATED)
+        val login = mockMvcTester.post().uri("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123")))
+            .exchange()
+        assertThat(login).hasStatus(HttpStatus.OK)
+        return json.readTree(login.response.contentAsString)["accessToken"].asString()
     }
 
-    private fun postJson(path: String, token: String?, body: Any): ResultActions = mvc.perform(
-        post(path).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)).apply {
-            if (token != null) header("Authorization", "Bearer $token")
-        },
-    )
+    private fun postJson(path: String, token: String?, body: Any): MvcTestResult {
+        val request = mockMvcTester.post().uri(path).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))
+        if (token != null) request.header("Authorization", "Bearer $token")
+        return request.exchange()
+    }
 
-    private fun created(result: ResultActions): Map<*, *> {
-        val response = result.andExpect(status().isCreated).andReturn().response.contentAsString
-        return json.readValue(response, Map::class.java)
+    private fun created(result: MvcTestResult): Map<*, *> {
+        assertThat(result).hasStatus(HttpStatus.CREATED)
+        return json.readValue(result.response.contentAsString, Map::class.java)
     }
 
     private fun seat(section: String, row: String, number: Int, grade: String) =
@@ -68,10 +66,12 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
     fun `주최자는 공연장을 등록하면 좌석 수를 돌려받는다`() {
         val token = accessToken("ORGANIZER")
 
-        postJson("/api/v1/venues", token, mapOf("name" to "올림픽홀", "seats" to twoGradeSeats))
-            .andExpect(status().isCreated)
-            .andExpect(jsonPath("$.id").isNumber)
-            .andExpect(jsonPath("$.seatCount").value(3))
+        assertThat(postJson("/api/v1/venues", token, mapOf("name" to "올림픽홀", "seats" to twoGradeSeats)))
+            .hasStatus(HttpStatus.CREATED)
+            .bodyJson().apply {
+                extractingPath("$.id").isInstanceOf(Number::class.java)
+                extractingPath("$.seatCount").isEqualTo(3)
+            }
     }
 
     @Test
@@ -79,33 +79,52 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
         val user = accessToken("USER")
         val body = mapOf("name" to "올림픽홀", "seats" to twoGradeSeats)
 
-        postJson("/api/v1/venues", user, body).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("FORBIDDEN"))
+        assertThat(postJson("/api/v1/venues", user, body))
+            .hasStatus(HttpStatus.FORBIDDEN)
+            .bodyJson().extractingPath("$.code").isEqualTo("FORBIDDEN")
         // @PreAuthorize는 인자 바인딩 뒤에 평가되므로 본문이 유효해야 403을 확인할 수 있다
-        postJson("/api/v1/performances", user, mapOf("title" to "t", "description" to "d", "venueId" to 1, "prices" to allPrices))
-            .andExpect(status().isForbidden)
-        postJson("/api/v1/performances/1/schedules", user, mapOf("startsAt" to "2027-01-01T10:00:00Z")).andExpect(status().isForbidden)
+        assertThat(
+            postJson("/api/v1/performances", user, mapOf("title" to "t", "description" to "d", "venueId" to 1, "prices" to allPrices)),
+        )
+            .hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(postJson("/api/v1/performances/1/schedules", user, mapOf("startsAt" to "2027-01-01T10:00:00Z")))
+            .hasStatus(HttpStatus.FORBIDDEN)
 
-        postJson("/api/v1/venues", null, body).andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        assertThat(postJson("/api/v1/venues", null, body))
+            .hasStatus(HttpStatus.UNAUTHORIZED)
+            .bodyJson().extractingPath("$.code").isEqualTo("UNAUTHORIZED")
     }
 
     @Test
     fun `좌석이 없거나 5000개를 넘으면 400이다`() {
         val token = accessToken("ORGANIZER")
 
-        postJson("/api/v1/venues", token, mapOf("name" to "빈 공연장", "seats" to emptyList<Any>()))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        assertThat(postJson("/api/v1/venues", token, mapOf("name" to "빈 공연장", "seats" to emptyList<Any>())))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_REQUEST")
 
         val tooMany = (1..5001).map { seat("A", "1", it, "A") }
-        postJson("/api/v1/venues", token, mapOf("name" to "큰 공연장", "seats" to tooMany))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        assertThat(postJson("/api/v1/venues", token, mapOf("name" to "큰 공연장", "seats" to tooMany)))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_REQUEST")
     }
 
     @Test
     fun `같은 구역·열·번호의 좌석이 중복되면 400이다`() {
         val token = accessToken("ORGANIZER")
 
-        postJson("/api/v1/venues", token, mapOf("name" to "중복", "seats" to listOf(seat("A", "1", 1, "VIP"), seat("A", "1", 1, "R"))))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("DUPLICATE_VENUE_SEAT"))
+        assertThat(
+            postJson(
+                "/api/v1/venues",
+                token,
+                mapOf(
+                    "name" to "중복",
+                    "seats" to listOf(seat("A", "1", 1, "VIP"), seat("A", "1", 1, "R")),
+                ),
+            ),
+        )
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("DUPLICATE_VENUE_SEAT")
     }
 
     @Test
@@ -113,11 +132,15 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
         val token = accessToken("ORGANIZER")
         val venueId = registerVenue(token)
 
-        postJson(
-            "/api/v1/performances",
-            token,
-            mapOf("title" to "콘서트", "description" to "설명", "venueId" to venueId, "prices" to allPrices),
-        ).andExpect(status().isCreated).andExpect(jsonPath("$.id").isNumber)
+        assertThat(
+            postJson(
+                "/api/v1/performances",
+                token,
+                mapOf("title" to "콘서트", "description" to "설명", "venueId" to venueId, "prices" to allPrices),
+            ),
+        )
+            .hasStatus(HttpStatus.CREATED)
+            .bodyJson().extractingPath("$.id").isInstanceOf(Number::class.java)
     }
 
     @Test
@@ -125,27 +148,35 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
         val token = accessToken("ORGANIZER")
         val venueId = registerVenue(token)
 
-        postJson(
-            "/api/v1/performances",
-            token,
-            mapOf(
-                "title" to "콘서트",
-                "description" to "설명",
-                "venueId" to venueId,
-                "prices" to listOf(mapOf("grade" to "VIP", "price" to 150000)),
+        assertThat(
+            postJson(
+                "/api/v1/performances",
+                token,
+                mapOf(
+                    "title" to "콘서트",
+                    "description" to "설명",
+                    "venueId" to venueId,
+                    "prices" to listOf(mapOf("grade" to "VIP", "price" to 150000)),
+                ),
             ),
-        ).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PRICE_MISSING_FOR_GRADE"))
+        )
+            .hasStatus(HttpStatus.BAD_REQUEST)
+            .bodyJson().extractingPath("$.code").isEqualTo("PRICE_MISSING_FOR_GRADE")
     }
 
     @Test
     fun `없는 공연장으로 공연을 등록하면 404다`() {
         val token = accessToken("ORGANIZER")
 
-        postJson(
-            "/api/v1/performances",
-            token,
-            mapOf("title" to "콘서트", "description" to "설명", "venueId" to Long.MAX_VALUE, "prices" to allPrices),
-        ).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("VENUE_NOT_FOUND"))
+        assertThat(
+            postJson(
+                "/api/v1/performances",
+                token,
+                mapOf("title" to "콘서트", "description" to "설명", "venueId" to Long.MAX_VALUE, "prices" to allPrices),
+            ),
+        )
+            .hasStatus(HttpStatus.NOT_FOUND)
+            .bodyJson().extractingPath("$.code").isEqualTo("VENUE_NOT_FOUND")
     }
 
     @Test
@@ -179,8 +210,9 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
         val performanceId = registerPerformance(owner, registerVenue(owner))
         val before = events.stream(ScheduleRegistered::class.java).count()
 
-        postJson("/api/v1/performances/$performanceId/schedules", other, mapOf("startsAt" to "2027-01-01T10:00:00Z"))
-            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("NOT_PERFORMANCE_OWNER"))
+        assertThat(postJson("/api/v1/performances/$performanceId/schedules", other, mapOf("startsAt" to "2027-01-01T10:00:00Z")))
+            .hasStatus(HttpStatus.FORBIDDEN)
+            .bodyJson().extractingPath("$.code").isEqualTo("NOT_PERFORMANCE_OWNER")
 
         assertThat(events.stream(ScheduleRegistered::class.java).count()).isEqualTo(before)
     }
@@ -189,8 +221,9 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
     fun `없는 공연에 회차를 등록하면 404다`() {
         val token = accessToken("ORGANIZER")
 
-        postJson("/api/v1/performances/${Long.MAX_VALUE}/schedules", token, mapOf("startsAt" to "2027-01-01T10:00:00Z"))
-            .andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("PERFORMANCE_NOT_FOUND"))
+        assertThat(postJson("/api/v1/performances/${Long.MAX_VALUE}/schedules", token, mapOf("startsAt" to "2027-01-01T10:00:00Z")))
+            .hasStatus(HttpStatus.NOT_FOUND)
+            .bodyJson().extractingPath("$.code").isEqualTo("PERFORMANCE_NOT_FOUND")
     }
 
     @Test
@@ -199,10 +232,11 @@ class CatalogRegisterApiTests(private val mvc: MockMvc) : IntegrationTestSupport
         val performanceId = registerPerformance(token, registerVenue(token))
         val body = mapOf("startsAt" to "2027-02-01T10:00:00Z")
 
-        postJson("/api/v1/performances/$performanceId/schedules", token, body).andExpect(status().isCreated)
+        assertThat(postJson("/api/v1/performances/$performanceId/schedules", token, body)).hasStatus(HttpStatus.CREATED)
 
-        postJson("/api/v1/performances/$performanceId/schedules", token, body)
-            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("DUPLICATE_SCHEDULE"))
+        assertThat(postJson("/api/v1/performances/$performanceId/schedules", token, body))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("DUPLICATE_SCHEDULE")
 
         assertThat(events.stream(ScheduleRegistered::class.java).filter { it.performanceId == performanceId }.count()).isEqualTo(1)
     }

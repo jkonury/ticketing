@@ -12,6 +12,7 @@ import io.github.ticketing.booking.application.port.provided.RegisterScheduleSea
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
+import io.github.ticketing.expectStatus
 import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
@@ -29,16 +30,13 @@ import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import org.springframework.test.context.bean.override.mockito.MockitoBean
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
@@ -50,7 +48,7 @@ import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
 class BookingPaymentFlowTests(
-    private val mvc: MockMvc,
+    private val mockMvcTester: MockMvcTester,
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
     private val jdbc: JdbcTemplate,
@@ -61,6 +59,9 @@ class BookingPaymentFlowTests(
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
+
+    private fun get(path: String) = mockMvcTester.get().uri(path)
+    private fun post(path: String) = mockMvcTester.post().uri(path)
 
     private fun newSchedule(seatCount: Int = 4): Long {
         val scheduleId = System.nanoTime()
@@ -80,35 +81,39 @@ class BookingPaymentFlowTests(
     private fun token(): String {
         val email = "u-${UUID.randomUUID()}@example.com"
         val body = { m: Map<String, String> -> json.writeValueAsString(m) }
-        mvc.perform(
-            post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
-                .content(body(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to "USER"))),
-        ).andExpect(status().isCreated)
-        val res = mvc.perform(
-            post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-                .content(body(mapOf("email" to email, "password" to "password123"))),
-        ).andExpect(status().isOk).andReturn().response.contentAsString
+        post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
+            .content(body(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to "USER")))
+            .exchange()
+            .expectStatus(HttpStatus.CREATED)
+        val res = post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
+            .content(body(mapOf("email" to email, "password" to "password123")))
+            .exchange()
+            .expectStatus(HttpStatus.OK)
+            .response.contentAsString
         return json.readValue(res, Map::class.java)["accessToken"] as String
     }
 
     private fun book(token: String, scheduleId: Long, seatIds: List<Long>): Long {
-        val res = mvc.perform(
-            post("/api/v1/bookings").header("Authorization", "Bearer $token").header("Idempotency-Key", UUID.randomUUID().toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("scheduleId" to scheduleId, "seatIds" to seatIds))),
-        ).andExpect(status().isCreated).andReturn().response.contentAsString
+        val res = post("/api/v1/bookings").header("Authorization", "Bearer $token").header("Idempotency-Key", UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("scheduleId" to scheduleId, "seatIds" to seatIds)))
+            .exchange()
+            .expectStatus(HttpStatus.CREATED)
+            .response.contentAsString
         return (json.readValue(res, Map::class.java)["bookingId"] as Number).toLong()
     }
 
-    private fun pay(token: String, bookingId: Long, key: String = UUID.randomUUID().toString()): ResultActions =
-        mvc.perform(post("/api/v1/bookings/$bookingId/payments").header("Authorization", "Bearer $token").header("Idempotency-Key", key))
+    private fun pay(token: String, bookingId: Long, key: String = UUID.randomUUID().toString()): MvcTestResult =
+        post("/api/v1/bookings/$bookingId/payments").header("Authorization", "Bearer $token").header("Idempotency-Key", key).exchange()
 
-    private fun cancel(token: String, bookingId: Long): ResultActions =
-        mvc.perform(post("/api/v1/bookings/$bookingId/cancel").header("Authorization", "Bearer $token"))
+    private fun cancel(token: String, bookingId: Long): MvcTestResult =
+        post("/api/v1/bookings/$bookingId/cancel").header("Authorization", "Bearer $token").exchange()
 
     private fun statusOf(token: String, bookingId: Long): String {
-        val res = mvc.perform(get("/api/v1/bookings/$bookingId").header("Authorization", "Bearer $token"))
-            .andExpect(status().isOk).andReturn().response.contentAsString
+        val res = get("/api/v1/bookings/$bookingId").header("Authorization", "Bearer $token")
+            .exchange()
+            .expectStatus(HttpStatus.OK)
+            .response.contentAsString
         return json.readValue(res, Map::class.java)["status"] as String
     }
 
@@ -134,11 +139,15 @@ class BookingPaymentFlowTests(
         val token = token()
         val id = book(token, schedule, listOf(1, 2))
 
-        pay(
-            token,
-            id,
-        ).andExpect(status().isAccepted).andExpect(jsonPath("$.bookingId").value(id)).andExpect(jsonPath("$.status").value("PENDING"))
-        pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.status").value("PENDING"))
+        assertThat(pay(token, id))
+            .hasStatus(HttpStatus.ACCEPTED)
+            .bodyJson().apply {
+                extractingPath("$.bookingId").convertTo(Long::class.java).isEqualTo(id)
+                extractingPath("$.status").isEqualTo("PENDING")
+            }
+        assertThat(pay(token, id))
+            .hasStatus(HttpStatus.ACCEPTED)
+            .bodyJson().extractingPath("$.status").isEqualTo("PENDING")
 
         val requested = collector.of(PaymentRequested::class.java) { it.orderId == id }
 
@@ -153,9 +162,9 @@ class BookingPaymentFlowTests(
         val owner = token()
         val id = book(owner, schedule, listOf(1))
 
-        mvc.perform(post("/api/v1/bookings/$id/payments").header("Authorization", "Bearer $owner")).andExpect(status().isBadRequest)
+        post("/api/v1/bookings/$id/payments").header("Authorization", "Bearer $owner").assertThat().hasStatus(HttpStatus.BAD_REQUEST)
 
-        pay(token(), id).andExpect(status().isForbidden)
+        assertThat(pay(token(), id)).hasStatus(HttpStatus.FORBIDDEN)
     }
 
     @Test
@@ -165,7 +174,9 @@ class BookingPaymentFlowTests(
         val id = book(token, schedule, listOf(1))
         clock.now = clock.now.plus(Duration.ofMinutes(6))
 
-        pay(token, id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("BOOKING_EXPIRED"))
+        assertThat(pay(token, id))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("BOOKING_EXPIRED")
 
         assertThat(statusOf(token, id)).isEqualTo("EXPIRED")
         assertThat(collector.of(BookingExpired::class.java) { it.bookingId == id }).hasSize(1)
@@ -178,7 +189,7 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1, 2))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
 
         succeed(id, amount = BigDecimal(200000))
         awaitStatus(token, id, "CONFIRMED")
@@ -209,7 +220,7 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
 
         tx.executeWithoutResult { publisher.publishEvent(PaymentFailed(1, id, "카드 한도 초과", Instant.now())) }
 
@@ -231,7 +242,7 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
         clock.now = clock.now.plus(Duration.ofMinutes(6))
 
         succeed(id)
@@ -256,8 +267,8 @@ class BookingPaymentFlowTests(
         redis.delete(listOf(holdKey(ScheduleId(schedule), SeatId(1)), holdKey(ScheduleId(schedule), SeatId(2))))
         val bookingB = book(tokenB, schedule, listOf(2, 3))
 
-        pay(tokenA, bookingA).andExpect(status().isAccepted)
-        pay(tokenB, bookingB).andExpect(status().isAccepted)
+        pay(tokenA, bookingA).expectStatus(HttpStatus.ACCEPTED)
+        pay(tokenB, bookingB).expectStatus(HttpStatus.ACCEPTED)
         succeed(bookingB, amount = BigDecimal(200000))
         awaitStatus(tokenB, bookingB, "CONFIRMED")
 
@@ -281,7 +292,7 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1, 2))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
 
         succeed(id, amount = BigDecimal(100000))
 
@@ -314,11 +325,13 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
         succeed(id)
         awaitStatus(token, id, "CONFIRMED")
 
-        pay(token, id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("INVALID_BOOKING_STATE"))
+        assertThat(pay(token, id))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_BOOKING_STATE")
 
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
     }
@@ -328,10 +341,12 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
-        pay(token, id).andExpect(status().isAccepted)
-        cancel(token, id).andExpect(status().isOk)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
+        cancel(token, id).expectStatus(HttpStatus.OK)
 
-        pay(token, id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("INVALID_BOOKING_STATE"))
+        assertThat(pay(token, id))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_BOOKING_STATE")
     }
 
     @Test
@@ -339,10 +354,12 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
         clock.now = clock.now.plus(Duration.ofMinutes(6))
 
-        pay(token, id).andExpect(status().isAccepted).andExpect(jsonPath("$.status").value("PENDING"))
+        assertThat(pay(token, id))
+            .hasStatus(HttpStatus.ACCEPTED)
+            .bodyJson().extractingPath("$.status").isEqualTo("PENDING")
 
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
     }
@@ -352,12 +369,14 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1, 2))
-        pay(token, id).andExpect(status().isAccepted)
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
         succeed(id, amount = BigDecimal(200000))
         awaitStatus(token, id, "CONFIRMED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("SOLD") }
 
-        cancel(token, id).andExpect(status().isOk).andExpect(jsonPath("$.status").value("CANCELLED"))
+        assertThat(cancel(token, id))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.status").isEqualTo("CANCELLED")
 
         assertThat(soldSeatCount(id)).isZero()
         assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE")
@@ -368,7 +387,7 @@ class BookingPaymentFlowTests(
         assertThat(cancelled.organizerId).isEqualTo(2L)
         assertThat(cancelled.refundRequired).isTrue()
 
-        cancel(token, id).andExpect(status().isOk)
+        cancel(token, id).expectStatus(HttpStatus.OK)
 
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).hasSize(1)
     }

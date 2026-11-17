@@ -8,12 +8,9 @@ import org.awaitility.Awaitility.await
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
@@ -21,7 +18,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 class AuditLogIntegrationTests(
-    private val mvc: MockMvc,
+    private val mockMvcTester: MockMvcTester,
     private val dsl: DSLContext,
     private val recorder: AdminActionRecorder,
     private val publisher: ApplicationEventPublisher,
@@ -34,15 +31,21 @@ class AuditLogIntegrationTests(
 
     private fun token(role: String): String {
         val email = "audit-${UUID.randomUUID()}@example.com"
-        mvc.perform(
-            post("/api/v1/members").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동"))),
-        ).andExpect(status().isCreated)
+        mockMvcTester.post()
+            .uri("/api/v1/members")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동")))
+            .assertThat()
+            .hasStatus(HttpStatus.CREATED)
+
         dsl.execute("UPDATE member.member SET role = ? WHERE email = ?", role, email)
-        val body = mvc.perform(
-            post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123"))),
-        ).andExpect(status().isOk).andReturn().response.contentAsString
+        val result = mockMvcTester.post()
+            .uri("/api/v1/auth/tokens")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(mapOf("email" to email, "password" to "password123")))
+            .exchange()
+        assertThat(result).hasStatus(HttpStatus.OK)
+        val body = result.response.contentAsString
         return json.readValue(body, Map::class.java)["accessToken"].toString()
     }
 
@@ -78,8 +81,11 @@ class AuditLogIntegrationTests(
 
     @Test
     fun `비관리자는 감사 로그를 조회할 수 없다`() {
-        mvc.perform(get("/api/v1/admin/audit-logs").header("Authorization", "Bearer ${token("USER")}"))
-            .andExpect(status().isForbidden)
+        mockMvcTester.get()
+            .uri("/api/v1/admin/audit-logs")
+            .header("Authorization", "Bearer ${token("USER")}")
+            .assertThat()
+            .hasStatus(HttpStatus.FORBIDDEN)
     }
 
     @Test
@@ -90,26 +96,45 @@ class AuditLogIntegrationTests(
         repeat(3) { record(action, 99L, base.plusSeconds(it * 10L)) }
         record("OTHER", 99L, base)
 
-        val first = mvc.perform(get("/api/v1/admin/audit-logs?action=$action&size=2").header("Authorization", "Bearer $admin"))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.items.length()").value(2))
-            .andExpect(jsonPath("$.items[0].detail.k").value("v"))
-            .andExpect(jsonPath("$.items[0].actorId").value(99))
-            .andReturn().response.contentAsString
+        val result = mockMvcTester.get()
+            .uri("/api/v1/admin/audit-logs?action=$action&size=2")
+            .header("Authorization", "Bearer $admin")
+            .exchange()
+
+        assertThat(result)
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.items.length()").isEqualTo(2)
+                extractingPath("$.items[0].detail.k").isEqualTo("v")
+                extractingPath("$.items[0].actorId").isEqualTo(99)
+            }
+        val first = result.response.contentAsString
         val cursor = json.readValue(first, Map::class.java)["nextCursor"]
-        assertThat(cursor).isNotNull
+        assertThat(cursor).isNotNull()
 
-        mvc.perform(get("/api/v1/admin/audit-logs?action=$action&size=2&cursor=$cursor").header("Authorization", "Bearer $admin"))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.items.length()").value(1))
-            .andExpect(jsonPath("$.nextCursor").doesNotExist())
+        mockMvcTester.get()
+            .uri("/api/v1/admin/audit-logs?action=$action&size=2&cursor=$cursor")
+            .header("Authorization", "Bearer $admin")
+            .assertThat()
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.items.length()").isEqualTo(1)
+                extractingPath("$.nextCursor").isNull()
+            }
 
-        mvc.perform(
-            get("/api/v1/admin/audit-logs?action=$action&actorId=99&from=2030-01-01T00:00:05Z&to=2030-01-01T00:00:20Z")
-                .header("Authorization", "Bearer $admin"),
-        ).andExpect(status().isOk).andExpect(jsonPath("$.items.length()").value(1))
+        mockMvcTester.get()
+            .uri("/api/v1/admin/audit-logs?action=$action&actorId=99&from=2030-01-01T00:00:05Z&to=2030-01-01T00:00:20Z")
+            .header("Authorization", "Bearer $admin")
+            .assertThat()
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.items.length()").isEqualTo(1)
+            }
 
-        mvc.perform(get("/api/v1/admin/audit-logs?size=101").header("Authorization", "Bearer $admin"))
-            .andExpect(status().isBadRequest)
+        mockMvcTester.get()
+            .uri("/api/v1/admin/audit-logs?size=101")
+            .header("Authorization", "Bearer $admin")
+            .assertThat()
+            .hasStatus(HttpStatus.BAD_REQUEST)
     }
 }

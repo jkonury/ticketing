@@ -9,18 +9,18 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.assertj.MockMvcTester
 import java.time.Duration
 import java.util.UUID
 
 class PaymentFailurePathTests(
-    mvc: MockMvc,
+    mockMvcTester: MockMvcTester,
     jdbc: JdbcTemplate,
     redis: StringRedisTemplate,
     pg: TestPg,
     clock: MutableClock,
     collector: EventCollector,
-) : FlowSupport(mvc, jdbc, redis, pg, clock, collector) {
+) : FlowSupport(mockMvcTester, jdbc, redis, pg, clock, collector) {
 
     @Test
     fun `결제 실패는 예매를 취소하고 좌석을 반환한다`() {

@@ -1,14 +1,13 @@
 package io.github.ticketing.settlement.adapter.provided.web
 
 import io.github.ticketing.IntegrationTestSupport
+import org.assertj.core.api.Assertions.assertThat
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import ticketing.jooq.settlement.tables.references.DAILY_SETTLEMENT
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
@@ -16,19 +15,19 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.UUID
 
-class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLContext) : IntegrationTestSupport() {
+class SettlementApiIntegrationTests(private val mockMvcTester: MockMvcTester, private val dsl: DSLContext) : IntegrationTestSupport() {
     private val json = JsonMapper.builder().build()
 
     private fun member(role: String): Pair<Long, String> {
         val email = "${UUID.randomUUID()}@example.com"
         val signup = json.writeValueAsString(mapOf("email" to email, "password" to "password123", "name" to "홍길동", "role" to role))
-        val registered = mvc.perform(post("/api/v1/members").contentType(MediaType.APPLICATION_JSON).content(signup))
-            .andExpect(status().isCreated).andReturn().response.contentAsString
+        val registered = mockMvcTester.post().uri("/api/v1/members").contentType(MediaType.APPLICATION_JSON).content(signup).exchange()
+        assertThat(registered).hasStatus(HttpStatus.CREATED)
         val login = json.writeValueAsString(mapOf("email" to email, "password" to "password123"))
-        val token = mvc.perform(post("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON).content(login))
-            .andExpect(status().isOk).andReturn().response.contentAsString
-        return (json.readValue(registered, Map::class.java)["id"] as Number).toLong() to
-            (json.readValue(token, Map::class.java)["accessToken"] as String)
+        val token = mockMvcTester.post().uri("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON).content(login).exchange()
+        assertThat(token).hasStatus(HttpStatus.OK)
+        return (json.readValue(registered.response.contentAsString, Map::class.java)["id"] as Number).toLong() to
+            (json.readValue(token.response.contentAsString, Map::class.java)["accessToken"] as String)
     }
 
     private fun insert(organizer: Long, performance: Long, date: String, platformDiscount: Long = 0) {
@@ -49,6 +48,9 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
             .execute()
     }
 
+    private fun get(url: String, token: String): MvcTestResult =
+        mockMvcTester.get().uri(url).header("Authorization", "Bearer $token").exchange()
+
     @Test
     fun `주최자는 기간 내 자기 정산만 날짜와 공연 순으로 조회한다`() {
         val (owner, token) = member("ORGANIZER")
@@ -60,18 +62,26 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
         insert(owner, base + 4, "2026-10-31")
         insert(other, base + 5, "2026-11-01")
 
-        mvc.perform(get("/api/v1/settlements?from=2026-11-01&to=2026-11-10").header("Authorization", "Bearer $token"))
-            .andExpect(status().isOk).andExpect(jsonPath("$.length()").value(3))
-            .andExpect(jsonPath("$[0].performanceId").value(base + 3))
-            .andExpect(jsonPath("$[1].performanceId").value(base + 1))
-            .andExpect(jsonPath("$[2].performanceId").value(base + 2))
-            .andExpect(jsonPath("$[0].settlementDate").value("2026-11-01"))
-            .andExpect(jsonPath("$[0].saleCount").value(3)).andExpect(jsonPath("$[0].saleAmount").value(300000))
-            .andExpect(jsonPath("$[0].refundCount").value(1)).andExpect(jsonPath("$[0].refundAmount").value(100000))
-            .andExpect(jsonPath("$[0].netAmount").value(200000)).andExpect(jsonPath("$[0].feeRate").value(0.1))
-            .andExpect(jsonPath("$[0].feeAmount").value(20000)).andExpect(jsonPath("$[0].payoutAmount").value(180000))
-        mvc.perform(get("/api/v1/settlements?from=2026-12-01&to=2026-12-31").header("Authorization", "Bearer $token"))
-            .andExpect(status().isOk).andExpect(jsonPath("$.length()").value(0))
+        assertThat(get("/api/v1/settlements?from=2026-11-01&to=2026-11-10", token))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.length()").isEqualTo(3)
+                extractingPath("$[0].performanceId").isEqualTo(base + 3)
+                extractingPath("$[1].performanceId").isEqualTo(base + 1)
+                extractingPath("$[2].performanceId").isEqualTo(base + 2)
+                extractingPath("$[0].settlementDate").isEqualTo("2026-11-01")
+                extractingPath("$[0].saleCount").isEqualTo(3)
+                extractingPath("$[0].saleAmount").isEqualTo(300000)
+                extractingPath("$[0].refundCount").isEqualTo(1)
+                extractingPath("$[0].refundAmount").isEqualTo(100000)
+                extractingPath("$[0].netAmount").isEqualTo(200000)
+                extractingPath("$[0].feeRate").isEqualTo(0.1)
+                extractingPath("$[0].feeAmount").isEqualTo(20000)
+                extractingPath("$[0].payoutAmount").isEqualTo(180000)
+            }
+        assertThat(get("/api/v1/settlements?from=2026-12-01&to=2026-12-31", token))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.length()").isEqualTo(0)
     }
 
     @Test
@@ -79,11 +89,14 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
         val (owner, token) = member("ORGANIZER")
         insert(owner, System.nanoTime(), "2026-11-05", platformDiscount = 2000)
 
-        mvc.perform(get("/api/v1/settlements?from=2026-11-01&to=2026-11-10").header("Authorization", "Bearer $token"))
-            .andExpect(status().isOk).andExpect(jsonPath("$[0].saleAmount").value(300000))
-            .andExpect(jsonPath("$[0].platformDiscountAmount").doesNotExist())
-            .andExpect(jsonPath("$[0].platformDiscount").doesNotExist())
-            .andExpect(jsonPath("$[0].discountAmount").doesNotExist())
+        assertThat(get("/api/v1/settlements?from=2026-11-01&to=2026-11-10", token))
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$[0].saleAmount").isEqualTo(300000)
+                doesNotHavePath("$[0].platformDiscountAmount")
+                doesNotHavePath("$[0].platformDiscount")
+                doesNotHavePath("$[0].discountAmount")
+            }
     }
 
     @Test
@@ -91,8 +104,8 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
         val (_, token) = member("USER")
         val url = "/api/v1/settlements?from=2026-11-01&to=2026-11-10"
 
-        mvc.perform(get(url).header("Authorization", "Bearer $token")).andExpect(status().isForbidden)
-        mvc.perform(get(url)).andExpect(status().isUnauthorized)
+        assertThat(get(url, token)).hasStatus(HttpStatus.FORBIDDEN)
+        mockMvcTester.get().uri(url).assertThat().hasStatus(HttpStatus.UNAUTHORIZED)
     }
 
     @Test
@@ -101,8 +114,9 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
         val queries = listOf("from=2026-11-10&to=2026-11-01", "from=2026-11-01&to=2026-12-02", "from=bad&to=2026-11-10", "to=2026-11-10")
 
         queries.forEach { query ->
-            mvc.perform(get("/api/v1/settlements?$query").header("Authorization", "Bearer $token"))
-                .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("INVALID_SETTLEMENT_PERIOD"))
+            assertThat(get("/api/v1/settlements?$query", token))
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson().extractingPath("$.code").isEqualTo("INVALID_SETTLEMENT_PERIOD")
         }
     }
 }

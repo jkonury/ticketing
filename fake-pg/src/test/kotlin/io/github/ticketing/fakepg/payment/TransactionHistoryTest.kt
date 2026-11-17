@@ -1,14 +1,13 @@
 package io.github.ticketing.fakepg.payment
 
 import org.junit.jupiter.api.Test
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.http.HttpStatus
+import org.springframework.test.web.servlet.assertj.MockMvcTester
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class TransactionHistoryTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
+class TransactionHistoryTest(mockMvcTester: MockMvcTester, clock: MutableClock) : FakePgTestSupport(mockMvcTester, clock) {
 
     @Test
     fun `거래 내역은 요청 시각의 한국 날짜로 필터링한다`() {
@@ -50,7 +49,7 @@ class TransactionHistoryTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTest
 
     @Test
     fun `date가 없거나 형식이 틀리면 400이다`() {
-        mockMvc.perform(get("/v1/transactions")).andExpect(status().isBadRequest)
-        mockMvc.perform(get("/v1/transactions").param("date", "2031/05/05")).andExpect(status().isBadRequest)
+        mockMvcTester.get().uri("/v1/transactions").assertThat().hasStatus(HttpStatus.BAD_REQUEST)
+        mockMvcTester.get().uri("/v1/transactions").param("date", "2031/05/05").assertThat().hasStatus(HttpStatus.BAD_REQUEST)
     }
 }

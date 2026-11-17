@@ -1,26 +1,29 @@
 package io.github.ticketing.fakepg.payment
 
 import io.github.ticketing.fakepg.payment.service.WebhookSender
+import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.kotlin.await
 import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.Test
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.http.HttpStatus
+import org.springframework.test.web.servlet.assertj.MockMvcTester
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSupport(mockMvc, clock) {
+class PaymentScenarioTest(mockMvcTester: MockMvcTester, clock: MutableClock) : FakePgTestSupport(mockMvcTester, clock) {
 
     @Test
     fun `SUCCESS는 202 PENDING을 돌려주고 승인 웹훅 1건을 보낸다`() {
         val result = requestPayment("order-success", scenario = "SUCCESS")
-            .andExpect(status().isAccepted)
-            .andExpect(jsonPath("$.status").value("PENDING"))
-            .andExpect(jsonPath("$.transactionId").isNotEmpty)
+        assertThat(result)
+            .hasStatus(HttpStatus.ACCEPTED)
+            .bodyJson().apply {
+                extractingPath("$.status").isEqualTo("PENDING")
+                extractingPath("$.transactionId").asString().isNotEmpty()
+            }
         val transactionId = transactionIdOf(result)
 
         val webhooks = awaitWebhooks("order-success", 1)
@@ -37,7 +40,9 @@ class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSup
 
     @Test
     fun `FAIL은 CARD_DECLINED 사유의 실패 웹훅을 보내고 거래는 FAILED가 된다`() {
-        val transactionId = transactionIdOf(requestPayment("order-fail", scenario = "FAIL").andExpect(status().isAccepted))
+        val accepted = requestPayment("order-fail", scenario = "FAIL")
+        assertThat(accepted).hasStatus(HttpStatus.ACCEPTED)
+        val transactionId = transactionIdOf(accepted)
 
         val event = awaitWebhooks("order-fail", 1).single().json
 
@@ -49,7 +54,8 @@ class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSup
     @Test
     fun `TIMEOUT은 응답만 timeout-delay만큼 늦고 결제는 정상 승인된다`() {
         val started = System.nanoTime()
-        val result = requestPayment("order-timeout", scenario = "TIMEOUT").andExpect(status().isAccepted)
+        val result = requestPayment("order-timeout", scenario = "TIMEOUT")
+        assertThat(result).hasStatus(HttpStatus.ACCEPTED)
         val elapsed = Duration.ofNanos(System.nanoTime() - started)
 
         assertTrue(elapsed >= Duration.ofMillis(500), "응답이 timeout-delay(500ms)만큼 늦어야 한다: $elapsed")
@@ -60,7 +66,9 @@ class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSup
 
     @Test
     fun `DELAYED는 delayed-webhook-delay 동안 PENDING으로 남다가 승인 웹훅을 보낸다`() {
-        val transactionId = transactionIdOf(requestPayment("order-delayed", scenario = "DELAYED").andExpect(status().isAccepted))
+        val accepted = requestPayment("order-delayed", scenario = "DELAYED")
+        assertThat(accepted).hasStatus(HttpStatus.ACCEPTED)
+        val transactionId = transactionIdOf(accepted)
 
         assertEquals("PENDING", statusOf(transactionId))
         assertTrue(TestWebhookReceiver.forOrder("order-delayed").isEmpty())
@@ -72,7 +80,7 @@ class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSup
 
     @Test
     fun `DUPLICATE_WEBHOOK은 같은 eventId의 승인 웹훅을 duplicate-count만큼 더 보낸다`() {
-        requestPayment("order-dup", scenario = "DUPLICATE_WEBHOOK").andExpect(status().isAccepted)
+        assertThat(requestPayment("order-dup", scenario = "DUPLICATE_WEBHOOK")).hasStatus(HttpStatus.ACCEPTED)
 
         val webhooks = awaitWebhooks("order-dup", 3)
         assertNoMoreWebhooks("order-dup", 3)
@@ -99,14 +107,14 @@ class PaymentScenarioTest(mockMvc: MockMvc, clock: MutableClock) : FakePgTestSup
 
     @Test
     fun `시나리오를 생략하면 확률이 0일 때 SUCCESS로 진행한다`() {
-        requestPayment("order-default").andExpect(status().isAccepted)
+        assertThat(requestPayment("order-default")).hasStatus(HttpStatus.ACCEPTED)
 
         assertEquals("PAYMENT_APPROVED", awaitWebhooks("order-default", 1).single().type)
     }
 
     @Test
     fun `알 수 없는 시나리오나 잘못된 금액은 400이다`() {
-        requestPayment("order-bad", scenario = "UNKNOWN").andExpect(status().isBadRequest)
-        requestPayment("order-bad", key = "k-neg", amount = -1).andExpect(status().isBadRequest)
+        assertThat(requestPayment("order-bad", scenario = "UNKNOWN")).hasStatus(HttpStatus.BAD_REQUEST)
+        assertThat(requestPayment("order-bad", key = "k-neg", amount = -1)).hasStatus(HttpStatus.BAD_REQUEST)
     }
 }

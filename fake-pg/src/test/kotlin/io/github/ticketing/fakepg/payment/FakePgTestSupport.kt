@@ -13,10 +13,8 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import org.springframework.test.web.servlet.assertj.MvcTestResult
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import java.net.InetSocketAddress
@@ -105,7 +103,7 @@ object TestWebhookReceiver {
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestClockConfig::class)
-abstract class FakePgTestSupport(protected val mockMvc: MockMvc, protected val clock: MutableClock) {
+abstract class FakePgTestSupport(protected val mockMvcTester: MockMvcTester, protected val clock: MutableClock) {
 
     protected val mapper: JsonMapper = JsonMapper.builder().build()
 
@@ -119,21 +117,21 @@ abstract class FakePgTestSupport(protected val mockMvc: MockMvc, protected val c
         key: String = "key-$orderId",
         amount: Long = 12000,
         scenario: String? = null,
-    ): ResultActions {
+    ): MvcTestResult {
         val scenarioJson = scenario?.let { ""","scenario":"$it"""" } ?: ""
-        return mockMvc.perform(
-            post("/v1/payments")
-                .header("Idempotency-Key", key)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"orderId":"$orderId","amount":$amount$scenarioJson}"""),
-        )
+        return mockMvcTester.post()
+            .uri("/v1/payments")
+            .header("Idempotency-Key", key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""{"orderId":"$orderId","amount":$amount$scenarioJson}""")
+            .exchange()
     }
 
-    protected fun transactionIdOf(result: ResultActions): String =
-        mapper.readTree(result.andReturn().response.contentAsString).get("transactionId").asString()
+    protected fun transactionIdOf(result: MvcTestResult): String =
+        mapper.readTree(result.response.contentAsString).get("transactionId").asString()
 
     protected fun listTransactions(date: String): List<JsonNode> =
-        mapper.readTree(mockMvc.perform(get("/v1/transactions").param("date", date)).andReturn().response.contentAsString).toList()
+        mapper.readTree(mockMvcTester.get().uri("/v1/transactions").param("date", date).exchange().response.contentAsString).toList()
 
     protected fun statusOf(transactionId: String, date: String = "2030-01-01"): String? =
         listTransactions(date).firstOrNull { it.get("transactionId").asString() == transactionId }?.get("status")?.asString()

@@ -12,16 +12,15 @@ import io.github.ticketing.catalog.service.CatalogRegistrationService.SeatSpec
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.cache.CacheManager
-import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.http.HttpStatus
+import org.springframework.test.web.servlet.assertj.MockMvcTester
+import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.time.Instant
 
 class CatalogQueryApiTests(
-    private val mvc: MockMvc,
+    private val mockMvcTester: MockMvcTester,
     private val registration: CatalogRegistrationService,
     private val cacheManager: CacheManager,
 ) : IntegrationTestSupport() {
@@ -53,7 +52,11 @@ class CatalogQueryApiTests(
     private fun schedule(performanceId: Long, startsAt: String): Long =
         requireNotNull(registration.registerSchedule(RegisterScheduleCommand(organizerId, performanceId, Instant.parse(startsAt))).id)
 
-    private fun body(path: String) = json.readTree(mvc.perform(get(path)).andExpect(status().isOk).andReturn().response.contentAsString)
+    private fun body(path: String): JsonNode {
+        val result = mockMvcTester.get().uri(path).exchange()
+        assertThat(result).hasStatus(HttpStatus.OK)
+        return json.readTree(result.response.contentAsString)
+    }
 
     @Test
     fun `공연 목록은 ID 내림차순 커서로 페이지를 넘기고 마지막 페이지의 nextCursor는 null이다`() {
@@ -93,8 +96,8 @@ class CatalogQueryApiTests(
 
     @Test
     fun `size는 최대 100으로 제한된다`() {
-        mvc.perform(get("/api/v1/performances?size=100000")).andExpect(status().isOk)
-        mvc.perform(get("/api/v1/performances?size=0")).andExpect(status().isOk)
+        mockMvcTester.get().uri("/api/v1/performances?size=100000").assertThat().hasStatus(HttpStatus.OK)
+        mockMvcTester.get().uri("/api/v1/performances?size=0").assertThat().hasStatus(HttpStatus.OK)
     }
 
     @Test
@@ -103,17 +106,22 @@ class CatalogQueryApiTests(
         val s2 = schedule(performanceId, "2027-04-02T10:00:00Z")
         val s1 = schedule(performanceId, "2027-04-01T10:00:00Z")
 
-        mvc.perform(get("/api/v1/performances/$performanceId"))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.title").value("조회 공연"))
-            .andExpect(jsonPath("$.venueName").value("조회홀"))
-            .andExpect(jsonPath("$.prices.length()").value(2))
-            .andExpect(jsonPath("$.prices[0].grade").value("VIP"))
-            .andExpect(jsonPath("$.schedules[0].id").value(s1))
-            .andExpect(jsonPath("$.schedules[1].id").value(s2))
+        mockMvcTester.get().uri("/api/v1/performances/$performanceId")
+            .assertThat()
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.title").isEqualTo("조회 공연")
+                extractingPath("$.venueName").isEqualTo("조회홀")
+                extractingPath("$.prices.length()").isEqualTo(2)
+                extractingPath("$.prices[0].grade").isEqualTo("VIP")
+                extractingPath("$.schedules[0].id").convertTo(Long::class.java).isEqualTo(s1)
+                extractingPath("$.schedules[1].id").convertTo(Long::class.java).isEqualTo(s2)
+            }
 
-        mvc.perform(get("/api/v1/performances/999999999")).andExpect(status().isNotFound)
-            .andExpect(jsonPath("$.code").value("PERFORMANCE_NOT_FOUND"))
+        mockMvcTester.get().uri("/api/v1/performances/999999999")
+            .assertThat()
+            .hasStatus(HttpStatus.NOT_FOUND)
+            .bodyJson().extractingPath("$.code").isEqualTo("PERFORMANCE_NOT_FOUND")
     }
 
     @Test
@@ -121,15 +129,19 @@ class CatalogQueryApiTests(
         val performanceId = performance(venue())
         val scheduleId = schedule(performanceId, "2027-05-01T10:00:00Z")
 
-        mvc.perform(get("/api/v1/schedules/$scheduleId"))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.id").value(scheduleId))
-            .andExpect(jsonPath("$.performanceId").value(performanceId))
-            .andExpect(jsonPath("$.performanceTitle").value("조회 공연"))
-            .andExpect(jsonPath("$.startsAt").value("2027-05-01T10:00:00Z"))
-        mvc.perform(get("/api/v1/schedules/999999999"))
-            .andExpect(status().isNotFound)
-            .andExpect(jsonPath("$.code").value("SCHEDULE_NOT_FOUND"))
+        mockMvcTester.get().uri("/api/v1/schedules/$scheduleId")
+            .assertThat()
+            .hasStatus(HttpStatus.OK)
+            .bodyJson().apply {
+                extractingPath("$.id").convertTo(Long::class.java).isEqualTo(scheduleId)
+                extractingPath("$.performanceId").convertTo(Long::class.java).isEqualTo(performanceId)
+                extractingPath("$.performanceTitle").isEqualTo("조회 공연")
+                extractingPath("$.startsAt").isEqualTo("2027-05-01T10:00:00Z")
+            }
+        mockMvcTester.get().uri("/api/v1/schedules/999999999")
+            .assertThat()
+            .hasStatus(HttpStatus.NOT_FOUND)
+            .bodyJson().extractingPath("$.code").isEqualTo("SCHEDULE_NOT_FOUND")
     }
 
     @Test
@@ -144,8 +156,10 @@ class CatalogQueryApiTests(
         assertThat(seats[0]["price"].asInt()).isEqualTo(150000)
         assertThat(seats[2]["grade"].asString()).isEqualTo("R")
 
-        mvc.perform(get("/api/v1/schedules/999999999/seats")).andExpect(status().isNotFound)
-            .andExpect(jsonPath("$.code").value("SCHEDULE_NOT_FOUND"))
+        mockMvcTester.get().uri("/api/v1/schedules/999999999/seats")
+            .assertThat()
+            .hasStatus(HttpStatus.NOT_FOUND)
+            .bodyJson().extractingPath("$.code").isEqualTo("SCHEDULE_NOT_FOUND")
     }
 
     @Test
@@ -153,9 +167,9 @@ class CatalogQueryApiTests(
         val performanceId = performance(venue())
         val scheduleId = schedule(performanceId, "2027-06-01T10:00:00Z")
 
-        mvc.perform(get("/api/v1/performances")).andExpect(status().isOk)
-        mvc.perform(get("/api/v1/performances/$performanceId")).andExpect(status().isOk)
-        mvc.perform(get("/api/v1/schedules/$scheduleId/seats")).andExpect(status().isOk)
+        mockMvcTester.get().uri("/api/v1/performances").assertThat().hasStatus(HttpStatus.OK)
+        mockMvcTester.get().uri("/api/v1/performances/$performanceId").assertThat().hasStatus(HttpStatus.OK)
+        mockMvcTester.get().uri("/api/v1/schedules/$scheduleId/seats").assertThat().hasStatus(HttpStatus.OK)
     }
 
     @Test
@@ -166,7 +180,7 @@ class CatalogQueryApiTests(
         cache.evict(performanceId)
 
         assertThat(cache.get(performanceId)).isNull()
-        val first = mvc.perform(get("/api/v1/performances/$performanceId")).andReturn().response.contentAsString
+        val first = mockMvcTester.get().uri("/api/v1/performances/$performanceId").exchange().response.contentAsString
 
         assertThat(cache.get(performanceId)).isNotNull()
 
@@ -174,14 +188,19 @@ class CatalogQueryApiTests(
         val cached = requireNotNull(cache.get(performanceId)?.get()) as io.github.ticketing.catalog.query.PerformanceDetail
         cache.put(performanceId, cached.copy(title = "캐시된 제목"))
 
-        mvc.perform(get("/api/v1/performances/$performanceId")).andExpect(jsonPath("$.title").value("캐시된 제목"))
+        mockMvcTester.get().uri("/api/v1/performances/$performanceId")
+            .assertThat()
+            .bodyJson().extractingPath("$.title").isEqualTo("캐시된 제목")
 
         schedule(performanceId, "2027-07-02T10:00:00Z")
 
         assertThat(cache.get(performanceId)).isNull()
-        mvc.perform(get("/api/v1/performances/$performanceId"))
-            .andExpect(jsonPath("$.title").value("조회 공연"))
-            .andExpect(jsonPath("$.schedules.length()").value(2))
+        mockMvcTester.get().uri("/api/v1/performances/$performanceId")
+            .assertThat()
+            .bodyJson().apply {
+                extractingPath("$.title").isEqualTo("조회 공연")
+                extractingPath("$.schedules.length()").isEqualTo(2)
+            }
         assertThat(first).contains("조회 공연")
     }
 }
