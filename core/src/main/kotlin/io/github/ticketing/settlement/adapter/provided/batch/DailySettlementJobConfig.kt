@@ -86,7 +86,7 @@ class DailySettlementJobConfig {
     ): ItemProcessor<PerformanceTotals, DailySettlement> = ItemProcessor { totals ->
         DailySettlementCalculator.settle(
             parseDate(targetDate), totals.performanceId, totals.organizerId, totals.saleCount, totals.saleAmount,
-            totals.refundCount, totals.refundAmount, FeeRate(properties.feeRate), clock.instant(),
+            totals.refundCount, totals.refundAmount, FeeRate(properties.feeRate), clock.instant(), totals.platformDiscountAmount,
         )
     }
 }

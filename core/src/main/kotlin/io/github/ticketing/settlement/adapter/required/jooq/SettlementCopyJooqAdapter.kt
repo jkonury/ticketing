@@ -18,6 +18,8 @@ class SettlementCopyJooqAdapter(private val dsl: DSLContext) : SettlementCopyCom
         .set(BOOKING_SALE.ORGANIZER_ID, command.organizerId)
         .set(BOOKING_SALE.SCHEDULE_ID, command.scheduleId)
         .set(BOOKING_SALE.AMOUNT, command.amount.longValueExact())
+        .set(BOOKING_SALE.LIST_AMOUNT, command.listAmount.longValueExact())
+        .set(BOOKING_SALE.DISCOUNT_AMOUNT, command.discountAmount.longValueExact())
         .set(BOOKING_SALE.CONFIRMED_AT, command.confirmedAt.atOffset(ZoneOffset.UTC))
         .set(BOOKING_SALE.RECEIVED_AT, receivedAt.atOffset(ZoneOffset.UTC))
         .onConflict(BOOKING_SALE.BOOKING_ID).doNothing().execute() == 1

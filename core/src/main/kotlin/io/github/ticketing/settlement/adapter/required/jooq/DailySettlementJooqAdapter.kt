@@ -42,9 +42,10 @@ class DailySettlementJooqAdapter(private val dsl: DSLContext) :
             BOOKING_SALE.PERFORMANCE_ID,
             BOOKING_SALE.ORGANIZER_ID,
             DSL.inline(1).`as`("sale_count"),
-            BOOKING_SALE.AMOUNT.cast(BigDecimal::class.java).`as`("sale_amount"),
+            BOOKING_SALE.LIST_AMOUNT.cast(BigDecimal::class.java).`as`("sale_amount"),
             DSL.inline(0).`as`("refund_count"),
             DSL.inline(BigDecimal.ZERO).`as`("refund_amount"),
+            BOOKING_SALE.DISCOUNT_AMOUNT.cast(BigDecimal::class.java).`as`("platform_discount_amount"),
         ).from(BOOKING_SALE).where(BOOKING_SALE.CONFIRMED_AT.ge(start).and(BOOKING_SALE.CONFIRMED_AT.lt(end)))
         val refund = dsl.select(
             BOOKING_REFUND.PERFORMANCE_ID,
@@ -52,7 +53,8 @@ class DailySettlementJooqAdapter(private val dsl: DSLContext) :
             DSL.inline(0),
             DSL.inline(BigDecimal.ZERO),
             DSL.inline(1),
-            BOOKING_SALE.AMOUNT.cast(BigDecimal::class.java),
+            BOOKING_SALE.LIST_AMOUNT.cast(BigDecimal::class.java),
+            DSL.inline(BigDecimal.ZERO),
         ).from(BOOKING_REFUND).join(BOOKING_SALE).on(BOOKING_REFUND.BOOKING_ID.eq(BOOKING_SALE.BOOKING_ID))
             .where(BOOKING_REFUND.CANCELLED_AT.ge(start).and(BOOKING_REFUND.CANCELLED_AT.lt(end)))
         val events = sale.unionAll(refund).asTable("events")
@@ -62,7 +64,8 @@ class DailySettlementJooqAdapter(private val dsl: DSLContext) :
         val saleAmount = DSL.sum(requireNotNull(events.field("sale_amount", BigDecimal::class.java)))
         val refundCount = DSL.sum(requireNotNull(events.field("refund_count", Int::class.java)))
         val refundAmount = DSL.sum(requireNotNull(events.field("refund_amount", BigDecimal::class.java)))
-        return dsl.select(performance, organizer, saleCount, saleAmount, refundCount, refundAmount)
+        val platformDiscount = DSL.sum(requireNotNull(events.field("platform_discount_amount", BigDecimal::class.java)))
+        return dsl.select(performance, organizer, saleCount, saleAmount, refundCount, refundAmount, platformDiscount)
             .from(events).where(if (afterPerformanceId == null) DSL.noCondition() else performance.gt(afterPerformanceId))
             .groupBy(performance, organizer).orderBy(performance).limit(limit)
             .fetch { row ->
@@ -73,6 +76,7 @@ class DailySettlementJooqAdapter(private val dsl: DSLContext) :
                     requireNotNull(row.value4()),
                     requireNotNull(row.value5()).toInt(),
                     requireNotNull(row.value6()),
+                    requireNotNull(row.value7()),
                 )
             }
     }
@@ -91,6 +95,7 @@ class DailySettlementJooqAdapter(private val dsl: DSLContext) :
                 .set(DAILY_SETTLEMENT.FEE_RATE, settlement.feeRate.value)
                 .set(DAILY_SETTLEMENT.FEE_AMOUNT, settlement.feeAmount)
                 .set(DAILY_SETTLEMENT.PAYOUT_AMOUNT, settlement.payoutAmount)
+                .set(DAILY_SETTLEMENT.PLATFORM_DISCOUNT_AMOUNT, settlement.platformDiscountAmount)
                 .set(DAILY_SETTLEMENT.CALCULATED_AT, settlement.calculatedAt.atOffset(ZoneOffset.UTC))
                 .onConflict(DAILY_SETTLEMENT.SETTLEMENT_DATE, DAILY_SETTLEMENT.PERFORMANCE_ID).doUpdate()
                 .set(DAILY_SETTLEMENT.ORGANIZER_ID, settlement.organizerId)
@@ -102,6 +107,7 @@ class DailySettlementJooqAdapter(private val dsl: DSLContext) :
                 .set(DAILY_SETTLEMENT.FEE_RATE, settlement.feeRate.value)
                 .set(DAILY_SETTLEMENT.FEE_AMOUNT, settlement.feeAmount)
                 .set(DAILY_SETTLEMENT.PAYOUT_AMOUNT, settlement.payoutAmount)
+                .set(DAILY_SETTLEMENT.PLATFORM_DISCOUNT_AMOUNT, settlement.platformDiscountAmount)
                 .set(DAILY_SETTLEMENT.CALCULATED_AT, settlement.calculatedAt.atOffset(ZoneOffset.UTC))
                 .execute()
         }

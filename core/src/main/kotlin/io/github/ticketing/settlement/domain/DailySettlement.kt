@@ -23,6 +23,7 @@ data class DailySettlement(
     val feeRate: FeeRate,
     val feeAmount: BigDecimal,
     val payoutAmount: BigDecimal,
+    val platformDiscountAmount: BigDecimal,
     val calculatedAt: Instant,
 )
 
@@ -37,12 +38,13 @@ object DailySettlementCalculator {
         refundAmount: BigDecimal,
         feeRate: FeeRate,
         calculatedAt: Instant,
+        platformDiscountAmount: BigDecimal = BigDecimal.ZERO,
     ): DailySettlement {
         val netAmount = saleAmount - refundAmount
         val feeAmount = netAmount.multiply(feeRate.value).setScale(0, RoundingMode.DOWN)
         return DailySettlement(
             date, performanceId, organizerId, saleCount, saleAmount, refundCount, refundAmount,
-            netAmount, feeRate, feeAmount, netAmount - feeAmount, calculatedAt,
+            netAmount, feeRate, feeAmount, netAmount - feeAmount, platformDiscountAmount, calculatedAt,
         )
     }
 }

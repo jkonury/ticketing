@@ -31,7 +31,7 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
             (json.readValue(token, Map::class.java)["accessToken"] as String)
     }
 
-    private fun insert(organizer: Long, performance: Long, date: String) {
+    private fun insert(organizer: Long, performance: Long, date: String, platformDiscount: Long = 0) {
         dsl.insertInto(DAILY_SETTLEMENT)
             .set(DAILY_SETTLEMENT.SETTLEMENT_DATE, LocalDate.parse(date))
             .set(DAILY_SETTLEMENT.PERFORMANCE_ID, performance)
@@ -44,6 +44,7 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
             .set(DAILY_SETTLEMENT.FEE_RATE, BigDecimal("0.1000"))
             .set(DAILY_SETTLEMENT.FEE_AMOUNT, BigDecimal(20000))
             .set(DAILY_SETTLEMENT.PAYOUT_AMOUNT, BigDecimal(180000))
+            .set(DAILY_SETTLEMENT.PLATFORM_DISCOUNT_AMOUNT, BigDecimal(platformDiscount))
             .set(DAILY_SETTLEMENT.CALCULATED_AT, OffsetDateTime.parse("2026-11-12T00:00:00Z"))
             .execute()
     }
@@ -71,6 +72,18 @@ class SettlementApiIntegrationTests(private val mvc: MockMvc, private val dsl: D
             .andExpect(jsonPath("$[0].feeAmount").value(20000)).andExpect(jsonPath("$[0].payoutAmount").value(180000))
         mvc.perform(get("/api/v1/settlements?from=2026-12-01&to=2026-12-31").header("Authorization", "Bearer $token"))
             .andExpect(status().isOk).andExpect(jsonPath("$.length()").value(0))
+    }
+
+    @Test
+    fun `플랫폼 할인 부담액은 주최자 응답에 노출하지 않는다`() {
+        val (owner, token) = member("ORGANIZER")
+        insert(owner, System.nanoTime(), "2026-11-05", platformDiscount = 2000)
+
+        mvc.perform(get("/api/v1/settlements?from=2026-11-01&to=2026-11-10").header("Authorization", "Bearer $token"))
+            .andExpect(status().isOk).andExpect(jsonPath("$[0].saleAmount").value(300000))
+            .andExpect(jsonPath("$[0].platformDiscountAmount").doesNotExist())
+            .andExpect(jsonPath("$[0].platformDiscount").doesNotExist())
+            .andExpect(jsonPath("$[0].discountAmount").doesNotExist())
     }
 
     @Test

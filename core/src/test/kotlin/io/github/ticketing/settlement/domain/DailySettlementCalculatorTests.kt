@@ -26,4 +26,15 @@ class DailySettlementCalculatorTests {
         assertThatIllegalArgumentException().isThrownBy { FeeRate(BigDecimal("-0.01")) }
         assertThatIllegalArgumentException().isThrownBy { FeeRate(BigDecimal.ONE) }
     }
+
+    @Test
+    fun `플랫폼 할인 부담액은 수수료와 지급액 계산에 영향을 주지 않는다`() {
+        val result = DailySettlementCalculator.settle(
+            LocalDate.parse("2026-11-11"), 1, 2, 1, BigDecimal("10000"), 0, BigDecimal.ZERO,
+            FeeRate(BigDecimal("0.10")), Instant.EPOCH, BigDecimal("2000"),
+        )
+        assertThat(result.platformDiscountAmount).isEqualByComparingTo("2000")
+        assertThat(result.feeAmount).isEqualByComparingTo("1000")
+        assertThat(result.payoutAmount).isEqualByComparingTo("9000")
+    }
 }

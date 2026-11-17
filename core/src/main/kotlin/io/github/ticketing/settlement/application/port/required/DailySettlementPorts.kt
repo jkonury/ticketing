@@ -12,6 +12,7 @@ data class PerformanceTotals(
     val saleAmount: BigDecimal,
     val refundCount: Int,
     val refundAmount: BigDecimal,
+    val platformDiscountAmount: BigDecimal,
 )
 
 interface SettlementQueryPort {

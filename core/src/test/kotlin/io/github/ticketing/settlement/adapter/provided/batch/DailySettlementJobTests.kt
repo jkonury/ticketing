@@ -25,9 +25,10 @@ class DailySettlementJobTests(
     private val dsl: DSLContext,
     private val writer: FailingDailySettlementWriter,
 ) : IntegrationTestSupport() {
-    private fun sale(booking: Long, performance: Long, instant: String, amount: String = "101") {
+    private fun sale(booking: Long, performance: Long, instant: String, amount: String = "101", discount: String = "0") {
+        val list = BigDecimal(amount) + BigDecimal(discount)
         copies.insertSaleIfAbsent(
-            RecordSaleCommand(booking, performance, 987, 1, BigDecimal(amount), Instant.parse(instant)),
+            RecordSaleCommand(booking, performance, 987, 1, BigDecimal(amount), list, BigDecimal(discount), Instant.parse(instant)),
             Instant.EPOCH,
         )
     }
@@ -65,6 +66,34 @@ class DailySettlementJobTests(
         assertThat(refunded.feeAmount).isEqualByComparingTo("-10")
         assertThat(refunded.payoutAmount).isEqualByComparingTo("-91")
         assertThat(rows.single { it.performanceId == 97002L }.saleAmount).isEqualByComparingTo("101")
+    }
+
+    @Test
+    fun `쿠폰 예매는 정가 기준으로 정산하고 할인 부담은 판매일에 기록하며 환불해도 차감하지 않는다`() {
+        sale(97201, 97201, "2027-02-10T00:00:00Z", amount = "8000", discount = "2000")
+        refund(97201, 97201, "2027-02-11T00:00:00Z")
+        sale(97202, 97202, "2027-02-10T00:00:00Z", amount = "5000")
+
+        assertThat(operator.start(dailySettlementJob, params("2027-02-10")).status).isEqualTo(BatchStatus.COMPLETED)
+        assertThat(operator.start(dailySettlementJob, params("2027-02-11")).status).isEqualTo(BatchStatus.COMPLETED)
+
+        val sold = dsl.selectFrom(DAILY_SETTLEMENT)
+            .where(
+                DAILY_SETTLEMENT.PERFORMANCE_ID.eq(97201L).and(DAILY_SETTLEMENT.SETTLEMENT_DATE.eq(LocalDate.parse("2027-02-10"))),
+            ).fetchSingle()
+        assertThat(sold.saleAmount).isEqualByComparingTo("10000")
+        assertThat(sold.feeAmount).isEqualByComparingTo("1000")
+        assertThat(sold.payoutAmount).isEqualByComparingTo("9000")
+        assertThat(sold.platformDiscountAmount).isEqualByComparingTo("2000")
+        val refunded = dsl.selectFrom(DAILY_SETTLEMENT)
+            .where(
+                DAILY_SETTLEMENT.PERFORMANCE_ID.eq(97201L).and(DAILY_SETTLEMENT.SETTLEMENT_DATE.eq(LocalDate.parse("2027-02-11"))),
+            ).fetchSingle()
+        assertThat(refunded.refundAmount).isEqualByComparingTo("10000")
+        assertThat(refunded.platformDiscountAmount).isEqualByComparingTo("0")
+        val plain = dsl.selectFrom(DAILY_SETTLEMENT).where(DAILY_SETTLEMENT.PERFORMANCE_ID.eq(97202L)).fetchSingle()
+        assertThat(plain.saleAmount).isEqualByComparingTo("5000")
+        assertThat(plain.platformDiscountAmount).isEqualByComparingTo("0")
     }
 
     @Test

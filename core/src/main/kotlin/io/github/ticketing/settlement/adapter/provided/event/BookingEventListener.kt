@@ -13,7 +13,16 @@ class BookingEventListener(private val records: RecordBookingEventUseCase) {
     @ApplicationModuleListener
     fun on(event: BookingConfirmed) {
         records.recordSale(
-            RecordSaleCommand(event.bookingId, event.performanceId, event.organizerId, event.scheduleId, event.amount, event.confirmedAt),
+            RecordSaleCommand(
+                event.bookingId,
+                event.performanceId,
+                event.organizerId,
+                event.scheduleId,
+                event.amount,
+                event.listAmount,
+                event.discountAmount,
+                event.confirmedAt,
+            ),
         )
     }
 

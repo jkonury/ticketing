@@ -14,6 +14,8 @@ data class RecordSaleCommand(
     val organizerId: Long,
     val scheduleId: Long,
     val amount: BigDecimal,
+    val listAmount: BigDecimal,
+    val discountAmount: BigDecimal,
     val confirmedAt: Instant,
 )
 
