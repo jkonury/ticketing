@@ -22,6 +22,7 @@ export default async function AdminLayout({
     <>
       <nav aria-label="관리자 메뉴">
         <Link href="/admin/members">회원</Link>{' '}
+        <Link href="/admin/coupons">쿠폰</Link>{' '}
         <Link href="/admin/audit-logs">감사 로그</Link>
       </nav>
       {children}
