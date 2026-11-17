@@ -76,7 +76,7 @@ class SecurityConfig {
 
     private fun secretKey(properties: JwtProperties) = SecretKeySpec(properties.secret.toByteArray(), "HmacSHA256")
 
-    // role 클레임(USER, ORGANIZER)을 ROLE_ 접두사가 붙은 권한으로 바꿔 hasRole(...)로 검사할 수 있게 한다
+    // role 클레임(USER, ORGANIZER, ADMIN)을 ROLE_ 접두사가 붙은 권한으로 바꿔 hasRole(...)로 검사할 수 있게 한다
     private fun jwtAuthenticationConverter() = JwtAuthenticationConverter().apply {
         setJwtGrantedAuthoritiesConverter(
             JwtGrantedAuthoritiesConverter().apply {

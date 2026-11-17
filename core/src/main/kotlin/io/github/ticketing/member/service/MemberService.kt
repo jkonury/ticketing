@@ -14,6 +14,7 @@ class MemberService(private val members: MemberRepository, private val passwordE
 
     @Transactional
     fun signUp(command: SignUpCommand): Member {
+        rejectAdminRole(command.role)
         val email = command.email.trim().lowercase()
         if (members.existsByEmail(email)) throw EmailAlreadyExistsException()
         val member = Member(
@@ -29,6 +30,11 @@ class MemberService(private val members: MemberRepository, private val passwordE
         } catch (e: DataIntegrityViolationException) {
             throw EmailAlreadyExistsException().also { it.initCause(e) }
         }
+    }
+
+    // ADMIN은 부트스트랩이나 관리자 API로만 부여한다 (ADR 0034)
+    private fun rejectAdminRole(role: Role) {
+        if (role == Role.ADMIN) throw RoleNotAllowedException()
     }
 
     @Transactional(readOnly = true)

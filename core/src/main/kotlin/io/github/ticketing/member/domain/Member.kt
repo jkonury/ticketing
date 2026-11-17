@@ -29,6 +29,10 @@ class Member(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null
 
+    fun changeRole(newRole: Role) {
+        role = newRole
+    }
+
     override fun equals(other: Any?): Boolean = this === other || (other is Member && id != null && id == other.id)
 
     override fun hashCode(): Int = id?.hashCode() ?: 0

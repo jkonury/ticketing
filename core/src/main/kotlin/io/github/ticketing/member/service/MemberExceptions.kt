@@ -11,3 +11,7 @@ class InvalidCredentialsException : DomainException("INVALID_CREDENTIALS", HttpS
 class InvalidRefreshTokenException : DomainException("INVALID_REFRESH_TOKEN", HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다.")
 
 class MemberNotFoundException : DomainException("MEMBER_NOT_FOUND", HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다.")
+
+class RoleNotAllowedException : DomainException("ROLE_NOT_ALLOWED", HttpStatus.BAD_REQUEST, "가입 시 선택할 수 없는 역할입니다.")
+
+class LastAdminException : DomainException("LAST_ADMIN", HttpStatus.CONFLICT, "마지막 관리자의 역할은 바꿀 수 없습니다.")

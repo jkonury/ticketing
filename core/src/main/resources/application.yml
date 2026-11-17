@@ -79,6 +79,8 @@ ticketing:
     local-iterations: ${STARTUP_WARMUP_LOCAL_ITERATIONS:10000}
   jwt:
     secret: ${TICKETING_JWT_SECRET}
+  admin:
+    bootstrap-email: ${TICKETING_ADMIN_BOOTSTRAP_EMAIL:}
   payment:
     fake-pg:
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}
