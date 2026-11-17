@@ -17,9 +17,11 @@ import org.testcontainers.containers.GenericContainer
 import reactor.netty.DisposableServer
 import reactor.netty.http.server.HttpServer
 import java.net.URI
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val TEST_SECRET = "test-secret-test-secret-test-secret-0123"
 
@@ -74,18 +76,34 @@ data class RecordedRequest(val method: String, val path: String, val query: Stri
 
 class DownstreamStub {
     val requests = CopyOnWriteArrayList<RecordedRequest>()
+
+    /** 응답을 지연시켜 동시 연결이 겹치게 한다. */
+    @Volatile
+    var responseDelay: Duration = Duration.ZERO
+    private val inFlight = AtomicInteger()
+    private val maxInFlight = AtomicInteger()
+
+    /** HTTP/1.1 연결 하나는 한 번에 요청 하나만 처리하므로, 동시에 처리 중인 요청 수가 곧 동시에 열려 있어야 하는 연결 수다. */
+    val maxConcurrentConnections: Int get() = maxInFlight.get()
+
     private val server: DisposableServer = HttpServer.create().host("127.0.0.1").port(0)
         .handle { request, response ->
+            maxInFlight.accumulateAndGet(inFlight.incrementAndGet()) { a, b -> maxOf(a, b) }
             request.receive().aggregate().asString().defaultIfEmpty("").flatMap { body ->
                 val headers = HttpHeaders()
                 request.requestHeaders().forEach { headers.add(it.key, it.value) }
                 requests.add(RecordedRequest(request.method().name(), request.path(), URI.create(request.uri()).rawQuery, headers, body))
-                response.status(200).sendString(reactor.core.publisher.Mono.just("ok")).then()
+                response.status(200).sendString(reactor.core.publisher.Mono.just("ok").delayElement(responseDelay)).then()
+                    .doFinally { inFlight.decrementAndGet() }
             }
         }.bindNow()
     val uri: String get() = "http://127.0.0.1:${server.port()}"
 
-    fun clear() = requests.clear()
+    fun clear() {
+        requests.clear()
+        responseDelay = Duration.ZERO
+        maxInFlight.set(inFlight.get())
+    }
 }
 
 private object TestInfrastructure {
