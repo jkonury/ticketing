@@ -207,7 +207,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 ## 9. Batch
 
-Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJob`, `paymentReconciliationJob`, `releaseStaleCouponReservationsJob` 다섯 개다. 파라미터와 규칙은 [batch.md](./architecture/batch.md)를 본다.
+Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJob`, `paymentReconciliationJob`, `releaseStaleCouponReservationsJob`, `reconcileCouponStockJob` 여섯 개다. 파라미터와 규칙은 [batch.md](./architecture/batch.md)를 본다.
 
 ## 10. 외부 연동
 

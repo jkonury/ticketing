@@ -9,9 +9,12 @@
 | `expirePendingBookingsJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
 | `reconcileSeatSnapshotJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
 | `releaseStaleCouponReservationsJob` | `coupon` | 실행 구분용 식별 파라미터 `run.id` (Long). `reserved_until + reservation-release-grace`(기본 10m) 경과한 RESERVED를 조건부 UPDATE로 ISSUED 복원 |
+| `reconcileCouponStockJob` | `coupon` | 실행 구분용 식별 파라미터 `run.id` (Long). 발급이 시작된 LIMITED 쿠폰의 Redis 재고·회원 Set을 DB 기준으로 보정. `limited-claim.strategy`가 `redis`가 아니면 아무것도 하지 않고 완료 |
 | `paymentReconciliationJob` | `payment` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
 
 일별 정산은 공연·주최자별 매출 집계와 수수료 계산을 수행하며 jOOQ reader와 chunk 처리를 사용한다. 미결제 예매 정리는 `PENDING` 예매를 `EXPIRED`로 전환하고, 좌석 스냅샷 보정은 DB 기준으로 Redis 상태를 맞춘다. 결제 대사는 가짜 PG 거래 내역과 내부 결제 기록의 불일치를 검출한다.
+
+쿠폰 재고 보정은 받기가 진행 중이어도 안전한 방향만 고친다. 재고는 Redis 값이 `총 수량 − DB 발급 수`보다 클 때만 낮추고 올리지 않는다(DECR 후 INSERT 전 요청이 있을 수 있어 올리면 초과 발급이 된다). 회원 Set은 DB 발급 회원 중 빠진 회원만 SADD하고, Set에만 있는 회원은 지우지 않는다. 키가 없으면 DB 기준으로 구성한다. 한 Lua(`redis/coupon/reconcile.lua`)로 처리한다. 한계: 보상 실패 등으로 Redis 재고가 DB보다 작아진 누수 재고는 복구하지 않는다(올리면 진행 중 요청과 충돌). 이 경우 진행 중인 받기 요청이 없을 때만 키를 지운다. 그러면 다음 받기가 DB 기준으로 다시 만든다. 진행 중 요청이 있을 때 지우면 Redis 차감 후 INSERT 전인 건이 빠진 채 재구성되어 초과 발급될 수 있다.
 
 Batch Job은 데이터를 소유한 모듈의 `adapter.provided.batch`에 두고 `@Profile("batch")`로 활성화한다. Batch는 웹 컨트롤러와 같은 입력 어댑터다. `core-batch`는 웹 서버 없이 `batch` 프로필로 core 컨텍스트를 띄우며 `spring.batch.job.name`으로 Job 하나를 실행한다. 웹 앱에서는 Job 빈을 만들지 않고 자동 실행도 끈다. 이 결정의 대안과 근거는 [ADR 0019](../adr/0019-batch-jobs-in-owning-modules.md)를 참고한다.
 

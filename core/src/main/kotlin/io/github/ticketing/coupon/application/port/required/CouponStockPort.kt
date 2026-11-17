@@ -17,4 +17,12 @@ interface CouponStockPort {
 
     /** 재고 키가 없을 때만 만든다. 이미 있으면 아무것도 하지 않는다. */
     fun initializeIfAbsent(definitionId: CouponDefinitionId, remaining: Int, claimedMemberIds: List<MemberId>)
+
+    /**
+     * Redis를 DB 기준으로 보수적으로만 고친다. 바꾼 건수를 돌려준다.
+     * 키가 없으면 [initializeIfAbsent]처럼 구성한다. 있으면 재고는 [remaining]보다 클 때만 낮추고(올리지 않는다),
+     * 받은 회원 Set에는 [claimedMemberIds] 중 빠진 회원만 더한다(Set에만 있는 회원은 지우지 않는다).
+     * 올리지 않으므로 보상 실패 등으로 Redis 재고가 DB보다 작아진 "누수 재고"는 이 호출로 복구되지 않는다.
+     */
+    fun reconcile(definitionId: CouponDefinitionId, remaining: Int, claimedMemberIds: List<MemberId>): Int
 }
