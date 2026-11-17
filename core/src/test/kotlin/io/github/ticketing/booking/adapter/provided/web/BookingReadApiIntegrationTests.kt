@@ -4,6 +4,7 @@ import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
+import org.hamcrest.Matchers.hasSize
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -120,14 +121,17 @@ class BookingReadApiIntegrationTests(
         val (_, user) = member()
         val performanceId = System.nanoTime()
         val mine = schedule(performanceId, organizerId)
-        schedule(performanceId + 1, otherId)
+        val others = schedule(performanceId + 1, otherId)
         booking(1, mine, 1, "CONFIRMED", now.plusSeconds(60))
         booking(1, mine, 2, "PENDING", now.plusSeconds(60))
 
+        // 다른 테스트가 고정 organizerId로 등록한 회차와 생성된 회원 id가 겹칠 수 있어 건수 대신 회차 id로 검증한다
+        val mineRow = "$[?(@.scheduleId == $mine)]"
         mvc.perform(get("/api/v1/organizer/sales").header("Authorization", "Bearer $organizer"))
-            .andExpect(status().isOk).andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].scheduleId").value(mine)).andExpect(jsonPath("$[0].totalSeats").value(6))
-            .andExpect(jsonPath("$[0].soldSeats").value(1)).andExpect(jsonPath("$[0].confirmedAmount").value(100))
+            .andExpect(status().isOk).andExpect(jsonPath(mineRow, hasSize<Any>(1)))
+            .andExpect(jsonPath("$[?(@.scheduleId == $others)]").isEmpty)
+            .andExpect(jsonPath("$mineRow.totalSeats").value(6))
+            .andExpect(jsonPath("$mineRow.soldSeats").value(1)).andExpect(jsonPath("$mineRow.confirmedAmount").value(100))
         mvc.perform(get("/api/v1/organizer/sales").header("Authorization", "Bearer $user"))
             .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("FORBIDDEN"))
         mvc.perform(get("/api/v1/organizer/sales"))
