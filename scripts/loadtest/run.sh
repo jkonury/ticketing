@@ -27,8 +27,8 @@ SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
 --warmup·--failure-inject와 함께 쓰지 않습니다.
 coupon-drop은 선착순(LIMITED) 쿠폰을 1만 VU가 동시에 받는 시나리오입니다(기본 100장, COUPON_QUANTITY로 변경). --coupon-strategy redis|db(기본 redis)는
-core의 COUPON_LIMITED_CLAIM_STRATEGY로 전달되며, 측정 뒤 verify-coupon-integrity.sh로 초과 발급·중복·재고 일치를 검사합니다. --warmup·--aot-cache·--tool gatling은 지원하지 않습니다.
---tool gatling은 queue-surge·hot-seats·seat-conflict-refund를 지원하며 --aot-cache와 함께 쓰지 않습니다.
+core의 COUPON_LIMITED_CLAIM_STRATEGY로 전달되며, 측정 뒤 verify-coupon-integrity.sh로 초과 발급·중복·재고 일치를 검사합니다. --warmup·--aot-cache는 지원하지 않습니다.
+--tool gatling은 queue-surge·hot-seats·seat-conflict-refund·coupon-drop을 지원하며 --aot-cache와 함께 쓰지 않습니다.
 --booking-p95-ms는 Gatling 예매 p95 한도(양의 정수)입니다. 미지정 시 100명 이하 300ms, 초과 1500ms입니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
 JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 기본은 리포트를 생략하며(-nr), --gatling-report로 HTML 리포트를 생성합니다.
 리포트는 회차별 gatling-results/<실행 디렉터리>/index.html에 저장됩니다. 리포트 생성 시간·메모리도 측정에 포함됩니다.
@@ -102,8 +102,8 @@ case "$SCENARIO" in smoke|queue-surge|hot-seats|seat-conflict-refund|coupon-drop
 case "$COUPON_STRATEGY" in redis|db) ;; *) echo '--coupon-strategy에는 redis 또는 db가 필요합니다.' >&2; exit 1 ;; esac
 COUPON_QUANTITY=${COUPON_QUANTITY:-100}
 [[ $COUPON_QUANTITY =~ ^[1-9][0-9]*$ ]] || { echo 'COUPON_QUANTITY에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
-if [[ $SCENARIO == coupon-drop ]] && { $WARMUP || $AOT_CACHE || [[ $TOOL == gatling ]]; }; then
-  echo 'coupon-drop은 --warmup, --aot-cache, --tool gatling과 함께 쓰지 않습니다.' >&2; exit 1
+if [[ $SCENARIO == coupon-drop ]] && { $WARMUP || $AOT_CACHE; }; then
+  echo 'coupon-drop은 --warmup, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
 fi
 if [[ $SCENARIO == seat-conflict-refund ]] && { $WARMUP || $FAILURE_INJECT || $AOT_CACHE; }; then
   echo 'seat-conflict-refund는 --warmup, --failure-inject, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
@@ -114,7 +114,7 @@ if $GATLING_REPORT && [[ $TOOL != gatling ]]; then
 fi
 [[ $GATLING_HEAP =~ ^[1-9][0-9]*[mMgG]$ ]] || { echo '--gatling-heap에는 512m, 4g 같은 값이 필요합니다.' >&2; exit 1; }
 if [[ $TOOL == gatling ]]; then
-  [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats || $SCENARIO == seat-conflict-refund ]] || { echo '--tool gatling은 queue-surge, hot-seats, seat-conflict-refund만 지원합니다.' >&2; exit 1; }
+  [[ $SCENARIO == queue-surge || $SCENARIO == hot-seats || $SCENARIO == seat-conflict-refund || $SCENARIO == coupon-drop ]] || { echo '--tool gatling은 queue-surge, hot-seats, seat-conflict-refund, coupon-drop만 지원합니다.' >&2; exit 1; }
   $AOT_CACHE && { echo '--tool gatling은 --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1; }
 fi
 if [[ -n $BOOKING_P95_MS ]]; then
@@ -417,13 +417,14 @@ launch_gatling() {
   case "$SCENARIO" in
     hot-seats) simulation=HotSeatsSimulation ;;
     seat-conflict-refund) simulation=SeatConflictRefundSimulation ;;
+    coupon-drop) simulation=CouponDropSimulation ;;
   esac
   $GATLING_REPORT || report_args=(-nr)
   [[ -z $VUS ]] || load_env+=(VUS="$VUS")
   [[ -z $BOOKING_P95_MS ]] || load_env+=(BOOKING_P95_MS="$BOOKING_P95_MS")
   mkdir -p "$dir/gatling-prefs/.java/.userPrefs"
   cp "$schedule_file" "$dir/schedule.json"
-  env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$dir/schedule.json" \
+  env BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$dir/schedule.json" COUPON_FILE="$OUT/coupon.json" \
     READINESS_FILE="$dir/readiness.json" SUMMARY_FILE="$dir/gatling-summary.json" "${load_env[@]}" "$@" \
     taskset -c "$K6_CPUS" java -Xmx"$GATLING_HEAP" "-Xlog:gc*:file=$dir/gatling-gc.log" -XX:+HeapDumpOnOutOfMemoryError "-XX:HeapDumpPath=$dir/gatling.hprof" \
     --enable-native-access=ALL-UNNAMED "-Djava.util.prefs.userRoot=$dir/gatling-prefs" \

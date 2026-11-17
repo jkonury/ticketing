@@ -7,6 +7,7 @@
 | `SmokeSimulation` | `smoke.ts` | `GET /api/v1/performances` 확인 |
 | `QueueSurgeSimulation` | `queue-surge.ts` | 대기열 동시 진입 → 입장 → 좌석 선택 → 예매 → 결제 → 확정 폴링 (기본 10,000명) |
 | `HotSeatsSimulation` | `hot-seats.ts` | 입장한 사용자가 같은 시각에 앞줄 100석 경합 (기본 1,000명, 60초 뒤 시작) |
+| `CouponDropSimulation` | `coupon-drop.ts` | 회원 1만 명이 30초 뒤 같은 시각에 선착순 쿠폰을 1회씩 받음 (`COUPON_FILE`, 429 재시도 없음) |
 | `SeatConflictRefundSimulation` | `seat-conflict-refund.ts` | 좌석 충돌 환불 보상 검증 (`PHASE=first\|second`) |
 
 `queue-ui.ts`(UI 확인용 가상 대기자 등록)는 옮기지 않았다.
@@ -21,6 +22,7 @@ MEMBERS_FILE=build/loadtest/members.json SCHEDULE_FILE=<schedule.json> VUS=1000 
 ./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.QueueSurgeSimulation --non-interactive
 ```
 
+- `COUPON_FILE`: `CouponDropSimulation` 전용. `definitionId`·`totalQuantity`가 든 JSON(seed.sh coupon이 만든다). 분류 카운터는 `claim_created`·`claim_already_claimed`·`claim_sold_out`·`claim_rate_limited`·`claim_other`이며 `claim_other`(KO)가 0이고 `coupon_claim` p95가 1,000ms 미만이어야 assertion을 통과한다.
 - `READINESS_FILE`: 시나리오 B·충돌 검증의 준비 현황 JSON 경로
 - `PHASE`, `FIRST_FILE`: `SeatConflictRefundSimulation` 전용(k6와 같다). 사용자별 결과는 `PAIR_FIRST`·`PAIR_SECOND` 줄로 표준 출력에 남긴다.
 - 리포트는 `loadtest/gatling/build/reports/gatling/`에 생긴다.
@@ -30,6 +32,7 @@ MEMBERS_FILE=build/loadtest/members.json SCHEDULE_FILE=<schedule.json> VUS=1000 
 ```bash
 ./scripts/loadtest/run.sh --scenario queue-surge --tool gatling --gatling-heap 2g   # 기본 힙 2g
 ./scripts/loadtest/run.sh --scenario hot-seats --tool gatling --gatling-report    # HTML 리포트 생성
+./scripts/loadtest/run.sh --scenario coupon-drop --tool gatling --coupon-strategy redis   # 선착순 쿠폰(redis|db)
 ./scripts/loadtest/run.sh --scenario queue-surge                                      # k6 기준선
 ```
 

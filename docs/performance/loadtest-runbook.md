@@ -221,4 +221,4 @@ SCOUTER_AGENT_DIR=<패치 에이전트 디렉터리> ./scripts/loadtest/run.sh -
 - `--coupon-strategy`는 core의 `COUPON_LIMITED_CLAIM_STRATEGY`로 전달한다(기본 `redis`). 전략별로 따로 실행해 비교한다.
 - k6 지표는 `claim_created`(201), `claim_already_claimed`, `claim_sold_out`, `claim_rate_limited`(429), `claim_other`, `claim_latency`(p95)다. `claim_other`가 0이어야 threshold를 통과한다. 쿠폰 받기 rate limit에 걸리면 429가 늘어나므로 처리량 비교는 `--no-rate-limit`으로 한다.
 - 정합성은 발급 수 ≤ 총수량, `(definition_id, member_id)` 중복 0, redis 전략은 재고 + 발급 수 = 총수량과 claimed Set = DB 회원 집합, db 전략은 `remaining_quantity` + 발급 수 = 총수량으로 판정한다. 결과는 실행 디렉터리의 `integrity.log`·`integrity.json`에 남는다.
-- `--warmup`, `--aot-cache`, `--tool gatling`은 지원하지 않는다. hot-seats와 동시에 실행하는 옵션은 아직 없다.
+- `--warmup`, `--aot-cache`는 지원하지 않는다. Gatling으로는 `./scripts/loadtest/run.sh --scenario coupon-drop --tool gatling [--coupon-strategy redis|db]`로 실행한다(`CouponDropSimulation`, 지표·판정은 k6와 같고 `gatling-summary.json`의 `claim_*` 카운터와 `coupon_claim` 요청 p95로 판정한다). hot-seats와 동시에 실행하는 옵션은 아직 없다.

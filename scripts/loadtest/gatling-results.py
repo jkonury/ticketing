@@ -124,6 +124,22 @@ def judge(directory, scenario, limit, exit_code, warmup=False, check_server=Fals
         total = summary['totalRequests']
         check('toolExit', exit_code in (0, 2) if warmup else exit_code == 0)
         check('globalFailureRate', total > 0 and summary['failedRequests'] / total < .01)
+        if scenario == 'coupon-drop':
+            claim = requests.get('coupon_claim', {})
+            counters = summary['metrics']
+            check('claimOther', counters.get('claim_other', {}).get('count', 0) == 0)
+            check('claimFailedRequests', claim.get('count', 0) > 0 and claim.get('failed', 1) == 0)
+            if not warmup:
+                check('claimP95', claim.get('p95') is not None and claim['p95'] < 1000)
+            check('integrity', read('integrity.json')['ok'])
+            if check_server:
+                delta = read('server-delta.json')
+                check('serverDelta', delta['valid'])
+                controlled = delta['controlledInputChecks']
+                check('controlledInputs', len(controlled) == 2 and all(c.get('ok') is True for c in controlled))
+            result = {'passed': bool(checks) and all(v is True for v in checks.values()), 'warmup': warmup, 'bookingP95LimitMs': limit, 'toolExitCode': exit_code, 'checks': checks}
+            (directory / 'verdict.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+            return result
         for stream in ['sse_queue'] + (['sse_seats'] if scenario == 'queue-surge' else []):
             stream_result = requests.get(stream, {})
             count = stream_result.get('count', 0)

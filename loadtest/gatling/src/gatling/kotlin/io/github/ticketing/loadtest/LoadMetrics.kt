@@ -92,6 +92,12 @@ object LoadMetrics {
     const val CONFLICT_FINAL_CONFIRMED = "conflict_final_confirmed"
     const val CONFLICT_FINAL_CANCELLED = "conflict_final_cancelled"
     const val CONFLICT_FINAL_OTHER = "conflict_final_other"
+    const val CLAIM_CREATED = "claim_created"
+    const val CLAIM_ALREADY_CLAIMED = "claim_already_claimed"
+    const val CLAIM_SOLD_OUT = "claim_sold_out"
+    const val CLAIM_RATE_LIMITED = "claim_rate_limited"
+    const val CLAIM_OTHER = "claim_other"
+    const val CLAIM_LATENCY = "claim_latency"
 
     /** 시나리오 B의 준비·시작 현황. */
     fun readinessReport(vusCount: Int, startAtEpochMs: Long?): Map<String, Any?> {
