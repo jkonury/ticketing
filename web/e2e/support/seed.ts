@@ -60,3 +60,66 @@ export async function seed(request: APIRequestContext) {
     scheduleId: schedule.id,
   };
 }
+
+function gatewayUrl() {
+  return process.env.E2E_GATEWAY_URL ?? 'http://localhost:18000';
+}
+
+export async function registerMember(
+  request: APIRequestContext,
+  member: { email: string; password: string; name: string },
+) {
+  const response = await request.post(`${gatewayUrl()}/api/v1/members`, {
+    data: member,
+  });
+  expect(response.ok(), `회원 가입: ${response.status()}`).toBe(true);
+  const body = await response.json();
+  return body.id as number;
+}
+
+export async function grantFixedCoupon(
+  request: APIRequestContext,
+  options: { name: string; discountValue: number; memberIds: number[] },
+) {
+  const email = process.env.E2E_ADMIN_EMAIL;
+  const password = process.env.E2E_ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      'E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD 환경 변수가 필요합니다 (scripts/e2e/run.sh가 설정).',
+    );
+  }
+  const base = `${gatewayUrl()}/api/v1`;
+  const tokenResponse = await request.post(`${base}/auth/tokens`, {
+    data: { email, password },
+  });
+  expect(tokenResponse.ok(), `관리자 로그인: ${tokenResponse.status()}`).toBe(
+    true,
+  );
+  const headers = {
+    Authorization: `Bearer ${(await tokenResponse.json()).accessToken}`,
+  };
+  const now = Date.now();
+  const created = await request.post(`${base}/admin/coupons`, {
+    headers,
+    data: {
+      name: options.name,
+      description: 'E2E 정액 할인',
+      discountType: 'FIXED',
+      discountValue: options.discountValue,
+      maxDiscount: null,
+      minOrderAmount: 0,
+      performanceId: null,
+      validFrom: new Date(now - 3600_000).toISOString(),
+      validUntil: new Date(now + 7 * 86400_000).toISOString(),
+      issueMode: 'DIRECT',
+      totalQuantity: null,
+    },
+  });
+  expect(created.ok(), `쿠폰 정의 생성: ${created.status()}`).toBe(true);
+  const definition = await created.json();
+  const granted = await request.post(
+    `${base}/admin/coupons/${definition.id}/grants`,
+    { headers, data: { memberIds: options.memberIds } },
+  );
+  expect(granted.ok(), `쿠폰 지급: ${granted.status()}`).toBe(true);
+}
