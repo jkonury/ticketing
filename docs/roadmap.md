@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0·M1·M2·M3·M4 완료, M5 완료 확정(아래 300ms 두 건은 장기 과제로 유지), M5.5 쿠폰 구현 0단계(문서 선행) 진행 중. M5 완료 기준(중복 판매 0건, 전후 수치 문서화) 충족, 단 B 예매 p95 300ms 잠정 기준 미달 잔존([최종 보고서](./performance/m5/11-step8-final-report.md)). 내부 예열 콜드 계열은 잠정 900ms 기준을 충족하고 300ms 장기 목표는 미달([문서 16](./performance/m5/16-startup-warmup-burst-volume.md)) (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
+- 상태: M0·M1·M2·M3·M4 완료, M5 완료 확정(아래 300ms 두 건은 장기 과제로 유지), M5.5 쿠폰 완료(M5.5-1·2·3 게이트 통과, coupon-drop p95 1초는 후속 항목, [결과](./performance/m5.5/coupon-drop.md)). M5 완료 기준(중복 판매 0건, 전후 수치 문서화) 충족, 단 B 예매 p95 300ms 잠정 기준 미달 잔존([최종 보고서](./performance/m5/11-step8-final-report.md)). 내부 예열 콜드 계열은 잠정 900ms 기준을 충족하고 300ms 장기 목표는 미달([문서 16](./performance/m5/16-startup-warmup-burst-volume.md)) (M0·M1 이력은 [backup/roadmap-completed-M0-M1.md](./backup/roadmap-completed-M0-M1.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
