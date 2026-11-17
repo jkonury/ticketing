@@ -27,11 +27,22 @@ const booking = z.object({
   expiresAt: z.string(),
   seats: z.array(seat),
 });
-const detail = booking.extend({
+export const bookingCouponSchema = z.object({
+  issuedCouponId: z.number(),
+  state: z.enum(['RESERVING', 'RESERVED', 'REJECTED']),
+  discountAmount: z.number().nullish(),
+  rejectReason: z.string().nullish(),
+});
+export const bookingDetailSchema = booking.extend({
   performanceTitle: z.string(),
   startsAt: z.string(),
   createdAt: z.string(),
+  listAmount: z.number().optional(),
+  discountAmount: z.number().optional(),
+  payableAmount: z.number().optional(),
+  coupon: bookingCouponSchema.nullish(),
 });
+const detail = bookingDetailSchema;
 const availability = z.array(
   z.object({
     scheduleId: z.number(),

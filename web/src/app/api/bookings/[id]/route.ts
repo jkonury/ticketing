@@ -11,6 +11,10 @@ export async function GET(
       bookingId: booking.bookingId,
       status: booking.status,
       expiresAt: booking.expiresAt,
+      listAmount: booking.listAmount ?? booking.totalAmount,
+      discountAmount: booking.discountAmount ?? 0,
+      payableAmount: booking.payableAmount ?? booking.totalAmount,
+      coupon: booking.coupon ?? null,
     });
   } catch (error) {
     return errorResponse(error);

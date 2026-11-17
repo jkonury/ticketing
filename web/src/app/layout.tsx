@@ -19,7 +19,10 @@ async function UserMenu() {
         {user.name} ({user.role})
       </span>
       {user.role === 'USER' ? (
-        <Link href="/my">마이페이지</Link>
+        <>
+          <Link href="/coupons">쿠폰</Link>
+          <Link href="/my">마이페이지</Link>
+        </>
       ) : user.role === 'ADMIN' ? (
         <Link href="/admin/members">관리자</Link>
       ) : (

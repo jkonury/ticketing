@@ -1,6 +1,7 @@
 import type { MyPageView } from '@/server/aggregate/my-page';
 import { bookingLabel, paymentLabel } from '@/lib/labels';
 import { formatSeoul } from '@/lib/datetime';
+import { MyCoupons } from './my-coupons';
 import { CancelButton } from './cancel-button';
 export function BookingList({ view }: { view: MyPageView }) {
   return (
@@ -41,6 +42,7 @@ export function BookingList({ view }: { view: MyPageView }) {
           ))}
         </tbody>
       </table>
+      <MyCoupons view={view} />
     </>
   );
 }

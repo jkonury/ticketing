@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { call, codeOf, type Booking } from './booking-shared';
 import { bookingError } from './error-messages';
+import { CouponPanel } from './coupon-panel';
+import type { AmountView } from './coupon-shared';
 
 export function Payment({
   booking,
@@ -29,6 +31,7 @@ export function Payment({
   );
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
+  const [amount, setAmount] = useState<AmountView>({});
   const paymentKey = useRef(crypto.randomUUID());
   const router = useRouter();
   useEffect(() => {
@@ -105,14 +108,30 @@ export function Payment({
       <h2>결제</h2>
       <p>선택한 좌석: {booking.seats.map((seat) => seat.label).join(', ')}</p>
       <p>남은 시간: {remaining}초</p>
-      <p>{booking.totalAmount.toLocaleString('ko-KR')}원</p>
+      <p>
+        결제 금액:{' '}
+        {(amount.payableAmount ?? booking.totalAmount).toLocaleString('ko-KR')}
+        원
+      </p>
+      <CouponPanel
+        bookingId={booking.bookingId}
+        amount={amount}
+        onAmount={setAmount}
+        onSessionExpired={() => router.push('/login')}
+        disabled={pending || remaining === 0}
+      />
       {remaining === 0 && <p>선점이 만료되었습니다.</p>}
       {notice && (
         <p role="alert">
           {notice} <Link href="/my">마이페이지</Link>
         </p>
       )}
-      <button disabled={pending || remaining === 0} onClick={() => void pay()}>
+      <button
+        disabled={
+          pending || remaining === 0 || amount.coupon?.state === 'RESERVING'
+        }
+        onClick={() => void pay()}
+      >
         결제하기
       </button>
       <button disabled={pending} onClick={() => void cancel()}>

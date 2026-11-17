@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/problem';
 import { SessionExpiredError } from '@/server/api/gateway-client';
 import { getPerformance } from '@/server/api/catalog';
 import { getAvailability, getBookings, getSales } from '@/server/api/booking';
+import { listMyCoupons } from '@/server/api/coupon';
 import { getPayments } from '@/server/api/payment';
 import { getSettlements } from '@/server/api/settlement';
 import { getCurrentUser } from '@/server/auth/current-user';
@@ -15,6 +16,7 @@ vi.mock('@/server/api/booking', () => ({
   getBookings: vi.fn(),
   getSales: vi.fn(),
 }));
+vi.mock('@/server/api/coupon', () => ({ listMyCoupons: vi.fn() }));
 vi.mock('@/server/api/payment', () => ({ getPayments: vi.fn() }));
 vi.mock('@/server/api/settlement', () => ({ getSettlements: vi.fn() }));
 vi.mock('@/server/auth/current-user', () => ({ getCurrentUser: vi.fn() }));
@@ -38,6 +40,7 @@ beforeEach(() => {
   vi.mocked(getAvailability).mockResolvedValue([]);
   vi.mocked(getBookings).mockResolvedValue({ items: [], nextCursor: null });
   vi.mocked(getPayments).mockResolvedValue([]);
+  vi.mocked(listMyCoupons).mockResolvedValue([]);
   vi.mocked(getSales).mockResolvedValue([]);
   vi.mocked(getSettlements).mockResolvedValue([]);
 });
@@ -82,6 +85,14 @@ describe('화면 조합', () => {
     await expect(getMyPage()).rejects.toThrow('failed');
     expect((await getMyPage()).bookings).toEqual([]);
     expect(getPayments).not.toHaveBeenCalled();
+  });
+  it('쿠폰 조회가 실패해도 마이페이지는 쿠폰 섹션만 비운다', async () => {
+    vi.mocked(listMyCoupons).mockRejectedValue(new ApiError(503));
+    const result = await getMyPage();
+    expect(result.couponsStatus).toBe('unavailable');
+    expect(result.coupons).toEqual([]);
+    vi.mocked(listMyCoupons).mockRejectedValue(new SessionExpiredError());
+    await expect(getMyPage()).rejects.toBeInstanceOf(SessionExpiredError);
   });
   it('결제 오류는 부분 실패로 표시한다', async () => {
     vi.mocked(getBookings).mockResolvedValue({

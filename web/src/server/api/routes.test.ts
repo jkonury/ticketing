@@ -3,11 +3,22 @@ import { ApiError } from '@/lib/problem';
 import { gateway } from './gateway-client';
 import { createSseTicket } from './member';
 import { POST as ticketPost } from '@/app/api/streams/tickets/route';
+import { POST as claimPost } from '@/app/api/coupons/[definitionId]/claims/route';
+import {
+  PUT as couponPut,
+  DELETE as couponDelete,
+} from '@/app/api/bookings/[id]/coupon/route';
+import { applyBookingCoupon } from './coupon';
 import { POST as bookingPost } from '@/app/api/bookings/route';
 vi.mock('./gateway-client', async (original) => {
   const actual = await original<typeof import('./gateway-client')>();
   return { ...actual, gateway: { call: vi.fn() } };
 });
+vi.mock('./coupon', () => ({
+  claimCoupon: vi.fn(),
+  applyBookingCoupon: vi.fn(),
+  removeBookingCoupon: vi.fn(),
+}));
 vi.mock('./member', () => ({ createSseTicket: vi.fn() }));
 function request(
   path: string,
@@ -97,5 +108,53 @@ describe('브라우저 API', () => {
       code: 'SEAT_ALREADY_HELD',
       seatIds: [2],
     });
+  });
+});
+
+describe('쿠폰 BFF API', () => {
+  const evil = {
+    origin: 'https://evil.test',
+    'content-type': 'application/json',
+  };
+  it('다른 Origin의 쿠폰 변경 요청을 거부한다', async () => {
+    const id = { params: Promise.resolve({ id: '1' }) };
+    const claim = await claimPost(
+      new Request('http://localhost:13000/api/coupons/1/claims', {
+        method: 'POST',
+        headers: evil,
+      }),
+      { params: Promise.resolve({ definitionId: '1' }) },
+    );
+    const put = await couponPut(
+      new Request('http://localhost:13000/api/bookings/1/coupon', {
+        method: 'PUT',
+        headers: evil,
+        body: JSON.stringify({ issuedCouponId: 1 }),
+      }),
+      id,
+    );
+    const del = await couponDelete(
+      new Request('http://localhost:13000/api/bookings/1/coupon', {
+        method: 'DELETE',
+        headers: evil,
+      }),
+      id,
+    );
+    expect([claim.status, put.status, del.status]).toEqual([403, 403, 403]);
+  });
+  it('쿠폰 적용 본문을 검증한다', async () => {
+    const response = await couponPut(
+      new Request('http://localhost:13000/api/bookings/1/coupon', {
+        method: 'PUT',
+        headers: {
+          origin: 'http://localhost:13000',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ issuedCouponId: 'x' }),
+      }),
+      { params: Promise.resolve({ id: '1' }) },
+    );
+    expect(response.status).toBe(400);
+    expect(applyBookingCoupon).not.toHaveBeenCalled();
   });
 });

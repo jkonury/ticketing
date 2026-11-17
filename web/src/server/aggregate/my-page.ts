@@ -2,6 +2,7 @@ import 'server-only';
 // 핵심: 예매 목록. 부가: 결제 상태.
 import { getBookings } from '@/server/api/booking';
 import { getPayments } from '@/server/api/payment';
+import { listMyCoupons } from '@/server/api/coupon';
 import { optional } from './section';
 export async function getMyPage(cursor?: number) {
   const page = await getBookings({ cursor });
@@ -10,7 +11,10 @@ export async function getMyPage(cursor?: number) {
       ? getPayments(page.items.map((item) => item.bookingId))
       : Promise.resolve([]),
   );
+  const coupons = await optional(listMyCoupons(2000));
   return {
+    couponsStatus: coupons.status,
+    coupons: coupons.status === 'ok' ? coupons.data : [],
     nextCursor: page.nextCursor ?? null,
     paymentsStatus: payments.status,
     bookings: page.items.map((item) => ({

@@ -15,5 +15,6 @@ export const config = {
     '/organizer/:path*',
     '/booking/:path*',
     '/admin/:path*',
+    '/coupons/:path*',
   ],
 };
