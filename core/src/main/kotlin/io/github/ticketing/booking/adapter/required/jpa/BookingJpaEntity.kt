@@ -46,6 +46,14 @@ class BookingJpaEntity(
     var cancelReason: String?,
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: Instant,
+    @Column(name = "coupon_issued_id")
+    var couponIssuedId: Long? = null,
+    @Column(name = "coupon_state")
+    var couponState: String? = null,
+    @Column(name = "discount_amount", nullable = false)
+    var discountAmount: BigDecimal = BigDecimal.ZERO,
+    @Column(name = "coupon_reject_reason")
+    var couponRejectReason: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

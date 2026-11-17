@@ -80,7 +80,7 @@ class PaymentResultService(
                             seatIds.map {
                                 it.value
                             },
-                            booking.totalPrice,
+                            booking.listAmount,
                             now,
                         ),
                     )
@@ -102,7 +102,7 @@ class PaymentResultService(
                     bookingId.value,
                     paymentId,
                     amount,
-                    booking.totalPrice,
+                    booking.payableAmount,
                 )
                 After.Release(bookings.save(booking))
             }

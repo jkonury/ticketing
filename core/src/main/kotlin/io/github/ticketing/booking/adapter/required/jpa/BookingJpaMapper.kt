@@ -1,22 +1,25 @@
 package io.github.ticketing.booking.adapter.required.jpa
 
+import io.github.ticketing.booking.domain.AppliedCoupon
 import io.github.ticketing.booking.domain.BookedSeat
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.BookingStatus
 import io.github.ticketing.booking.domain.CancelReason
+import io.github.ticketing.booking.domain.CouponState
 import io.github.ticketing.booking.domain.HoldToken
 import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
+import java.math.BigDecimal
 
 internal fun Booking.toNewEntity(): BookingJpaEntity {
     val entity = BookingJpaEntity(
         memberId = memberId.value,
         scheduleId = scheduleId.value,
         status = status.name,
-        totalAmount = totalPrice,
+        totalAmount = listAmount,
         holdToken = holdToken.value,
         idempotencyKey = idempotencyKey,
         expiresAt = expiresAt,
@@ -31,13 +34,18 @@ internal fun Booking.toNewEntity(): BookingJpaEntity {
     return entity
 }
 
-/** 상태 전이로 바뀔 수 있는 필드만 반영한다. 좌석과 금액은 생성 후 불변이다. */
+/** 상태 전이로 바뀔 수 있는 필드만 반영한다. 좌석과 정가는 생성 후 불변이다. */
 internal fun BookingJpaEntity.applyChanges(booking: Booking) {
     status = booking.status.name
     paymentRequestedAt = booking.paymentRequestedAt
     confirmedAt = booking.confirmedAt
     cancelledAt = booking.cancelledAt
     cancelReason = booking.cancelReason?.name
+    val coupon = booking.appliedCoupon
+    couponIssuedId = coupon?.issuedCouponId
+    couponState = coupon?.state?.name
+    discountAmount = coupon?.discountAmount ?: BigDecimal.ZERO
+    couponRejectReason = coupon?.rejectReason
 }
 
 internal fun BookingJpaEntity.toDomain(): Booking = Booking.restore(
@@ -55,6 +63,16 @@ internal fun BookingJpaEntity.toDomain(): Booking = Booking.restore(
     paymentRequestedAt = paymentRequestedAt,
     confirmedAt = confirmedAt,
     cancelledAt = cancelledAt,
+    appliedCoupon = couponIssuedId?.let {
+        AppliedCoupon(
+            it,
+            CouponState.valueOf(requireNotNull(couponState)),
+            discountAmount.takeIf { _ ->
+                couponState == "RESERVED"
+            },
+            couponRejectReason,
+        )
+    },
 )
 
 internal fun ScheduleSeatCopy.toEntity() = ScheduleSeatCopyJpaEntity(

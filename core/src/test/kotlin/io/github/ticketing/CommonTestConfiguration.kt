@@ -175,7 +175,8 @@ class EventCollector {
     @EventListener
     fun on(event: Any) {
         if (event.javaClass.name.startsWith("io.github.ticketing.booking.Booking") ||
-            event.javaClass.name.startsWith("io.github.ticketing.payment.")
+            event.javaClass.name.startsWith("io.github.ticketing.payment.") ||
+            event.javaClass.name.startsWith("io.github.ticketing.coupon.CouponRe")
         ) {
             events += event
         }

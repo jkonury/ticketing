@@ -79,7 +79,7 @@ class RequestPaymentService(
         val saved = bookings.save(booking)
         val bookingId = requireNotNull(saved.id).value
         events.publishEvent(
-            PaymentRequested(bookingId, saved.memberId.value, saved.totalPrice, paymentIdempotencyKey(bookingId), now),
+            PaymentRequested(bookingId, saved.memberId.value, saved.payableAmount, paymentIdempotencyKey(bookingId), now),
         )
         log.info("결제 요청 bookingId={} memberId={}", bookingId, saved.memberId.value)
         return Outcome.Done(saved)

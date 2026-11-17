@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.adapter.required.jooq
 
+import io.github.ticketing.booking.application.port.provided.BookingCouponView
 import io.github.ticketing.booking.application.port.provided.BookingDetailView
 import io.github.ticketing.booking.application.port.provided.BookingPage
 import io.github.ticketing.booking.application.port.provided.BookingSeatResult
@@ -88,6 +89,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
         val head = dsl.select(
             BOOKING.ID, BOOKING.MEMBER_ID, BOOKING.SCHEDULE_ID, BOOKING.STATUS, SCHEDULE.PERFORMANCE_TITLE,
             SCHEDULE.STARTS_AT, BOOKING.TOTAL_AMOUNT, BOOKING.EXPIRES_AT, BOOKING.CREATED_AT,
+            BOOKING.COUPON_ISSUED_ID, BOOKING.COUPON_STATE, BOOKING.DISCOUNT_AMOUNT, BOOKING.COUPON_REJECT_REASON,
         )
             .from(BOOKING)
             .join(SCHEDULE).on(SCHEDULE.SCHEDULE_ID.eq(BOOKING.SCHEDULE_ID))
@@ -109,6 +111,21 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
                 )
             }
 
+        val listAmount = BigDecimal.valueOf(requireNotNull(head[BOOKING.TOTAL_AMOUNT]))
+        val couponState = head[BOOKING.COUPON_STATE]
+        val discount = BigDecimal.valueOf(requireNotNull(head[BOOKING.DISCOUNT_AMOUNT]))
+        val applied = if (couponState == "RESERVED") discount else BigDecimal.ZERO
+        val coupon = head[BOOKING.COUPON_ISSUED_ID]?.let {
+            BookingCouponView(
+                it,
+                requireNotNull(couponState),
+                discount.takeIf { _ ->
+                    couponState == "RESERVED"
+                },
+                head[BOOKING.COUPON_REJECT_REASON],
+            )
+        }
+
         return BookingDetailView(
             bookingId = requireNotNull(head[BOOKING.ID]),
             memberId = requireNotNull(head[BOOKING.MEMBER_ID]),
@@ -116,7 +133,11 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
             status = requireNotNull(head[BOOKING.STATUS]),
             performanceTitle = requireNotNull(head[SCHEDULE.PERFORMANCE_TITLE]),
             startsAt = requireNotNull(head[SCHEDULE.STARTS_AT]).toInstant(),
-            totalAmount = BigDecimal.valueOf(requireNotNull(head[BOOKING.TOTAL_AMOUNT])),
+            totalAmount = listAmount,
+            listAmount = listAmount,
+            discountAmount = applied,
+            payableAmount = listAmount - applied,
+            coupon = coupon,
             expiresAt = requireNotNull(head[BOOKING.EXPIRES_AT]).toInstant(),
             createdAt = requireNotNull(head[BOOKING.CREATED_AT]).toInstant(),
             seats = seats,

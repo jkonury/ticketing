@@ -1,5 +1,7 @@
 package io.github.ticketing.booking.adapter.provided.web
 
+import io.github.ticketing.booking.application.port.provided.BookingCouponUseCase
+import io.github.ticketing.booking.application.port.provided.BookingCouponView
 import io.github.ticketing.booking.application.port.provided.BookingDetailView
 import io.github.ticketing.booking.application.port.provided.BookingPage
 import io.github.ticketing.booking.application.port.provided.BookingQueryUseCase
@@ -16,9 +18,11 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
@@ -33,6 +37,7 @@ class BookingController(
     private val cancelBooking: CancelBookingUseCase,
     private val queries: BookingQueryUseCase,
     private val requestPayment: RequestPaymentUseCase,
+    private val bookingCoupons: BookingCouponUseCase,
 ) {
     @PostMapping
     fun create(
@@ -60,6 +65,17 @@ class BookingController(
     fun detail(authentication: Authentication, @PathVariable id: Long): BookingDetailResponse =
         BookingDetailResponse.from(queries.detail(authentication.name.toLong(), id))
 
+    @PutMapping("/{id}/coupon")
+    fun applyCoupon(
+        authentication: Authentication,
+        @PathVariable id: Long,
+        @Valid @RequestBody request: ApplyCouponRequest,
+    ): BookingDetailResponse = BookingDetailResponse.from(bookingCoupons.apply(authentication.name.toLong(), id, request.issuedCouponId))
+
+    @DeleteMapping("/{id}/coupon")
+    fun removeCoupon(authentication: Authentication, @PathVariable id: Long): BookingDetailResponse =
+        BookingDetailResponse.from(bookingCoupons.remove(authentication.name.toLong(), id))
+
     @PostMapping("/{id}/cancel")
     fun cancel(authentication: Authentication, @PathVariable id: Long): BookingResponse =
         BookingResponse.from(cancelBooking.cancel(authentication.name.toLong(), id))
@@ -76,6 +92,8 @@ class BookingController(
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(PaymentRequestResponse(result.bookingId, result.status))
     }
 }
+
+data class ApplyCouponRequest(@field:Positive val issuedCouponId: Long)
 
 data class PaymentRequestResponse(val bookingId: Long, val status: String)
 
@@ -138,6 +156,10 @@ data class BookingDetailResponse(
     val performanceTitle: String,
     val startsAt: java.time.Instant,
     val totalAmount: java.math.BigDecimal,
+    val listAmount: java.math.BigDecimal,
+    val discountAmount: java.math.BigDecimal,
+    val payableAmount: java.math.BigDecimal,
+    val coupon: BookingCouponView?,
     val expiresAt: java.time.Instant,
     val createdAt: java.time.Instant,
     val seats: List<BookingSeatResponse>,
@@ -149,6 +171,10 @@ data class BookingDetailResponse(
             view.performanceTitle,
             view.startsAt,
             view.totalAmount,
+            view.listAmount,
+            view.discountAmount,
+            view.payableAmount,
+            view.coupon,
             view.expiresAt,
             view.createdAt,
             view.seats.map { BookingSeatResponse(it.seatId, it.label, it.price) },

@@ -37,7 +37,13 @@ data class BookingDetailView(
     val performanceTitle: String,
     val startsAt: Instant,
     val totalAmount: BigDecimal,
+    val listAmount: BigDecimal,
+    val discountAmount: BigDecimal,
+    val payableAmount: BigDecimal,
+    val coupon: BookingCouponView?,
     val expiresAt: Instant,
     val createdAt: Instant,
     val seats: List<BookingSeatResult>,
 )
+
+data class BookingCouponView(val issuedCouponId: Long, val state: String, val discountAmount: BigDecimal?, val rejectReason: String?)

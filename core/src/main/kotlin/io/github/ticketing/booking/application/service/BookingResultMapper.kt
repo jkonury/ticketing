@@ -8,7 +8,7 @@ import io.github.ticketing.booking.domain.SeatId
 internal fun Booking.toResult(labels: Map<SeatId, String>): BookingResult = BookingResult(
     bookingId = requireNotNull(id).value,
     status = status.name,
-    totalAmount = totalPrice,
+    totalAmount = listAmount,
     expiresAt = expiresAt,
     seats = seats.map { BookingSeatResult(it.seatId.value, labels[it.seatId].orEmpty(), it.price) },
 )

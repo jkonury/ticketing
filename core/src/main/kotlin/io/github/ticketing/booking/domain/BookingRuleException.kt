@@ -22,3 +22,13 @@ const val DUPLICATE_SEAT = "DUPLICATE_SEAT"
 const val BOOKING_EXPIRED = "BOOKING_EXPIRED"
 const val INVALID_BOOKING_STATE = "INVALID_BOOKING_STATE"
 const val NOT_BOOKING_OWNER = "NOT_BOOKING_OWNER"
+
+class CouponPendingException : BookingRuleException(COUPON_PENDING)
+
+class CouponChangeNotAllowedException : BookingRuleException(COUPON_CHANGE_NOT_ALLOWED)
+
+class InvalidCouponDiscountException : BookingRuleException(INVALID_COUPON_DISCOUNT)
+
+const val COUPON_PENDING = "COUPON_PENDING"
+const val COUPON_CHANGE_NOT_ALLOWED = "COUPON_CHANGE_NOT_ALLOWED"
+const val INVALID_COUPON_DISCOUNT = "INVALID_COUPON_DISCOUNT"

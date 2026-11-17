@@ -74,12 +74,12 @@ internal class BookingWarmupWork(
             clock.instant(),
             "warmup",
         )
-        check(booking.totalPrice == BigDecimal.TEN)
+        check(booking.listAmount == BigDecimal.TEN)
         mapper.writeValueAsString(
             BookingResponse(
                 1,
                 booking.status.name,
-                booking.totalPrice,
+                booking.listAmount,
                 booking.expiresAt,
                 listOf(BookingSeatResponse(1, "W-1", BigDecimal.TEN)),
             ),

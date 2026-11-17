@@ -21,6 +21,7 @@ class Booking private constructor(
     paymentRequestedAt: Instant?,
     confirmedAt: Instant?,
     cancelledAt: Instant?,
+    appliedCoupon: AppliedCoupon?,
 ) {
     var status: BookingStatus = status
         private set
@@ -33,8 +34,20 @@ class Booking private constructor(
     var cancelledAt: Instant? = cancelledAt
         private set
 
-    val totalPrice: BigDecimal
+    /** 쿠폰 전이 규칙은 `BookingCoupons.kt`가 맡는다. */
+    var appliedCoupon: AppliedCoupon? = appliedCoupon
+        internal set
+
+    /** 좌석 정가의 합. */
+    val listAmount: BigDecimal
         get() = seats.fold(BigDecimal.ZERO) { sum, seat -> sum + seat.price }
+
+    /** 쿠폰이 RESERVED일 때만 할인한다. 결제 금액 비교와 PG 요청 금액은 이 값이다. */
+    val discountAmount: BigDecimal
+        get() = appliedCoupon?.takeIf { it.state == CouponState.RESERVED }?.discountAmount ?: BigDecimal.ZERO
+
+    val payableAmount: BigDecimal
+        get() = listAmount - discountAmount
 
     fun isExpired(now: Instant): Boolean = !now.isBefore(expiresAt)
 
@@ -50,6 +63,7 @@ class Booking private constructor(
         if (status != BookingStatus.PENDING) throw InvalidBookingStateException(status)
         if (paymentRequestedAt != null) return
         if (isExpired(now)) throw BookingExpiredException()
+        requireNoPendingCoupon()
         paymentRequestedAt = now
     }
 
@@ -62,7 +76,7 @@ class Booking private constructor(
             if (isExpired(now)) {
                 status = BookingStatus.EXPIRED
                 PaymentOutcome.RefundRequired(RefundReason.BOOKING_EXPIRED)
-            } else if (paidAmount.compareTo(totalPrice) != 0) {
+            } else if (paidAmount.compareTo(payableAmount) != 0) {
                 status = BookingStatus.CANCELLED
                 cancelledAt = now
                 cancelReason = CancelReason.AMOUNT_MISMATCH
@@ -156,6 +170,7 @@ class Booking private constructor(
                 paymentRequestedAt = null,
                 confirmedAt = null,
                 cancelledAt = null,
+                appliedCoupon = null,
             )
         }
 
@@ -182,9 +197,10 @@ class Booking private constructor(
             paymentRequestedAt: Instant?,
             confirmedAt: Instant?,
             cancelledAt: Instant?,
+            appliedCoupon: AppliedCoupon? = null,
         ): Booking = Booking(
             id, memberId, scheduleId, seats.toList(), holdToken, idempotencyKey, version, createdAt, expiresAt,
-            status, cancelReason, paymentRequestedAt, confirmedAt, cancelledAt,
+            status, cancelReason, paymentRequestedAt, confirmedAt, cancelledAt, appliedCoupon,
         )
     }
 }

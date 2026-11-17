@@ -18,6 +18,7 @@ top to bottom direction
 System_Boundary("TicketingApplication_boundary", "TicketingApplication", $tags="") {
   Container_Boundary("TicketingApplication.TicketingApplication_boundary", "TicketingApplication", $tags="") {
     Component(TicketingApplication.TicketingApplication.Catalog, "Catalog", $techn="Module", $descr="", $tags="", $link="")
+    Component(TicketingApplication.TicketingApplication.Coupon, "Coupon", $techn="Module", $descr="", $tags="", $link="")
     Component(TicketingApplication.TicketingApplication.Payment, "Payment", $techn="Module", $descr="", $tags="", $link="")
     Component(TicketingApplication.TicketingApplication.Booking, "Booking", $techn="Module", $descr="", $tags="", $link="")
   }
@@ -26,6 +27,7 @@ System_Boundary("TicketingApplication_boundary", "TicketingApplication", $tags="
 
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Payment, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Catalog, "listens to", $techn="", $tags="", $link="")
+Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Coupon, "depends on", $techn="", $tags="", $link="")
 
 SHOW_LEGEND(true)
 hide stereotypes

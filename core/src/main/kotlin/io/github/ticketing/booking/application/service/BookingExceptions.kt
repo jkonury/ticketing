@@ -3,6 +3,8 @@ package io.github.ticketing.booking.application.service
 import io.github.ticketing.DomainException
 import io.github.ticketing.booking.domain.BOOKING_EXPIRED
 import io.github.ticketing.booking.domain.BookingRuleException
+import io.github.ticketing.booking.domain.COUPON_CHANGE_NOT_ALLOWED
+import io.github.ticketing.booking.domain.COUPON_PENDING
 import io.github.ticketing.booking.domain.DUPLICATE_SEAT
 import io.github.ticketing.booking.domain.INVALID_BOOKING_STATE
 import io.github.ticketing.booking.domain.NOT_BOOKING_OWNER
@@ -28,7 +30,7 @@ internal fun BookingRuleException.toApplicationException(): DomainException {
     val status = when (code) {
         TOO_MANY_SEATS, NO_SEATS, DUPLICATE_SEAT -> HttpStatus.BAD_REQUEST
         NOT_BOOKING_OWNER -> HttpStatus.FORBIDDEN
-        INVALID_BOOKING_STATE, BOOKING_EXPIRED -> HttpStatus.CONFLICT
+        INVALID_BOOKING_STATE, BOOKING_EXPIRED, COUPON_PENDING, COUPON_CHANGE_NOT_ALLOWED -> HttpStatus.CONFLICT
         else -> HttpStatus.BAD_REQUEST
     }
     return BookingRuleViolation(code, status, message ?: code)

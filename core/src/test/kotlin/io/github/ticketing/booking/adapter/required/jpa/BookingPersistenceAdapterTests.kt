@@ -49,7 +49,7 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
 
         assertThat(found.id).isEqualTo(saved.id)
         assertThat(found.seats.map { it.seatId.value }).containsExactly(1L, 2L)
-        assertThat(found.totalPrice).isEqualByComparingTo("20000")
+        assertThat(found.listAmount).isEqualByComparingTo("20000")
         assertThat(found.status).isEqualTo(BookingStatus.PENDING)
         assertThat(found.expiresAt).isEqualTo(now.plusSeconds(300))
         assertThat(found.idempotencyKey).isEqualTo(saved.idempotencyKey)
