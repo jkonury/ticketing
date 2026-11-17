@@ -49,7 +49,7 @@ internal fun CouponDefinition.toNewEntity() = CouponDefinitionJpaEntity(
     status = status.name,
     issueStartedAt = issueStartedAt,
     createdAt = createdAt,
-)
+).also { it.remainingQuantity = totalQuantity }
 
 internal fun CouponDefinitionJpaEntity.applyChanges(definition: CouponDefinition) {
     name = definition.name

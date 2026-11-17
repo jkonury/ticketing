@@ -37,6 +37,13 @@ internal class IssuedCouponPersistenceAdapter(private val issuedCoupons: IssuedC
 
     override fun findById(id: IssuedCouponId): IssuedCoupon? = issuedCoupons.findById(id.value).map { it.toDomain() }.orElse(null)
 
+    override fun findMemberIdsByDefinition(definitionId: CouponDefinitionId): List<MemberId> = dsl.select(ISSUED_COUPON.MEMBER_ID)
+        .from(ISSUED_COUPON)
+        .where(ISSUED_COUPON.DEFINITION_ID.eq(definitionId.value))
+        .fetch(ISSUED_COUPON.MEMBER_ID)
+        .filterNotNull()
+        .map(::MemberId)
+
     override fun findByDefinitionAndMember(definitionId: CouponDefinitionId, memberId: MemberId): IssuedCoupon? =
         issuedCoupons.findByDefinitionIdAndMemberId(definitionId.value, memberId.value)?.toDomain()
 

@@ -16,6 +16,8 @@ internal fun couponNotIssuable() = CouponApiException("COUPON_NOT_ISSUABLE", Htt
 
 internal fun couponAlreadyClaimed() = CouponApiException("COUPON_ALREADY_CLAIMED", HttpStatus.CONFLICT, "이미 받은 쿠폰입니다.")
 
+internal fun couponSoldOut() = CouponApiException("COUPON_SOLD_OUT", HttpStatus.CONFLICT, "선착순 수량이 모두 소진되었습니다.")
+
 internal fun couponNotRevocable() = CouponApiException("COUPON_NOT_REVOCABLE", HttpStatus.CONFLICT, "회수할 수 없는 상태의 쿠폰입니다.")
 
 /** 도메인 규칙 코드별 HTTP 상태를 정하는 한 곳. 새 규칙 코드는 여기에 추가한다(기본값은 409). */

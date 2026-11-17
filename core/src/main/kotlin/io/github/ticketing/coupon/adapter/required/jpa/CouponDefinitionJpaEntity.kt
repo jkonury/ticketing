@@ -46,6 +46,10 @@ internal class CouponDefinitionJpaEntity(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null
 
+    /** DB 전략이 jOOQ로 갱신한다. JPA는 INSERT 때만 쓰고 UPDATE에서는 건드리지 않는다. */
+    @Column(name = "remaining_quantity", updatable = false)
+    var remainingQuantity: Int? = null
+
     @Version
     @Column(name = "version", nullable = false)
     var version: Long = 0

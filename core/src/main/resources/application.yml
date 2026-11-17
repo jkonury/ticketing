@@ -86,6 +86,9 @@ ticketing:
     reservation-ttl: ${COUPON_RESERVATION_TTL:1h}
     # 고아 예약 정리 Job은 reserved_until + grace가 지난 RESERVED만 되돌린다
     reservation-release-grace: ${COUPON_RESERVATION_RELEASE_GRACE:10m}
+    limited-claim:
+      # redis: Lua 재고 + 동기 DB INSERT, db: 조건부 UPDATE(remaining_quantity). 실험 중 전환은 지원하지 않는다.
+      strategy: ${COUPON_LIMITED_CLAIM_STRATEGY:redis}
   payment:
     fake-pg:
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}

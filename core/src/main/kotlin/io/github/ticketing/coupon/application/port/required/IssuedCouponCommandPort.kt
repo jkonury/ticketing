@@ -26,6 +26,9 @@ interface IssuedCouponCommandPort {
 
     fun findById(id: IssuedCouponId): IssuedCoupon?
 
+    /** 정의에 발급된 모든 회원. 회수·사용 여부와 무관하게 (정의, 회원) 유니크 기준으로 이미 받은 회원이다. */
+    fun findMemberIdsByDefinition(definitionId: CouponDefinitionId): List<MemberId>
+
     fun findByDefinitionAndMember(definitionId: CouponDefinitionId, memberId: MemberId): IssuedCoupon?
 
     fun reserveIfIssued(id: IssuedCouponId, orderId: OrderId, discountAmount: BigDecimal, reservedUntil: Instant): Boolean

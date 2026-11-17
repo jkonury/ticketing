@@ -244,7 +244,7 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
     }
 
     @Test
-    fun `DIRECT와 LIMITED 쿠폰은 직접 받을 수 없고 목록의 DIRECT는 노출되지 않는다`() {
+    fun `DIRECT 쿠폰은 직접 받을 수 없고 LIMITED는 받을 수 있으며 목록의 DIRECT는 노출되지 않는다`() {
         val admin = account("ADMIN")
         val member = account("USER")
         val direct = createDefinition(admin, definitionBody(issueMode = "DIRECT"))
@@ -252,8 +252,7 @@ class CouponApiIntegrationTests(private val mvc: MockMvc, private val dsl: DSLCo
 
         send(member.token, post("/api/v1/coupons/$direct/claims")).andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("COUPON_NOT_ISSUABLE"))
-        send(member.token, post("/api/v1/coupons/$limited/claims")).andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("COUPON_NOT_ISSUABLE"))
+        send(member.token, post("/api/v1/coupons/$limited/claims")).andExpect(status().isCreated)
         send(member.token, post("/api/v1/coupons/0/claims")).andExpect(status().isNotFound)
 
         val listedIds = claimable(member).map { (it["id"] as Number).toLong() }
