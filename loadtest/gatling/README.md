@@ -7,7 +7,7 @@
 | `SmokeSimulation` | `smoke.ts` | `GET /api/v1/performances` 확인 |
 | `QueueSurgeSimulation` | `queue-surge.ts` | 대기열 동시 진입 → 입장 → 좌석 선택 → 예매 → 결제 → 확정 폴링 (기본 10,000명) |
 | `HotSeatsSimulation` | `hot-seats.ts` | 입장한 사용자가 같은 시각에 앞줄 100석 경합 (기본 1,000명, 60초 뒤 시작) |
-| `CouponDropSimulation` | `coupon-drop.ts` | 회원 1만 명이 30초 뒤 같은 시각에 선착순 쿠폰을 1회씩 받음 (`COUPON_FILE`, 429 재시도 없음) |
+| `CouponDropSimulation` | `coupon-drop.ts` | 회원 1만 명이 20초 동안 접속해 `coupon_preconnect`(`GET /api/v1/coupons`)로 연결을 미리 열고, 40초 뒤 같은 시각에 keep-alive 연결로 선착순 쿠폰을 1회씩 받음 (`COUPON_FILE`, 429 재시도 없음). 받기 시각에 새 연결 1만 개가 몰리면 Gateway listen 큐가 넘쳐 클라이언트 측 지연이 지배하기 때문이며, 사전 요청이 받기 시각 이후에 끝난 사용자 수는 `coupon_preconnect_late`로 세고 0이어야 한다 |
 | `SeatConflictRefundSimulation` | `seat-conflict-refund.ts` | 좌석 충돌 환불 보상 검증 (`PHASE=first\|second`) |
 
 `queue-ui.ts`(UI 확인용 가상 대기자 등록)는 옮기지 않았다.

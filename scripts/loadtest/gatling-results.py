@@ -127,6 +127,7 @@ def judge(directory, scenario, limit, exit_code, warmup=False, check_server=Fals
         if scenario == 'coupon-drop':
             claim = requests.get('coupon_claim', {})
             counters = summary['metrics']
+            check('preconnectOnTime', counters.get('coupon_preconnect_late', {}).get('count', 0) == 0)
             check('claimOther', counters.get('claim_other', {}).get('count', 0) == 0)
             check('claimFailedRequests', claim.get('count', 0) > 0 and claim.get('failed', 1) == 0)
             if not warmup:
