@@ -46,6 +46,8 @@ internal class IssuedCouponPersistenceAdapter(private val issuedCoupons: IssuedC
     override fun releaseIfReservedBy(id: IssuedCouponId, orderId: OrderId): Boolean =
         issuedCoupons.releaseIfReservedBy(id.value, orderId.value) == 1
 
+    override fun releaseIfStale(id: IssuedCouponId, cutoff: Instant): Boolean = issuedCoupons.releaseIfStale(id.value, cutoff) == 1
+
     override fun confirmIfReservedBy(id: IssuedCouponId, orderId: OrderId, now: Instant): Boolean =
         issuedCoupons.confirmIfReservedBy(id.value, orderId.value, now) == 1
 

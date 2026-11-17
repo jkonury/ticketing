@@ -26,6 +26,14 @@ internal interface IssuedCouponJpaRepository : JpaRepository<IssuedCouponJpaEnti
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(
+        "update IssuedCouponJpaEntity c set c.status = 'ISSUED', c.orderId = null, c.discountAmount = null, " +
+            "c.reservedUntil = null, c.version = c.version + 1 " +
+            "where c.id = :id and c.status = 'RESERVED' and c.reservedUntil < :cutoff",
+    )
+    fun releaseIfStale(id: Long, cutoff: Instant): Int
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(
         "update IssuedCouponJpaEntity c set c.status = 'USED', c.usedAt = :now, c.version = c.version + 1 " +
             "where c.id = :id and c.status = 'RESERVED' and c.orderId = :orderId",
     )

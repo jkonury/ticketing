@@ -7,6 +7,7 @@ import io.github.ticketing.coupon.CouponReserved
 import io.github.ticketing.coupon.CouponUseConfirmed
 import io.github.ticketing.coupon.application.port.provided.ConfirmCouponUseUseCase
 import io.github.ticketing.coupon.application.port.provided.ReleaseCouponUseCase
+import io.github.ticketing.coupon.application.port.provided.ReleaseStaleCouponReservationUseCase
 import io.github.ticketing.coupon.application.port.provided.ReserveCouponUseCase
 import io.github.ticketing.coupon.application.port.required.CouponDefinitionCommandPort
 import io.github.ticketing.coupon.application.port.required.IssuedCouponCommandPort
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 
 /** 예매–쿠폰 예약 Saga의 coupon 측. 모든 처리는 (orderId, issuedCouponId) 기준으로 멱등하다. */
 @Service
@@ -38,7 +40,8 @@ class CouponReservationService(
     @Value("\${ticketing.coupon.reservation-ttl:1h}") private val reservationTtl: Duration,
 ) : ReserveCouponUseCase,
     ReleaseCouponUseCase,
-    ConfirmCouponUseUseCase {
+    ConfirmCouponUseUseCase,
+    ReleaseStaleCouponReservationUseCase {
     private val log = LoggerFactory.getLogger(javaClass)
 
     private sealed interface Outcome {
@@ -114,6 +117,16 @@ class CouponReservationService(
         if (!released) {
             log.info("쿠폰 해제 무시: 이미 해제됐거나 다른 주문 예약 또는 사용됨 orderId={} couponId={}", request.orderId, request.issuedCouponId)
         }
+    }
+
+    @Transactional
+    override fun releaseIfStale(issuedCouponId: Long, cutoff: Instant): Boolean {
+        val id = IssuedCouponId(issuedCouponId)
+        // orderId는 로그용으로만 읽는다. 되돌릴지는 조건부 UPDATE가 정하므로 그 사이 확정된 쿠폰은 갱신되지 않는다
+        val orderId = issuedCoupons.findById(id)?.orderId?.value
+        val released = issuedCoupons.releaseIfStale(id, cutoff)
+        if (released) log.info("고아 쿠폰 예약 해제 orderId={} couponId={}", orderId, issuedCouponId)
+        return released
     }
 
     @Transactional

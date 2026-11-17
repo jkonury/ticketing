@@ -94,6 +94,7 @@ Job은 `core-batch`에서 하나씩 실행한다. 규칙과 파라미터의 기�
 | `dailySettlementJob` | `targetDate`, `run.id` | 일별 정산 |
 | `expirePendingBookingsJob` | `run.id` | 미결제 예매 만료 처리 |
 | `reconcileSeatSnapshotJob` | `run.id` | 좌석 스냅샷 보정 |
+| `releaseStaleCouponReservationsJob` | `run.id` | 기한 지난 RESERVED 쿠폰 복원 |
 | `paymentReconciliationJob` | `targetDate`, `run.id` | 결제 대사 |
 
 ```bash

@@ -8,6 +8,7 @@
 | `dailySettlementJob` | `settlement` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
 | `expirePendingBookingsJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
 | `reconcileSeatSnapshotJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
+| `releaseStaleCouponReservationsJob` | `coupon` | 실행 구분용 식별 파라미터 `run.id` (Long). `reserved_until + reservation-release-grace`(기본 10m) 경과한 RESERVED를 조건부 UPDATE로 ISSUED 복원 |
 | `paymentReconciliationJob` | `payment` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
 
 일별 정산은 공연·주최자별 매출 집계와 수수료 계산을 수행하며 jOOQ reader와 chunk 처리를 사용한다. 미결제 예매 정리는 `PENDING` 예매를 `EXPIRED`로 전환하고, 좌석 스냅샷 보정은 DB 기준으로 Redis 상태를 맞춘다. 결제 대사는 가짜 PG 거래 내역과 내부 결제 기록의 불일치를 검출한다.

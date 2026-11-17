@@ -32,6 +32,9 @@ interface IssuedCouponCommandPort {
 
     fun releaseIfReservedBy(id: IssuedCouponId, orderId: OrderId): Boolean
 
+    /** 기한(`reserved_until`)이 cutoff보다 앞선 RESERVED만 ISSUED로 되돌린다. 읽은 뒤 확정된 쿠폰은 건드리지 않는다. */
+    fun releaseIfStale(id: IssuedCouponId, cutoff: Instant): Boolean
+
     fun confirmIfReservedBy(id: IssuedCouponId, orderId: OrderId, now: Instant): Boolean
 
     /**

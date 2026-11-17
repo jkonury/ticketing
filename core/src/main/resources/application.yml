@@ -84,6 +84,8 @@ ticketing:
   coupon:
     # 예매 hold 5분 + booking.expiry.payment-grace(30m)보다 길어야 한다
     reservation-ttl: ${COUPON_RESERVATION_TTL:1h}
+    # 고아 예약 정리 Job은 reserved_until + grace가 지난 RESERVED만 되돌린다
+    reservation-release-grace: ${COUPON_RESERVATION_RELEASE_GRACE:10m}
   payment:
     fake-pg:
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}
