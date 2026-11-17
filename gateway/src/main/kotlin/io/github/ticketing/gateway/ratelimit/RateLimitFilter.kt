@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 private const val DEFAULT_REPLENISH_RATE = 20
 private const val DEFAULT_BURST_CAPACITY = 40L
 private const val BOOKING_BURST_CAPACITY = 5L
+private const val COUPON_CLAIM_REPLENISH_RATE = 1
+private const val COUPON_CLAIM_BURST_CAPACITY = 3L
 private const val STREAM_REPLENISH_RATE = 5
 private const val STREAM_BURST_CAPACITY = 10L
 private const val WARMUP_KEY_POOL = 1024
@@ -29,6 +31,8 @@ private const val WARMUP_KEY_POOL = 1024
 data class RateLimitProperties(
     val default: Limit = Limit(DEFAULT_REPLENISH_RATE, DEFAULT_BURST_CAPACITY),
     val bookingCreate: Limit = Limit(2, BOOKING_BURST_CAPACITY),
+    // 임시 기본값이다. 수치는 coupon-drop 부하 측정 후 정한다
+    val couponClaim: Limit = Limit(COUPON_CLAIM_REPLENISH_RATE, COUPON_CLAIM_BURST_CAPACITY),
     val streams: Limit = Limit(STREAM_REPLENISH_RATE, STREAM_BURST_CAPACITY),
     val trustedProxies: Int = 1,
     // 부하 테스트에서 rate limiter Redis 호출의 몫을 가르는 대조용이다. 운영 기본값은 켜짐
@@ -68,6 +72,7 @@ class RateLimitFilter(
             "core-api" to properties.default,
             "realtime-queues" to properties.default,
             "core-bookings-create" to properties.bookingCreate,
+            "core-coupon-claims" to properties.couponClaim,
             "realtime-streams" to properties.streams,
         ).forEach { (route, limit) ->
             limiter.config[route] = RedisRateLimiter.Config()

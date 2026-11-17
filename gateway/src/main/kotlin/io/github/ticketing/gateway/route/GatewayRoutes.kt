@@ -65,6 +65,10 @@ class GatewayRoutes {
                 path("/api/v1/bookings").and().method(org.springframework.http.HttpMethod.POST)
                     .filters { filters -> filters.filter(requireBookingMember).filter(admissionTokenFilter).filter(rateLimitFilter) }
             }
+            route(id = "core-coupon-claims", order = -1, uri = properties.coreUri) {
+                path("/api/v1/coupons/*/claims").and().method(org.springframework.http.HttpMethod.POST)
+                    .filters { filters -> filters.filter(requireBookingMember).filter(rateLimitFilter) }
+            }
             route(id = "core-api", order = 0, uri = properties.coreUri) {
                 path("/api/v1/**").filters { filters -> filters.filter(rateLimitFilter) }
             }

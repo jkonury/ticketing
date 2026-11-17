@@ -41,6 +41,37 @@ class RateLimitTests(client: WebTestClient, private val redis: ReactiveStringRed
         assertThat(core.requests).hasSize(3)
     }
 
+    private fun claim(memberId: Long?): WebTestClient.ResponseSpec =
+        client.post().uri("/api/v1/coupons/9/claims").headers { h -> memberId?.let { h.setBearerAuth(token(subject = "$it")) } }.exchange()
+
+    @Test
+    fun `쿠폰 받기는 회원별 coupon-claim 한도를 적용한다`() {
+        val member = memberId()
+        val other = memberId()
+
+        repeat(2) { claim(member).expectStatus().isOk }
+        claim(member).expectStatus().isEqualTo(429).expectBody().jsonPath("$.code").isEqualTo("RATE_LIMITED")
+        claim(other).expectStatus().isOk
+
+        assertThat(core.requests).hasSize(3)
+    }
+
+    @Test
+    fun `비로그인 쿠폰 받기는 401이다`() {
+        claim(null).expectStatus().isUnauthorized
+
+        assertThat(core.requests).isEmpty()
+    }
+
+    @Test
+    fun `쿠폰 목록 조회는 쿠폰 받기 한도와 별개로 core-api 버킷을 쓴다`() {
+        val member = memberId()
+        repeat(2) { claim(member).expectStatus().isOk }
+        claim(member).expectStatus().isEqualTo(429)
+
+        client.get().uri("/api/v1/coupons").headers { it.setBearerAuth(token(subject = "$member")) }.exchange().expectStatus().isOk
+    }
+
     @Test
     fun `비로그인 요청은 전달된 클라이언트 IP별로 제한한다`() {
         val suffix = UUID.randomUUID().hashCode().ushr(16)

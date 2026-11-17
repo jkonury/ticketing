@@ -57,6 +57,8 @@ abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClie
             registry.add("ticketing.gateway.rate-limit.default.burst-capacity") { 2 }
             registry.add("ticketing.gateway.rate-limit.booking-create.replenish-rate") { 1 }
             registry.add("ticketing.gateway.rate-limit.booking-create.burst-capacity") { 2 }
+            registry.add("ticketing.gateway.rate-limit.coupon-claim.replenish-rate") { 1 }
+            registry.add("ticketing.gateway.rate-limit.coupon-claim.burst-capacity") { 2 }
             registry.add("ticketing.gateway.rate-limit.streams.replenish-rate") { 1 }
             registry.add("ticketing.gateway.rate-limit.streams.burst-capacity") { 3 }
             registry.add("ticketing.jwt.secret") { TEST_SECRET }
