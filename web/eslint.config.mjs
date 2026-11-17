@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     'out/**',
     'build/**',
     'next-env.d.ts',
+    // Playwright 산출물(trace의 번들 JS)
+    'test-results/**',
+    'playwright-report/**',
   ]),
 ]);
 
