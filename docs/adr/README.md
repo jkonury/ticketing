@@ -46,3 +46,7 @@
 | [0031](0031-warmup-through-real-booking-handler.md) | 내부 예열을 실제 예매 핸들러와 보안 체인 경유로 변경 | 수락 (일부 확장: 0032) |
 | [0032](0032-warmup-traffic-mix.md) | 내부 예열을 실제 예매 구간 트래픽 구성(예매·결제·상세·웹훅·PG 조회)으로 혼합 | 수락 |
 | [0033](0033-warmup-rate-limiter-path.md) | Gateway 내부 예열에서 rate limiter 경로 실행 | 합의 |
+| [0034](0034-platform-admin-role-and-audit.md) | 플랫폼 관리자 역할과 audit 모듈 | 합의 |
+| [0035](0035-coupon-module-reservation-saga.md) | coupon 모듈과 예약 Saga | 합의 |
+| [0036](0036-settlement-list-price-platform-discount.md) | 정산 정가 기준과 플랫폼 할인 부담 | 합의 |
+| [0037](0037-limited-coupon-claim-redis-lua.md) | 선착순 쿠폰 발급 방식(Redis Lua + 동기 DB INSERT) | 합의 |
