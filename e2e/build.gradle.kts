@@ -22,4 +22,6 @@ tasks.register<Test>("e2eTest") {
     classpath = sourceSets.test.get().runtimeClasspath
     systemProperty("e2e.gatewayUrl", gatewayUrl.get())
     systemProperty("e2e.realtimeBUrl", realtimeBUrl.get())
+    providers.systemProperty("e2e.adminEmail").orNull?.let { systemProperty("e2e.adminEmail", it) }
+    providers.systemProperty("e2e.adminPassword").orNull?.let { systemProperty("e2e.adminPassword", it) }
 }

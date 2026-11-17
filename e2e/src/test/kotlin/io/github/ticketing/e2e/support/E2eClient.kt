@@ -65,6 +65,61 @@ class E2eClient(private val gatewayUrl: String) {
         return Member(created.body["id"].asLong(), login.body["accessToken"].asString())
     }
 
+    suspend fun adminLogin(): Member {
+        val email = checkNotNull(System.getProperty("e2e.adminEmail")) { "e2e.adminEmail이 필요합니다." }
+        val password = checkNotNull(System.getProperty("e2e.adminPassword")) { "e2e.adminPassword가 필요합니다." }
+        val login = request("POST", "/api/v1/auth/tokens", body = mapOf("email" to email, "password" to password))
+        check(login.status == 200) { "관리자 로그인 실패: ${login.status}" }
+        return Member(0, login.body["accessToken"].asString())
+    }
+
+    suspend fun createFixedCoupon(admin: Member, discount: Long): Long {
+        val now = Instant.now()
+        val result = request(
+            "POST",
+            "/api/v1/admin/coupons",
+            admin,
+            mapOf(
+                "name" to "E2E ${UUID.randomUUID()}",
+                "discountType" to "FIXED",
+                "discountValue" to discount,
+                "minOrderAmount" to 0,
+                "validFrom" to now.minusSeconds(3600).toString(),
+                "validUntil" to now.plusSeconds(7 * 86400).toString(),
+                "issueMode" to "DIRECT",
+            ),
+        )
+        check(result.status == 201) { "쿠폰 정의 생성 실패: ${result.status}" }
+        return result.body["id"].asLong()
+    }
+
+    suspend fun grantCoupon(admin: Member, definitionId: Long, memberId: Long) {
+        val result = request("POST", "/api/v1/admin/coupons/$definitionId/grants", admin, mapOf("memberIds" to listOf(memberId)))
+        check(result.status == 200 && result.body["granted"].size() == 1) { "쿠폰 지급 실패: ${result.status}" }
+    }
+
+    suspend fun myCoupon(member: Member, definitionId: Long): JsonNode {
+        val result = request("GET", "/api/v1/me/coupons", member)
+        check(result.status == 200) { "내 쿠폰 조회 실패: ${result.status}" }
+        return result.body.values().first { it["definitionId"].asLong() == definitionId }
+    }
+
+    suspend fun applyCoupon(member: Member, bookingId: Long, issuedCouponId: Long) {
+        val result = request("PUT", "/api/v1/bookings/$bookingId/coupon", member, mapOf("issuedCouponId" to issuedCouponId))
+        check(result.status == 200) { "쿠폰 적용 실패: ${result.status}" }
+    }
+
+    suspend fun bookingDetail(member: Member, bookingId: Long): JsonNode {
+        val result = request("GET", "/api/v1/bookings/$bookingId", member)
+        check(result.status == 200) { "예매 조회 실패: ${result.status}" }
+        return result.body
+    }
+
+    suspend fun cancelBooking(member: Member, bookingId: Long) {
+        val result = request("POST", "/api/v1/bookings/$bookingId/cancel", member)
+        check(result.status == 200) { "예매 취소 실패: ${result.status}" }
+    }
+
     suspend fun createSchedule(organizer: Member, seatCount: Int): Schedule {
         val unique = UUID.randomUUID().toString()
         val seats = (1..seatCount).map { mapOf("section" to "A", "row" to "1", "number" to it, "grade" to "A") }

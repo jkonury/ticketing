@@ -87,6 +87,18 @@ health core 18080 "${PIDS[1]}"
 health realtime-a 18081 "${PIDS[2]}"
 health realtime-b "$REALTIME_B_PORT" "${PIDS[3]}"
 health gateway 18000 "${PIDS[4]}"
+# 관리자 seed: ADMIN은 가입으로 얻을 수 없으므로(ADR 0034) 가입한 회원을 DB에서 승격한다. 앱 코드에는 E2E 전용 경로를 두지 않는다.
+E2E_ADMIN_EMAIL="e2e-admin-$(date +%s)-$RANDOM$RANDOM@example.com"
+E2E_ADMIN_PASSWORD=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+export E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD
+signup_status=$(curl -s -o "$LOG_DIR/admin-seed.log" -w '%{http_code}' -X POST http://localhost:18000/api/v1/members \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$E2E_ADMIN_EMAIL\",\"password\":\"$E2E_ADMIN_PASSWORD\",\"name\":\"E2E Admin\",\"role\":\"USER\"}") || signup_status=000
+[[ $signup_status == 201 ]] || { printf '관리자 seed 가입 실패(HTTP %s). 로그: %s/admin-seed.log\n' "$signup_status" "$LOG_DIR" >&2; exit 1; }
+promoted=$(set -a; source .env; set +a
+  docker compose exec -T postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" -v ON_ERROR_STOP=1 -qtA \
+    -c "UPDATE member.member SET role='ADMIN' WHERE email='$E2E_ADMIN_EMAIL' RETURNING 1" 2>> "$LOG_DIR/admin-seed.log") || promoted=
+[[ $promoted == 1 ]] || { printf '관리자 seed 승격 실패. 로그: %s/admin-seed.log\n' "$LOG_DIR" >&2; exit 1; }
 if $WEB; then
   if [[ ! -d web/node_modules ]]; then
     (cd web && pnpm install --frozen-lockfile) > "$LOG_DIR/web.log" 2>&1 || { echo "web 설치 실패: $LOG_DIR/web.log" >&2; exit 1; }
@@ -115,7 +127,7 @@ if $WEB; then
 fi
 args=()
 if [[ -n $TEST_PATTERN ]]; then args=(--tests "$TEST_PATTERN"); fi
-if ./gradlew -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
+if ./gradlew -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" -De2e.adminEmail="$E2E_ADMIN_EMAIL" -De2e.adminPassword="$E2E_ADMIN_PASSWORD" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
   echo 'E2E 테스트 통과'
 else
   shopt -s nullglob
