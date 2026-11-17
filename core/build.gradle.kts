@@ -46,14 +46,31 @@ dependencies {
 val jooqOutputDir = layout.buildDirectory.dir("generated-sources/jooq")
 val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
 
+// 절대 경로를 인자로 넘기되 입력·출력은 상대 경로 기준으로 선언해, checkout 위치가 달라도(워크트리) 빌드 캐시를 공유한다.
+abstract class JooqCodegenArgs : CommandLineArgumentProvider {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val migrations: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val generated: DirectoryProperty
+
+    override fun asArguments(): Iterable<String> = listOf(migrations.get().asFile.absolutePath, generated.get().asFile.absolutePath)
+}
+
 val generateJooq = tasks.register<JavaExec>("generateJooq") {
     group = "build"
     description = "Flyway 마이그레이션을 임시 PostgreSQL에 적용하고 jOOQ 코드를 생성한다."
     classpath = jooqGenerator.runtimeClasspath
     mainClass = "io.github.ticketing.codegen.JooqCodegenKt"
-    inputs.dir(migrationDir).withPropertyName("migrations")
-    outputs.dir(jooqOutputDir).withPropertyName("generated")
-    args(migrationDir.asFile.absolutePath, jooqOutputDir.get().asFile.absolutePath)
+    argumentProviders.add(
+        objects.newInstance<JooqCodegenArgs>().apply {
+            migrations.set(migrationDir)
+            generated.set(jooqOutputDir)
+        },
+    )
+    // 같은 마이그레이션·생성기 클래스패스면 결과가 같으므로 캐시한다.
+    outputs.cacheIf { true }
 }
 
 sourceSets.main {
