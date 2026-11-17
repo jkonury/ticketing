@@ -43,7 +43,7 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
 
     @Test
     fun `저장하고 조회하면 좌석과 상태가 그대로 복원된다`() {
-        val saved = tx.execute { port.save(newBooking()) }!!
+        val saved = tx.execute { port.save(newBooking()) }
 
         val found = tx.execute { port.findById(saved.id!!) }!!
 
@@ -57,11 +57,11 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
 
     @Test
     fun `상태 전이를 저장하면 버전이 오르고 취소 시각이 남는다`() {
-        val saved = tx.execute { port.save(newBooking()) }!!
+        val saved = tx.execute { port.save(newBooking()) }
         val loaded = tx.execute { port.findById(saved.id!!) }!!
 
         loaded.cancelByUser(loaded.memberId, now.plusSeconds(10))
-        val updated = tx.execute { port.save(loaded) }!!
+        val updated = tx.execute { port.save(loaded) }
 
         assertThat(updated.version).isEqualTo(saved.version!! + 1)
 
@@ -73,7 +73,7 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
 
     @Test
     fun `오래된 버전으로 저장하면 낙관적 락 예외가 난다`() {
-        val saved = tx.execute { port.save(newBooking()) }!!
+        val saved = tx.execute { port.save(newBooking()) }
         val firstLoaded = tx.execute { port.findById(saved.id!!) }!!
         val secondLoaded = tx.execute { port.findById(saved.id!!) }!!
 
@@ -87,7 +87,7 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
     @Test
     fun `같은 회원과 멱등 키는 조회되고 중복 저장은 유니크 제약으로 거부된다`() {
         val member = ids.incrementAndGet()
-        val saved = tx.execute { port.save(newBooking(member = member, key = "key-1")) }!!
+        val saved = tx.execute { port.save(newBooking(member = member, key = "key-1")) }
 
         assertThat(tx.execute { port.findByMemberAndIdempotencyKey(MemberId(member), "key-1") }!!.id).isEqualTo(saved.id)
         assertThat(tx.execute { port.findByMemberAndIdempotencyKey(MemberId(member), "other") }).isNull()
@@ -101,8 +101,8 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
     @Test
     fun `같은 회차 좌석을 두 번째로 넣으면 삽입 수가 0이다`() {
         val schedule = ScheduleId(ids.incrementAndGet())
-        val first = tx.execute { port.save(newBooking(schedule = schedule.value)) }!!.id!!
-        val second = tx.execute { port.save(newBooking(schedule = schedule.value)) }!!.id!!
+        val first = tx.execute { port.save(newBooking(schedule = schedule.value)) }.id!!
+        val second = tx.execute { port.save(newBooking(schedule = schedule.value)) }.id!!
 
         assertThat(tx.execute { port.insertSoldSeats(first, schedule, listOf(SeatId(1), SeatId(2)), now) }).isEqualTo(2)
         assertThat(tx.execute { port.insertSoldSeats(second, schedule, listOf(SeatId(1)), now) }).isEqualTo(0)
@@ -112,8 +112,8 @@ class BookingPersistenceAdapterTests(private val port: BookingCommandPort, priva
     @Test
     fun `판매 좌석을 지우면 같은 좌석을 다시 넣을 수 있다`() {
         val schedule = ScheduleId(ids.incrementAndGet())
-        val first: BookingId = tx.execute { port.save(newBooking(schedule = schedule.value)) }!!.id!!
-        val second: BookingId = tx.execute { port.save(newBooking(schedule = schedule.value)) }!!.id!!
+        val first: BookingId = tx.execute { port.save(newBooking(schedule = schedule.value)) }.id!!
+        val second: BookingId = tx.execute { port.save(newBooking(schedule = schedule.value)) }.id!!
         tx.execute { port.insertSoldSeats(first, schedule, listOf(SeatId(1)), now) }
 
         tx.execute { port.deleteSoldSeats(first) }

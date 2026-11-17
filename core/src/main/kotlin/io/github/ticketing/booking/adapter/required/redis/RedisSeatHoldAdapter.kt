@@ -98,9 +98,9 @@ class RedisSeatHoldAdapter(
         val key = snapshotKey(scheduleId)
         redis.executePipelined { connection ->
             val raw = redis.stringSerializer
-            val keyBytes = raw.serialize(key)!!
-            val available = raw.serialize("AVAILABLE")!!
-            seatIds.forEach { connection.hashCommands().hSetNX(keyBytes, raw.serialize(it.value.toString())!!, available) }
+            val keyBytes = raw.serialize(key)
+            val available = raw.serialize("AVAILABLE")
+            seatIds.forEach { connection.hashCommands().hSetNX(keyBytes, raw.serialize(it.value.toString()), available) }
             null
         }
     }

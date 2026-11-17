@@ -90,8 +90,8 @@ class CouponPersistenceAdapterTests(
 
         val results = tx.execute { listOf(issuedCoupons.issue(coupon), issuedCoupons.issue(coupon)) }
 
-        assertThat(results?.get(0)).isInstanceOf(IssueResult.Issued::class.java)
-        assertThat(results?.get(1)).isEqualTo(IssueResult.AlreadyClaimed)
+        assertThat(results.get(0)).isInstanceOf(IssueResult.Issued::class.java)
+        assertThat(results.get(1)).isEqualTo(IssueResult.AlreadyClaimed)
     }
 
     @Test

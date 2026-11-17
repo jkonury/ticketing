@@ -22,6 +22,10 @@ dependencyManagement {
 }
 
 dependencies {
+    // 빌드 호스트와 실행 호스트의 CPU가 달라도 macOS 시스템 DNS를 사용할 수 있게 한다.
+    runtimeOnly("io.netty:netty-resolver-dns-native-macos::osx-aarch_64")
+    runtimeOnly("io.netty:netty-resolver-dns-native-macos::osx-x86_64")
+
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.springframework.boot:spring-boot-starter-actuator")

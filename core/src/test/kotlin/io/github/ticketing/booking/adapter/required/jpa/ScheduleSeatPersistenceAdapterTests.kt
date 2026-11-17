@@ -34,7 +34,7 @@ class ScheduleSeatPersistenceAdapterTests(
         assertThat(firstSaved).isTrue()
         assertThat(secondSaved).isFalse()
 
-        val found = tx.execute { port.findSeats(id, listOf(SeatId(1), SeatId(3), SeatId(99))) }!!
+        val found = tx.execute { port.findSeats(id, listOf(SeatId(1), SeatId(3), SeatId(99))) }
 
         assertThat(found.map { it.seatId.value }).containsExactlyInAnyOrder(1L, 3L)
         assertThat(found.first().price).isEqualByComparingTo("150000")
