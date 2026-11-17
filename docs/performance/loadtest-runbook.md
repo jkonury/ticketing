@@ -213,6 +213,8 @@ SCOUTER_AGENT_DIR=<패치 에이전트 디렉터리> ./scripts/loadtest/run.sh -
 
 회원 1만 명이 같은 시각에 LIMITED 쿠폰 하나를 받는 시나리오다(기본 100장, `COUPON_QUANTITY`로 변경). 하네스 전용 ADMIN 회원(`load-admin@loadtest.local`)을 시드하고 harness가 JWT를 직접 서명해 쿠폰을 만든다(비밀번호·토큰은 결과에 남기지 않는다).
 
+측정 결과는 [m5.5/coupon-drop.md](m5.5/coupon-drop.md)에 있다.
+
 ```bash
 ./scripts/loadtest/run.sh --scenario coupon-drop [--coupon-strategy redis|db] [--vus N] [--no-rate-limit]
 ./scripts/loadtest/verify-coupon-integrity.sh <definitionId> [redis|db]   # 단독 재검증

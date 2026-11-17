@@ -195,13 +195,14 @@
 - Redis 유실·불일치 보정: DB 기준으로 재고 = total − 발급 수, Set = 발급 회원으로 맞춘다. 보정 Job이나 오픈 시 재구성으로 처리한다(좌석 스냅샷 보정 Job 패턴).
 - gateway
   - `GatewayRoutes.kt`에 `core-coupon-claims`(`POST /api/v1/coupons/*/claims`) 라우트를 추가한다.
-  - `RateLimitFilter.kt`에 `coupon-claim` 버킷을 추가한다. 수치는 측정 후 정한다.
+  - `RateLimitFilter.kt`에 `coupon-claim` 버킷(보충 1, 버스트 3)을 추가한다. 임시값으로 확정했고, 이번 시나리오는 회원당 1회라 429가 0건이어서 수치 검증은 후속 테스트로 둔다.
+  - core 호스트로 가는 연결 풀에만 상한 100을 둔다(`forRemoteHost`). 기본 풀(elastic)은 동시 받기마다 core로 새 연결을 만들어 core accept 큐가 넘쳤고, 전역 상한은 realtime SSE까지 막아 hot-seats가 깨졌다.
   - 대기열과 입장 토큰은 쓰지 않는다.
 - 부하 테스트
-  - `loadtest/scenarios/coupon-drop.ts`: 1만 VU가 100장을 노린다. `hot-seats.ts`의 동시 시작 방식을 재사용한다.
+  - 실제 측정은 Gatling `CouponDropSimulation`으로 했다(`run.sh --scenario coupon-drop --tool gatling`). 1만 명이 100장을 노리며, 새 연결 1만 개가 동시에 몰려 listen 큐가 넘치는 문제를 피하려고 20초 ramp 동안 `GET /api/v1/coupons`로 연결을 사전 수립하고 40초 뒤 같은 시각에 받는다. k6 `loadtest/scenarios/coupon-drop.ts`는 남아 있으나 측정에는 쓰지 않았다.
   - `scripts/loadtest/run.sh:90`의 case와 `seed.sh coupon`을 추가한다.
   - verify-coupon-integrity.sh (신규, scripts/loadtest): 발급 수 ≤ total, `(def, member)` 중복 0, Redis 재고 + 발급 수 = total, Set = DB 회원 집합을 확인한다.
-- 비교 실험: 같은 시나리오를 DB 조건부 UPDATE(`remaining > 0`) 방식으로 측정한다(프로퍼티로 전환). 결과는 docs/performance/m5.5 디렉터리(신규)에 기록한다.
+- 비교 실험: 같은 시나리오를 DB 조건부 UPDATE(`remaining > 0`) 방식으로 측정한다(프로퍼티로 전환). 결과는 [docs/performance/m5.5/coupon-drop.md](../performance/m5.5/coupon-drop.md)에 기록했다.
 - 회귀: hot-seats 중복 판매 0건 유지(`verify-integrity.sh`)
 
 ## 검증 (하위 단계마다)

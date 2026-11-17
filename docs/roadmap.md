@@ -124,11 +124,11 @@
 
 ### M5.5-3. 선착순 발급
 
-- [ ] Redis Lua(재고 + 중복 Set) 뒤 동기 DB INSERT, 실패 시 보상, Redis–DB 보정
-- [ ] gateway: 쿠폰 받기 라우트와 rate limit 버킷(수치는 측정 후 결정)
-- [ ] 부하 테스트 `coupon-drop`(1만 VU, 100장)과 정합성 검증 스크립트
-- [ ] DB 조건부 UPDATE 방식 비교 실험과 결과 문서화
-- [ ] 회귀: hot-seats 중복 판매 0건 유지
+- [x] Redis Lua(재고 + 중복 Set) 뒤 동기 DB INSERT, 실패 시 보상, Redis–DB 보정 (2cc628c, b775249)
+- [x] gateway: 쿠폰 받기 라우트와 rate limit 버킷(c8d2abc, `coupon-claim` 보충 1·버스트 3 임시값 확정)
+- [x] 부하 테스트 `coupon-drop`(1만 VU, 100장)과 정합성 검증 스크립트 (Gatling 하네스 effeca5, [결과](performance/m5.5/coupon-drop.md))
+- [x] DB 조건부 UPDATE 방식 비교 실험과 결과 문서화 ([결과](performance/m5.5/coupon-drop.md))
+- [x] 회귀: hot-seats 중복 판매 0건 유지 (확정 98석 중복 0, [결과](performance/m5.5/coupon-drop.md))
 
 **완료 기준**: (1) 예매–쿠폰 E2E 세 경로(USED, 복원, 소멸) 통과 (2) 쿠폰을 쓴 예매의 정산이 정가 기준과 일치 (3) coupon-drop에서 초과·중복 발급 0건이고 Redis–DB 대사 일치 (4) hot-seats 중복 판매 0건 유지.
 
@@ -165,3 +165,6 @@
 | coupon MSA 분리 | M6에서는 분리하지 않음. 이후 검토 |
 | 등급별 수량제 좌석 | 미정 |
 | k8s 배포 | MSA 전환과 함께 |
+| coupon_claim p95 1초 (Gateway의 core 풀 대기 감소) | M5.5-3 측정 후속. [결과](performance/m5.5/coupon-drop.md) |
+| 쿠폰 소진 경로의 DB 미접근 (정의 캐시) | M5.5-3 측정 후속 |
+| `coupon-claim` rate limit 수치 검증 테스트 | M5.5-3 측정 후속. 현재 값은 임시 |
