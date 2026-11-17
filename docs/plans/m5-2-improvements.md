@@ -2,7 +2,7 @@
 
 - 작성일: 2026-11-13
 - 상태: 계획. 이 문서 작성으로 구현·측정이나 M5 완료를 처리하지 않는다.
-- 선행 결과: [M5-1 기준 측정](../performance/m5-baseline.md), [로드맵 M5](../roadmap.md#m5-부하-테스트와-관측)
+- 선행 결과: [M5-1 기준 측정](../performance/m5-baseline.md), [로드맵 M5](../backup/roadmap-completed-M2-M5.5.md#m5-부하-테스트와-관측)
 - 작성 기준: 로컬 계획 작성 지침(build/prompt.md)의 step 형식
 
 ## 범위와 판단 기준
@@ -326,7 +326,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [로드맵 M5](../roadmap.md#m5-부하-테스트와-관측), [기준 측정](../performance/m5-baseline.md), [ADR 0024](../adr/0024-observability-and-load-test.md)
+- [로드맵 M5](../backup/roadmap-completed-M2-M5.5.md#m5-부하-테스트와-관측), [기준 측정](../performance/m5-baseline.md), [ADR 0024](../adr/0024-observability-and-load-test.md)
 - 앞 step에서 누적한 docs/performance/m5-improvements.md와 실행 디렉터리의 k6 summary·Prometheus·정합성·자원·로그·JFR 산출물
 - `docs/architecture.md`의 「개발 환경과 테스트」, `docs/runbook.md`, 저장소 명령 안내
 
