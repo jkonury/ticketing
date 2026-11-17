@@ -54,6 +54,7 @@ dependencies {
 
 tasks {
     test {
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
         jvmArgumentProviders.add(
             objects.newInstance<MockitoAgentProvider>().apply {
                 agentJar.from(mockitoAgent)
