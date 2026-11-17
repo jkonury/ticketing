@@ -2,7 +2,7 @@ plugins {
     kotlin("jvm")
 }
 
-val libs = the<VersionCatalogsExtension>().named("libs")
+val libs = versionCatalogs.named("libs")
 
 group = "io.github.ticketing"
 version = "0.0.1-SNAPSHOT"

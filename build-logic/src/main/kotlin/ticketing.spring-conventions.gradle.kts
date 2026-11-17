@@ -1,4 +1,5 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
+import org.springframework.boot.gradle.tasks.run.BootRun
 
 plugins {
     id("ticketing.kotlin-conventions")
@@ -8,16 +9,28 @@ plugins {
     id("ticketing.kotlin-quality")
 }
 
-tasks.named<BootJar>("bootJar") {
-    archiveFileName.set("${project.name}.jar")
+val libs = versionCatalogs.named("libs")
+
+// 카탈로그 library(group:name 과 version)를 BOM 좌표 문자열로 바꾼다.
+fun bomNotation(alias: String): String {
+    val dependency = libs.findLibrary(alias).get().get()
+    return "${dependency.module}:${dependency.versionConstraint.requiredVersion}"
 }
 
-val libs = the<VersionCatalogsExtension>().named("libs")
+tasks.named<BootJar>("bootJar") {
+    archiveFileName.set("${project.name}.jar")
+    // Netty(Lettuce 등)의 네이티브 접근 경고를 막는다.
+    manifest.attributes("Enable-Native-Access" to "ALL-UNNAMED")
+}
+
+tasks.named<BootRun>("bootRun") {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.modulith:spring-modulith-bom:${libs.findVersion("spring-modulith").get()}")
-        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${libs.findVersion("spring-cloud").get()}")
+        mavenBom(bomNotation("spring-modulith-bom"))
+        mavenBom(bomNotation("spring-cloud-dependencies"))
     }
 }
 
@@ -48,12 +61,12 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-micrometer-metrics-test")
 
-    testImplementation("org.mockito:mockito-core")
     mockitoAgent("org.mockito:mockito-core") { isTransitive = false }
 }
 
 tasks {
-    test {
+    // modulithDocs 같은 별도 Test task에도 같은 JVM 설정을 적용한다.
+    withType<Test>().configureEach {
         jvmArgs("--enable-native-access=ALL-UNNAMED")
         jvmArgumentProviders.add(
             objects.newInstance<MockitoAgentProvider>().apply {

@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    testImplementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.spring.boot.get()}"))
+    testImplementation(platform(libs.spring.boot.dependencies))
     testImplementation("org.springframework:spring-webflux")
     testImplementation("org.springframework:spring-context")
     testImplementation("io.projectreactor.netty:reactor-netty-http")

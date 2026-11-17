@@ -2,8 +2,6 @@ plugins {
     id("ticketing.jpa-conventions")
 }
 
-val libs = the<VersionCatalogsExtension>().named("libs")
-
 // jOOQ 코드 생성기. 애플리케이션 클래스패스와 분리해 Flyway·Testcontainers 같은 도구 의존성이 새어 들어가지 않게 한다.
 val jooqGenerator = sourceSets.create("jooqGenerator")
 
@@ -32,7 +30,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
-    testImplementation(libs.findLibrary("archunit-junit5").get())
+    testImplementation(libs.archunit.junit5)
 
     "jooqGeneratorImplementation"(kotlin("stdlib"))
     "jooqGeneratorImplementation"("org.jooq:jooq-codegen")
