@@ -31,9 +31,9 @@ System_Boundary("TicketingApplication_boundary", "TicketingApplication", $tags="
 
 Rel(TicketingApplication.TicketingApplication.Audit, TicketingApplication.TicketingApplication.Coupon, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Audit, TicketingApplication.TicketingApplication.Member, "listens to", $techn="", $tags="", $link="")
+Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Coupon, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Payment, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Catalog, "listens to", $techn="", $tags="", $link="")
-Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Coupon, "depends on", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Notification, TicketingApplication.TicketingApplication.Booking, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Settlement, TicketingApplication.TicketingApplication.Booking, "listens to", $techn="", $tags="", $link="")
 

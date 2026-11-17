@@ -17,7 +17,7 @@ class BookingNotificationListenerTests {
 
     @Test
     fun `확정 이벤트를 받으면 예매 식별자를 로그에 남긴다`(output: CapturedOutput) {
-        listener.on(BookingConfirmed(1, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, time))
+        listener.on(BookingConfirmed(1, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, time))
 
         assertThat(output.out).contains("예매 확정 알림: bookingId=1, memberId=2, scheduleId=3")
     }

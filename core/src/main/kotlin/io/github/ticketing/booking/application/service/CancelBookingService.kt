@@ -51,6 +51,7 @@ class CancelBookingService(
                 bookings.deleteSoldSeats(BookingId(bookingId))
                 events.publishEvent(RefundRequested(bookingId, CancelReason.USER_REQUESTED.name, now))
             }
+            if (!refundRequired) events.requestCouponRelease(saved, "USER_CANCELLED")
             val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
             events.publishEvent(
                 BookingCancelled(

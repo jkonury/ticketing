@@ -56,3 +56,7 @@ private fun Booking.isAwaitingCoupon(issuedCouponId: Long): Boolean {
     val current = appliedCoupon ?: return false
     return status == BookingStatus.PENDING && current.issuedCouponId == issuedCouponId && current.state == CouponState.RESERVING
 }
+
+/** 예매가 PENDING에서 끝날 때 coupon에 해제를 요청해야 하는 쿠폰이다. RESERVING도 포함한다(늦게 온 Reserved는 결과 리스너가 해제한다). */
+fun Booking.couponToRelease(): Long? =
+    appliedCoupon?.takeIf { it.state == CouponState.RESERVED || it.state == CouponState.RESERVING }?.issuedCouponId

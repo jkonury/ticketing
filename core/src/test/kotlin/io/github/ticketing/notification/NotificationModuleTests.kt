@@ -21,7 +21,7 @@ class NotificationModuleTests {
 
     @Test
     fun `확정 이벤트를 수신해 알림 로그를 출력한다`(scenario: Scenario, output: CapturedOutput) {
-        val event = BookingConfirmed(17001, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, time)
+        val event = BookingConfirmed(17001, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, time)
 
         scenario.publish(event)
             .andWaitForStateChange({ output.out }, { it.contains("예매 확정 알림: bookingId=17001") })

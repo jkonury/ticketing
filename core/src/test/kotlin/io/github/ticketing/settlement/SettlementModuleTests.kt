@@ -35,7 +35,7 @@ class SettlementModuleTests(private val dsl: DSLContext, private val completed: 
 
     @Test
     fun `확정 이벤트의 값을 매출 사본에 기록한다`(scenario: Scenario) {
-        val event = BookingConfirmed(18001, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, time)
+        val event = BookingConfirmed(18001, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, time)
 
         scenario.publish(event)
             .andWaitForStateChange({
@@ -54,7 +54,7 @@ class SettlementModuleTests(private val dsl: DSLContext, private val completed: 
 
     @Test
     fun `확정 이벤트를 중복 수신해도 사본은 하나다`(scenario: Scenario) {
-        val event = BookingConfirmed(18002, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, time)
+        val event = BookingConfirmed(18002, 2, 3, 5, 6, listOf(4), BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, time)
 
         scenario.publish(event)
             .andWaitForStateChange { dsl.fetchCount(BOOKING_SALE, BOOKING_SALE.BOOKING_ID.eq(event.bookingId)) }

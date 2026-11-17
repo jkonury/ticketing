@@ -2,6 +2,7 @@ package io.github.ticketing.booking.application.flow
 
 import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.booking.application.port.provided.HandleCouponResultUseCase
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.coupon.CouponReleaseRequested
@@ -11,6 +12,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -25,9 +27,10 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * 결과 리스너(Reserved/Rejected 구독)는 다음 작업 범위라 적용 후 상태는 RESERVING에 머문다.
- * coupon 측이 발행하는 결과 이벤트에 의존하지 않도록 RESERVING까지만 검증하고, RESERVED는 DB를 직접 바꿔 만든다.
+ * coupon의 결과가 비동기로 상태를 바꾸지 않도록 결과 유스케이스를 모의해 적용 후 상태를 RESERVING에 고정한다.
+ * RESERVED는 DB를 직접 바꿔 만든다. 실제 Saga는 [BookingCouponSagaTests]가 검증한다.
  */
+@MockitoBean(types = [HandleCouponResultUseCase::class])
 class BookingCouponApiTests(
     private val mvc: MockMvc,
     private val register: RegisterScheduleSeatsUseCase,

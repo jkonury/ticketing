@@ -11,6 +11,9 @@ data class BookingConfirmed(
     val performanceId: Long,
     val organizerId: Long,
     val seatIds: List<Long>,
+    /** 결제 금액(payable = listAmount - discountAmount). */
     val amount: BigDecimal,
+    val listAmount: BigDecimal,
+    val discountAmount: BigDecimal,
     val confirmedAt: Instant,
 )

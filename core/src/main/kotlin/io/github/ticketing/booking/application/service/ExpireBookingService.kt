@@ -40,6 +40,7 @@ class ExpireBookingService(
             booking.expireBySweep(now, paymentGrace)
             val saved = bookings.save(booking)
             events.publishEvent(BookingExpired(bookingId, saved.memberId.value, saved.scheduleId.value, now))
+            events.requestCouponRelease(saved, "EXPIRED")
             saved
         } ?: return ExpireResult.Skipped("대상이 아니거나 예매가 없음")
 

@@ -174,15 +174,22 @@ class EventCollector {
 
     @EventListener
     fun on(event: Any) {
-        if (event.javaClass.name.startsWith("io.github.ticketing.booking.Booking") ||
-            event.javaClass.name.startsWith("io.github.ticketing.payment.") ||
-            event.javaClass.name.startsWith("io.github.ticketing.coupon.CouponRe")
-        ) {
+        val name = event.javaClass.name
+        if (COLLECTED_PREFIXES.any { name.startsWith(it) }) {
             events += event
         }
     }
 
     fun <T : Any> of(type: Class<T>, predicate: (T) -> Boolean): List<T> = events.filterIsInstance(type).filter(predicate)
+
+    private companion object {
+        val COLLECTED_PREFIXES = listOf(
+            "io.github.ticketing.booking.Booking",
+            "io.github.ticketing.payment.",
+            "io.github.ticketing.coupon.CouponRe",
+            "io.github.ticketing.coupon.CouponUseConfirmed",
+        )
+    }
 }
 
 class FailingExpireBookingUseCase(private val delegate: ExpireBookingService) : ExpireBookingUseCase {

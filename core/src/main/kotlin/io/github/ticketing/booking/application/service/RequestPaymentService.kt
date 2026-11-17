@@ -69,6 +69,7 @@ class RequestPaymentService(
         booking.expire(now)
         val saved = bookings.save(booking)
         events.publishEvent(BookingExpired(requireNotNull(booking.id).value, booking.memberId.value, saved.scheduleId.value, now))
+        events.requestCouponRelease(saved, "EXPIRED")
         return Outcome.Expired(saved)
     }
 

@@ -10,7 +10,9 @@ import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.BookingStatus
+import io.github.ticketing.booking.domain.CouponState
 import io.github.ticketing.booking.domain.PaymentOutcome
+import io.github.ticketing.coupon.CouponUseConfirmed
 import io.github.ticketing.payment.RefundRequested
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -80,10 +82,15 @@ class PaymentResultService(
                             seatIds.map {
                                 it.value
                             },
+                            booking.payableAmount,
                             booking.listAmount,
+                            booking.discountAmount,
                             now,
                         ),
                     )
+                    booking.appliedCoupon?.takeIf { it.state == CouponState.RESERVED }?.let {
+                        events.publishEvent(CouponUseConfirmed(bookingId.value, it.issuedCouponId, now))
+                    }
                     log.info("예매 확정 bookingId={} paymentId={}", bookingId.value, paymentId)
                     After.MarkSold(saved)
                 } else {
@@ -120,6 +127,7 @@ class PaymentResultService(
         val id = requireNotNull(booking.id).value
         val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
         events.publishEvent(RefundRequested(id, reason, now))
+        events.requestCouponRelease(booking, reason)
         events.publishEvent(
             BookingCancelled(
                 id,
@@ -147,6 +155,7 @@ class PaymentResultService(
         events.publishEvent(RefundRequested(bookingId, outcome.reason.name, now))
         if (booking.status != before) {
             events.publishEvent(BookingExpired(bookingId, booking.memberId.value, booking.scheduleId.value, now))
+            events.requestCouponRelease(booking, "EXPIRED")
         }
 
         log.info("결제는 성공했지만 환불을 요청한다 bookingId={} paymentId={} reason={}", bookingId, paymentId, outcome.reason)
@@ -178,6 +187,7 @@ class PaymentResultService(
                         now,
                     ),
                 )
+                events.requestCouponRelease(booking, "PAYMENT_FAILED")
                 log.info("결제 실패로 예매 취소 bookingId={} paymentId={} reason={}", bookingId, paymentId, reason)
                 After.Release(saved)
             }

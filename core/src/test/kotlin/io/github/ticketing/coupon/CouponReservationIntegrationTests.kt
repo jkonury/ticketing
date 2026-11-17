@@ -219,8 +219,9 @@ class CouponReservationIntegrationTests(
         val orderId = nextOrder()
 
         tx.executeWithoutResult { publisher.publishEvent(request(orderId, couponId)) }
+        // 존재하지 않는 예매라 booking 리스너가 곧바로 해제를 요청하므로 RESERVED 상태가 아니라 Reserved 발행으로 예약을 확인한다
         await().atMost(10, TimeUnit.SECONDS).untilAsserted {
-            assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.RESERVED)
+            assertThat(events.stream(CouponReserved::class.java).filter { it.orderId == orderId }.count()).isPositive()
         }
 
         tx.executeWithoutResult { publisher.publishEvent(CouponReleaseRequested(orderId, couponId, "TEST")) }
