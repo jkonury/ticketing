@@ -81,6 +81,9 @@ ticketing:
     secret: ${TICKETING_JWT_SECRET}
   admin:
     bootstrap-email: ${TICKETING_ADMIN_BOOTSTRAP_EMAIL:}
+  coupon:
+    # 예매 hold 5분 + booking.expiry.payment-grace(30m)보다 길어야 한다
+    reservation-ttl: ${COUPON_RESERVATION_TTL:1h}
   payment:
     fake-pg:
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}

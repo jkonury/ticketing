@@ -34,4 +34,11 @@ internal interface IssuedCouponJpaRepository : JpaRepository<IssuedCouponJpaEnti
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update IssuedCouponJpaEntity c set c.status = 'REVOKED', c.version = c.version + 1 where c.id = :id and c.status = 'ISSUED'")
     fun revokeIfIssued(id: Long): Int
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(
+        "update IssuedCouponJpaEntity c set c.status = 'USED', c.orderId = :orderId, c.usedAt = :now, " +
+            "c.reservedUntil = null, c.version = c.version + 1 where c.id = :id",
+    )
+    fun forceUse(id: Long, orderId: Long, now: Instant): Int
 }

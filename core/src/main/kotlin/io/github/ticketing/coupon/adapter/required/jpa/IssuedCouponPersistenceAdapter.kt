@@ -5,6 +5,7 @@ import io.github.ticketing.coupon.application.port.required.IssuedCouponCommandP
 import io.github.ticketing.coupon.domain.CouponDefinitionId
 import io.github.ticketing.coupon.domain.IssuedCoupon
 import io.github.ticketing.coupon.domain.IssuedCouponId
+import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import io.github.ticketing.coupon.domain.MemberId
 import io.github.ticketing.coupon.domain.OrderId
 import org.jooq.DSLContext
@@ -47,6 +48,12 @@ internal class IssuedCouponPersistenceAdapter(private val issuedCoupons: IssuedC
 
     override fun confirmIfReservedBy(id: IssuedCouponId, orderId: OrderId, now: Instant): Boolean =
         issuedCoupons.confirmIfReservedBy(id.value, orderId.value, now) == 1
+
+    override fun forceUse(id: IssuedCouponId, orderId: OrderId, now: Instant): IssuedCouponStatus? {
+        val previous = issuedCoupons.findById(id.value).map { IssuedCouponStatus.valueOf(it.status) }.orElse(null) ?: return null
+        issuedCoupons.forceUse(id.value, orderId.value, now)
+        return previous
+    }
 
     override fun revokeIfIssued(id: IssuedCouponId): Boolean = issuedCoupons.revokeIfIssued(id.value) == 1
 }

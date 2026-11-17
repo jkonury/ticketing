@@ -3,6 +3,7 @@ package io.github.ticketing.coupon.application.port.required
 import io.github.ticketing.coupon.domain.CouponDefinitionId
 import io.github.ticketing.coupon.domain.IssuedCoupon
 import io.github.ticketing.coupon.domain.IssuedCouponId
+import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import io.github.ticketing.coupon.domain.MemberId
 import io.github.ticketing.coupon.domain.OrderId
 import java.math.BigDecimal
@@ -32,6 +33,12 @@ interface IssuedCouponCommandPort {
     fun releaseIfReservedBy(id: IssuedCouponId, orderId: OrderId): Boolean
 
     fun confirmIfReservedBy(id: IssuedCouponId, orderId: OrderId, now: Instant): Boolean
+
+    /**
+     * 결제가 끝난 뒤 도착한 사용 확정용 강제 전이. 상태와 관계없이 USED(order_id, used_at)로 바꾸고 직전 상태를 돌려준다.
+     * 쿠폰이 없으면 null. 호출 측 트랜잭션이 필요하다.
+     */
+    fun forceUse(id: IssuedCouponId, orderId: OrderId, now: Instant): IssuedCouponStatus?
 
     fun revokeIfIssued(id: IssuedCouponId): Boolean
 }
