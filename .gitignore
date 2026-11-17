@@ -40,3 +40,6 @@ phases/*/logs/
 
 ### 에이전트 지시 프롬프트
 docs/prompt.md
+
+### session handoff
+.handoff
