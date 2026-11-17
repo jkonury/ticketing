@@ -49,7 +49,7 @@ class PaymentWebhookController(
 
         fun requiredText(name: String, max: Int): String {
             val value = node.get(name)
-            require(value != null && value.isTextual)
+            require(value != null && value.isString)
             return value.asString().also { require(it.isNotBlank() && it.length <= max) }
         }
 
@@ -65,7 +65,7 @@ class PaymentWebhookController(
         val occurredAt = Instant.parse(requiredText("occurredAt", 100))
 
         val reasonNode = node.get("failureReason")
-        require(reasonNode == null || reasonNode.isNull || reasonNode.isTextual)
+        require(reasonNode == null || reasonNode.isNull || reasonNode.isString)
         val reason = if (reasonNode == null || reasonNode.isNull) null else reasonNode.asString()
         require(type != PaymentWebhookType.PAYMENT_FAILED || !reason.isNullOrBlank())
 
