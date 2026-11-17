@@ -210,6 +210,8 @@ def diff(pre_path, post_path, out, scenario, k6_summary, label):
         if scenario == "smoke":
             checks.append(check("k6 http_reqs = core GET /api/v1/performances", value("http_reqs"),
                                 route_count(summary, "core", "http_server_requests_seconds", uri="/api/v1/performances", method="GET")))
+        elif scenario == "coupon-drop":
+            pass  # 예매 흐름 지표가 없다. 정합성은 verify-coupon-integrity.sh가 판정한다
         else:
             attempts = value("flow_booking_attempt")
             op = "eq" if scenario in ("hot-seats", "seat-conflict-refund") else "ge"  # A는 409 재시도가 있어 서버 요청이 시도 수 이상

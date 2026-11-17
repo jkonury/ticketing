@@ -208,3 +208,17 @@ SCOUTER_AGENT_DIR=<패치 에이전트 디렉터리> ./scripts/loadtest/run.sh -
 ```
 
 `run.sh`는 실행 시 지정한 `SCOUTER_AGENT_DIR`을 `.env` 값보다 우선한다. 패치 에이전트가 붙었는지는 gateway·realtime 로그의 `[R171] reactive txid propagation: micrometer context-propagation accessor registered`로 확인한다. `[R168]`·`[R172]`가 보이면 `lift`로 되돌아간 것이다.
+
+## coupon-drop: 선착순 쿠폰 받기(M5.5-3)
+
+회원 1만 명이 같은 시각에 LIMITED 쿠폰 하나를 받는 시나리오다(기본 100장, `COUPON_QUANTITY`로 변경). 하네스 전용 ADMIN 회원(`load-admin@loadtest.local`)을 시드하고 harness가 JWT를 직접 서명해 쿠폰을 만든다(비밀번호·토큰은 결과에 남기지 않는다).
+
+```bash
+./scripts/loadtest/run.sh --scenario coupon-drop [--coupon-strategy redis|db] [--vus N] [--no-rate-limit]
+./scripts/loadtest/verify-coupon-integrity.sh <definitionId> [redis|db]   # 단독 재검증
+```
+
+- `--coupon-strategy`는 core의 `COUPON_LIMITED_CLAIM_STRATEGY`로 전달한다(기본 `redis`). 전략별로 따로 실행해 비교한다.
+- k6 지표는 `claim_created`(201), `claim_already_claimed`, `claim_sold_out`, `claim_rate_limited`(429), `claim_other`, `claim_latency`(p95)다. `claim_other`가 0이어야 threshold를 통과한다. 쿠폰 받기 rate limit에 걸리면 429가 늘어나므로 처리량 비교는 `--no-rate-limit`으로 한다.
+- 정합성은 발급 수 ≤ 총수량, `(definition_id, member_id)` 중복 0, redis 전략은 재고 + 발급 수 = 총수량과 claimed Set = DB 회원 집합, db 전략은 `remaining_quantity` + 발급 수 = 총수량으로 판정한다. 결과는 실행 디렉터리의 `integrity.log`·`integrity.json`에 남는다.
+- `--warmup`, `--aot-cache`, `--tool gatling`은 지원하지 않는다. hot-seats와 동시에 실행하는 옵션은 아직 없다.

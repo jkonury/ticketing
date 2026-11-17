@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 사용: seed.sh members [--count 10000] | seed.sh schedule --scenario queue-surge|hot-seats|seat-conflict-refund
+# 사용: seed.sh members [--count 10000] | seed.sh schedule --scenario queue-surge|hot-seats|seat-conflict-refund | seed.sh coupon [--quantity 100]
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -7,6 +7,7 @@ cd "$ROOT"
 OUT="$ROOT/build/loadtest"
 CORE_URL=${CORE_URL:-http://localhost:18080}
 ORGANIZER_EMAIL='load-organizer@loadtest.local'
+ADMIN_EMAIL='load-admin@loadtest.local'
 # 로그인하지 않으므로 값은 무관하다. 형식($2a$10$ + 53자)만 맞춘다
 PASSWORD_HASH='$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ01234'
 
@@ -22,7 +23,7 @@ psql_run() {
 }
 
 usage() {
-  echo '사용: seed.sh members [--count N] | seed.sh schedule --scenario queue-surge|hot-seats|seat-conflict-refund' >&2
+  echo '사용: seed.sh members [--count N] | seed.sh schedule --scenario queue-surge|hot-seats|seat-conflict-refund | seed.sh coupon [--quantity N]' >&2
   exit 1
 }
 
@@ -157,10 +158,43 @@ seed_schedule() {
     "$schedule_id" "$seat_count" "$(jq '.hotSeatIds | length' "$OUT/schedule-$scenario.json")" "$scenario"
 }
 
+seed_coupon() {
+  local quantity=100
+  while (($#)); do
+    case "$1" in
+      --quantity) [[ $# -ge 2 && $2 =~ ^[1-9][0-9]*$ ]] || { echo '--quantity에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }; quantity=$2; shift 2 ;;
+      *) printf '알 수 없는 옵션: %s\n' "$1" >&2; exit 1 ;;
+    esac
+  done
+  # 하네스 전용 ADMIN 회원. 로그인하지 않고 harness가 JWT를 직접 서명하므로 비밀번호를 쓰지 않는다
+  local admin token now valid_from valid_until body definition_id
+  admin=$(psql_run -v "hash=$PASSWORD_HASH" -v "email=$ADMIN_EMAIL" <<'SQL'
+INSERT INTO member.member (email, password_hash, name, role, created_at)
+VALUES (:'email', :'hash', 'load-admin', 'ADMIN', now())
+ON CONFLICT (email) DO UPDATE SET role = 'ADMIN'
+RETURNING id;
+SQL
+)
+  admin=$(printf '%s' "$admin" | head -n 1)
+  [[ $admin =~ ^[0-9]+$ ]] || { echo '관리자 회원 시드 결과를 읽지 못했습니다.' >&2; exit 1; }
+  token=$(sign_jwt "$admin" ADMIN)
+  valid_from=$(date -u -d '-1 hour' +%Y-%m-%dT%H:%M:%SZ)
+  valid_until=$(date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
+  body=$(jq -nc --arg name "loadtest-coupon-$(date +%Y%m%d%H%M%S)" --arg from "$valid_from" --arg until "$valid_until" --argjson quantity "$quantity" \
+    '{name: $name, description: null, discountType: "FIXED", discountValue: 1000, maxDiscount: null, minOrderAmount: 0,
+      performanceId: null, validFrom: $from, validUntil: $until, issueMode: "LIMITED", totalQuantity: $quantity}')
+  definition_id=$(api_ok "$token" POST /api/v1/admin/coupons "$body" | jq -r .id)
+  [[ $definition_id =~ ^[0-9]+$ ]] || { echo '쿠폰 정의 ID를 읽지 못했습니다.' >&2; exit 1; }
+  jq -n --argjson definitionId "$definition_id" --argjson totalQuantity "$quantity" \
+    '{definitionId: $definitionId, totalQuantity: $totalQuantity}' > "$OUT/coupon.json"
+  printf '쿠폰 시드 완료: definitionId=%s, 수량 %s장 -> build/loadtest/coupon.json\n' "$definition_id" "$quantity"
+}
+
 [[ $# -ge 1 ]] || usage
 cmd=$1; shift
 case "$cmd" in
   members) seed_members "$@" ;;
   schedule) seed_schedule "$@" ;;
+  coupon) seed_coupon "$@" ;;
   *) usage ;;
 esac

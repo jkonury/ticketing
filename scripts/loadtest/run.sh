@@ -8,7 +8,7 @@ source "$ROOT/scripts/lib/scouter.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
+사용: run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund|coupon-drop> [--runs N] [--failure-inject] [--jfr] [--observability] [--keep]
             [--vus N] [--k6-cpus 0-3] [--app-cpus 4-15] [--no-scouter]
             [--warmup [--warmup-rounds N]] [--internal-warmup] [--codelist] [--restart-after-warmup core,gateway|gateway|realtime] [--no-rate-limit] [--aot-cache [--aot-train-rounds N]]
             [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N] [--jvm-opts '-XX:옵션 ...']
@@ -26,6 +26,8 @@ SCOUTER_AGENT_DIR을 지정하면 Java 앱에 Scouter를 연결합니다.
 --no-scouter는 .env의 Scouter 설정도 끄고 대조 측정합니다.
 seat-conflict-refund는 선점 키 유실을 주입한 보상 정합성 검증입니다(100쌍·회원 200명, 결제 실패율 0·웹훅 중복률 30%). 정상 A·B 성능 비교와 별도로 해석하며
 --warmup·--failure-inject와 함께 쓰지 않습니다.
+coupon-drop은 선착순(LIMITED) 쿠폰을 1만 VU가 동시에 받는 시나리오입니다(기본 100장, COUPON_QUANTITY로 변경). --coupon-strategy redis|db(기본 redis)는
+core의 COUPON_LIMITED_CLAIM_STRATEGY로 전달되며, 측정 뒤 verify-coupon-integrity.sh로 초과 발급·중복·재고 일치를 검사합니다. --warmup·--aot-cache·--tool gatling은 지원하지 않습니다.
 --tool gatling은 queue-surge·hot-seats·seat-conflict-refund를 지원하며 --aot-cache와 함께 쓰지 않습니다.
 --booking-p95-ms는 Gatling 예매 p95 한도(양의 정수)입니다. 미지정 시 100명 이하 300ms, 초과 1500ms입니다. Gradle 없이 java를 직접 띄워 CPU 고정(--k6-cpus)·RSS 샘플링이 k6와 같은 조건이 되고,
 JVM 힙은 --gatling-heap(기본 2g)으로 고정합니다. 기본은 리포트를 생략하며(-nr), --gatling-report로 HTML 리포트를 생성합니다.
@@ -63,6 +65,7 @@ TOOL=k6
 GATLING_HEAP=2g
 BOOKING_P95_MS=
 GATLING_REPORT=false
+COUPON_STRATEGY=redis
 GATLING_DIST="$ROOT/loadtest/gatling/build/gatling-dist"
 need_value() { [[ $# -ge 2 && -n $2 ]] || { printf '%s 값이 필요합니다.\n' "$1" >&2; exit 1; }; }
 while (($#)); do
@@ -88,13 +91,20 @@ while (($#)); do
     --booking-p95-ms) need_value "$@"; BOOKING_P95_MS=$2; shift 2 ;;
     --gatling-heap) need_value "$@"; GATLING_HEAP=$2; shift 2 ;;
     --gatling-report) GATLING_REPORT=true; shift ;;
+    --coupon-strategy) need_value "$@"; COUPON_STRATEGY=$2; shift 2 ;;
     --aot-cache) AOT_CACHE=true; shift ;;
     --aot-train-rounds) need_value "$@"; AOT_TRAIN_ROUNDS=$2; shift 2 ;;
     -h|--help) usage ;;
     *) printf '알 수 없는 옵션: %s\n' "$1" >&2; usage ;;
   esac
 done
-case "$SCENARIO" in smoke|queue-surge|hot-seats|seat-conflict-refund) ;; *) usage ;; esac
+case "$SCENARIO" in smoke|queue-surge|hot-seats|seat-conflict-refund|coupon-drop) ;; *) usage ;; esac
+case "$COUPON_STRATEGY" in redis|db) ;; *) echo '--coupon-strategy에는 redis 또는 db가 필요합니다.' >&2; exit 1 ;; esac
+COUPON_QUANTITY=${COUPON_QUANTITY:-100}
+[[ $COUPON_QUANTITY =~ ^[1-9][0-9]*$ ]] || { echo 'COUPON_QUANTITY에는 1 이상의 숫자가 필요합니다.' >&2; exit 1; }
+if [[ $SCENARIO == coupon-drop ]] && { $WARMUP || $AOT_CACHE || [[ $TOOL == gatling ]]; }; then
+  echo 'coupon-drop은 --warmup, --aot-cache, --tool gatling과 함께 쓰지 않습니다.' >&2; exit 1
+fi
 if [[ $SCENARIO == seat-conflict-refund ]] && { $WARMUP || $FAILURE_INJECT || $AOT_CACHE; }; then
   echo 'seat-conflict-refund는 --warmup, --failure-inject, --aot-cache와 함께 쓰지 않습니다.' >&2; exit 1
 fi
@@ -328,7 +338,7 @@ start_apps() {
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
     FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
-  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" "${obs[@]}"
+  start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" COUPON_LIMITED_CLAIM_STRATEGY="$COUPON_STRATEGY" "${obs[@]}"
   start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"
   local gw_env=()
   if $NO_RATE_LIMIT; then gw_env=(TICKETING_GATEWAY_RATE_LIMIT_ENABLED=false); fi
@@ -497,7 +507,7 @@ conflict_first_phase() {
       return 1
     fi
   else
-    env PHASE=first BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" \
+    env PHASE=first BASE_URL=http://localhost:18000 TICKETING_JWT_SECRET="$TICKETING_JWT_SECRET" MEMBERS_FILE="$OUT/members.json" SCHEDULE_FILE="$schedule_file" COUPON_FILE="$OUT/coupon.json" \
       READINESS_FILE="$dir/conflict-first-readiness.json" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/k6-first-summary.json" \
       loadtest/scenarios/seat-conflict-refund.ts > "$dir/k6-first.log" 2>&1 || first_status=$?
     if ((first_status != 0 && first_status != 99)) || rg -q 'source=stacktrace|script exception' "$dir/k6-first.log"; then
@@ -570,7 +580,11 @@ run_once() {
 
   "$ROOT/scripts/loadtest/seed.sh" members > "$dir/seed.log" 2>&1 || { echo "회원 시드 실패: $dir/seed.log" >&2; return 1; }
   local schedule_file="$OUT/schedule-$SCENARIO.json"
-  if [[ $SCENARIO != smoke ]]; then
+  if [[ $SCENARIO == coupon-drop ]]; then
+    "$ROOT/scripts/loadtest/seed.sh" coupon --quantity "$COUPON_QUANTITY" >> "$dir/seed.log" 2>&1 \
+      || { echo "쿠폰 시드 실패: $dir/seed.log" >&2; return 1; }
+    schedule_file="$OUT/coupon.json"
+  elif [[ $SCENARIO != smoke ]]; then
     "$ROOT/scripts/loadtest/seed.sh" schedule --scenario "$SCENARIO" >> "$dir/seed.log" 2>&1 \
       || { echo "회차 시드 실패: $dir/seed.log" >&2; return 1; }
   fi
@@ -734,7 +748,18 @@ run_once() {
     fi
   fi
   local integrity='해당 없음' integrity_ok=true
-  if [[ $SCENARIO != smoke ]]; then
+  if [[ $SCENARIO == coupon-drop ]]; then
+    sleep 5
+    local definition_id
+    definition_id=$(jq -r .definitionId "$schedule_file")
+    if "$ROOT/scripts/loadtest/verify-coupon-integrity.sh" "$definition_id" "$COUPON_STRATEGY" > "$dir/integrity.log" 2>&1; then
+      integrity='통과'
+    else
+      integrity='위반(integrity.log 참고)'
+      integrity_ok=false
+    fi
+    cp "$OUT/coupon-integrity-$definition_id.json" "$dir/integrity.json" 2>/dev/null || true
+  elif [[ $SCENARIO != smoke ]]; then
     sleep 10
     local schedule_id
     schedule_id=$(jq -r .scheduleId "$schedule_file")
@@ -818,7 +843,9 @@ run_once() {
     fi
     reqs=$(jq -r '.metrics.http_reqs.count // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
     failed=$(jq -r '.metrics.http_req_failed | (.value // .rate) // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
-    p95=$(jq -r '.metrics["http_req_duration{name:booking_create}"]["p(95)"] // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
+    local p95_metric='http_req_duration{name:booking_create}'
+    [[ $SCENARIO != coupon-drop ]] || p95_metric=claim_latency
+    p95=$(jq -r --arg metric "$p95_metric" '.metrics[$metric]["p(95)"] // "n/a"' "$load_summary" 2>/dev/null || echo n/a)
   fi
   if $WARMUP && ! $server_delta_ok; then script_ok=false; fi
   # 앱·인프라·부하 도구가 한 호스트에서 돌므로 호스트 전체 메모리 사용률 최대값도 남긴다(총량 대비 MemAvailable 최소값)
