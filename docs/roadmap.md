@@ -114,13 +114,13 @@
 
 ### M5.5-2. 쿠폰 적용 Saga
 
-- [ ] `coupon` 모듈(헥사고날): 정의·발급 쿠폰, 할인 계산(정액·정률), 수명주기 규칙, 관리자 API(생성·수정·중지·현황·직접 지급·회수), 사용자 받기·조회 API
-- [ ] 계약 이벤트 5종(예약 요청·예약됨·거부·해제 요청·사용 확정)과 멱등·조건부 UPDATE, 늦은 사용 확정 강제 반영과 불일치 기록
-- [ ] 고아 예약 정리 Job
-- [ ] `booking`: 금액 3종(`list`/`discount`/`payable`), 쿠폰 적용·해제·교체 API, 결제 요청 시 `COUPON_PENDING`, 복원 지점별 해제 요청, 확정 시 사용 확정
-- [ ] `settlement`: 정가 기준 집계와 `platformDiscountAmount` 기록
-- [ ] web: 결제 화면 쿠폰 적용, 내 쿠폰, 받기 페이지, `/admin/coupons`
-- [ ] 테스트: 도메인 경계, Saga 통합(USED·복원·소멸·늦은 Reserved·재전달·늦은 USED), 정리 Job, 정산 Job, E2E 세 경로, Playwright
+- [x] `coupon` 모듈(헥사고날): 정의·발급 쿠폰, 할인 계산(정액·정률), 수명주기 규칙, 관리자 API(생성·수정·중지·현황·직접 지급·회수), 사용자 받기·조회 API
+- [x] 계약 이벤트 5종(예약 요청·예약됨·거부·해제 요청·사용 확정)과 멱등·조건부 UPDATE, 늦은 사용 확정 강제 반영과 불일치 기록
+- [x] 고아 예약 정리 Job
+- [x] `booking`: 금액 3종(`list`/`discount`/`payable`), 쿠폰 적용·해제·교체 API, 결제 요청 시 `COUPON_PENDING`, 복원 지점별 해제 요청, 확정 시 사용 확정
+- [x] `settlement`: 정가 기준 집계와 `platformDiscountAmount` 기록
+- [x] web: 결제 화면 쿠폰 적용, 내 쿠폰, 받기 페이지, `/admin/coupons`
+- [x] 테스트: 도메인 경계, Saga 통합(USED·복원·소멸·늦은 Reserved·재전달·늦은 USED), 정리 Job, 정산 Job, E2E 세 경로, Playwright
 
 ### M5.5-3. 선착순 발급
 

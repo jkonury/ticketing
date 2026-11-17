@@ -182,7 +182,7 @@
   - 늦은 USED 강제 반영
 - 정리 Job: 재시작, 확정과의 경합
 - 정산 Job: 쿠폰을 쓴 예매의 판매액·수수료가 정가 기준이고 할인 부담액이 기록된다.
-- E2E `CouponFlowE2eTests.kt`(`BookingFlowE2eTests.kt` 패턴): USED, 복원, 소멸 세 경로
+- E2E `CouponFlowE2eTests.kt`(`BookingFlowE2eTests.kt` 패턴): USED, 복원, 소멸 세 경로. 복원은 결제 전 사용자 취소로 검증한다(fake-pg로 결제 실패를 유도할 수 없어서. 결제 실패 복원은 Saga 통합 테스트가 다룬다). E2E 관리자 계정은 `scripts/e2e/run.sh`가 가입 후 DB에서 승격해 준비한다
 - Playwright: 결제 화면 쿠폰 적용
 
 ## M5.5-3 선착순 발급

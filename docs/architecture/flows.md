@@ -180,7 +180,7 @@ sequenceDiagram
     alt 결제 성공, 확정
         B-)C: CouponUseConfirmed
         C->>C: RESERVED -> USED
-    else 만료, 결제 실패, 시스템 취소
+    else 만료, 결제 실패, 시스템 취소, 결제 전 사용자 취소
         B-)C: CouponReleaseRequested
         C->>C: RESERVED -> ISSUED (복원)
     end
@@ -188,7 +188,8 @@ sequenceDiagram
 
 - 확정 후 환불은 쿠폰이 소멸하므로 해제를 보내지 않는다.
 - 모든 상태 전이는 조건부 UPDATE이고 `(orderId, issuedCouponId)`가 같은 재전달은 무시한다.
-- 늦게 온 사용 확정은 강제로 `USED`로 바꾸고 불일치를 기록한다. 해제되지 않은 고아 예약은 정리 Job이 해제한다.
+- 늦게 온 사용 확정은 강제로 `USED`로 바꾸고 불일치를 기록한다. 해제되지 않은 고아 예약은 정리 Job(`releaseStaleCouponReservationsJob`)이 해제한다.
+- 예약은 `ticketing.coupon.reservation-ttl`(기본 1h, 예매 hold 5분 + 결제 유예 30분보다 길게) 동안 유지하고, 정리 Job은 `reserved_until + ticketing.coupon.reservation-release-grace`(기본 10m)가 지난 RESERVED만 조건부 UPDATE로 복원한다.
 
 ## 6.6 선착순 발급
 
