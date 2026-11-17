@@ -39,12 +39,15 @@ fi
 mkdir -p build/e2e/logs
 LOG_DIR="$ROOT/build/e2e/logs"
 PIDS=()
+WEB_PGID=
 cleanup() {
   if $KEEP; then
     printf '프로세스 PID:'
     printf ' %s' "${PIDS[@]}"
     printf '\n'
   elif ((${#PIDS[@]})); then
+    # pnpm start는 next-server를 자식으로 띄우므로 web은 프로세스 그룹째 종료한다
+    [[ -z $WEB_PGID ]] || kill -- "-$WEB_PGID" 2>/dev/null || true
     kill "${PIDS[@]}" 2>/dev/null || true
     wait "${PIDS[@]}" 2>/dev/null || true
   fi
@@ -104,8 +107,9 @@ if $WEB; then
     (cd web && pnpm install --frozen-lockfile) > "$LOG_DIR/web.log" 2>&1 || { echo "web 설치 실패: $LOG_DIR/web.log" >&2; exit 1; }
   fi
   (cd web && pnpm build) > "$LOG_DIR/web.log" 2>&1 || { echo "web 빌드 실패: $LOG_DIR/web.log" >&2; exit 1; }
-  (cd web && GATEWAY_URL=http://localhost:18000 GATEWAY_PUBLIC_URL=http://localhost:18000 REDIS_URL=redis://localhost:16379 WEB_ORIGIN=http://localhost:13000 exec pnpm start) >> "$LOG_DIR/web.log" 2>&1 &
+  (cd web && GATEWAY_URL=http://localhost:18000 GATEWAY_PUBLIC_URL=http://localhost:18000 REDIS_URL=redis://localhost:16379 WEB_ORIGIN=http://localhost:13000 exec setsid pnpm start) >> "$LOG_DIR/web.log" 2>&1 &
   PIDS+=("$!")
+  WEB_PGID=$!
   deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   until curl -s -o /dev/null http://localhost:13000; do
     if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[5]}" 2>/dev/null; then
