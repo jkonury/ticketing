@@ -48,7 +48,7 @@
 
 ■ 참고 문서(저장소 루트 기준)
 - docs/architecture.md, docs/roadmap.md, docs/glossary.md, docs/adr/
-- AGENTS.md, docs/rules/backend.md, docs/rules/frontend.md
+- AGENTS.md, 해당 백엔드 모듈의 작성 지침과 테스트 지침, 프런트엔드 지침
 
 ■ 이 주석과 작성용 `<...>` 표시는 작성하면서 바꾸거나 지운다. 비밀 값 치환 표시는 유지한다.
 ■ 아래 상대 링크는 docs/troubleshooting/<대상>-<증상>.md로 복사한 뒤를 기준으로 한다.
@@ -201,7 +201,7 @@ Compose 설정과 실제 실행 프로필·환경 변수를 기준으로 연결 
 
 <필요한 명령만 실행하고 실제 결과를 아래 표에 기록한다. 문서만 바꿨다면 링크·경로·명령의 지침 일치를 확인한다.>
 
-JVM 앱 코드를 바꾸면 [백엔드 규칙](../rules/backend.md)에 따라 저장소 루트에서 테스트와 검사를 실행한다.
+JVM 앱 코드를 바꾸면 저장소 루트에서 테스트와 검사를 실행한다. [테스트 실행](../../AGENTS.md#7-테스트-실행) · [백엔드 테스트 지침](../rules/backend-testing.md)
 모듈 의존을 바꿨다면 Modulith 구조 검증도 필수다. Docker, fd, rg가 필요하다.
 테스트 필터는 사용자가 지정한 경우에만 추가한다.
 

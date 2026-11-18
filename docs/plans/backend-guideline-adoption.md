@@ -3,7 +3,7 @@
 - 작성일: 2026-11-12
 - 상태: 계획 (코드 변경 전)
 - 출처: 외부 Kotlin 프로젝트 작성 가이드(Spring Boot 3.5 + 헥사고날, 단일 애그리거트 구조)를 이 저장소 기준으로 검토한 결과
-- 개선된 지침: [rules/backend.md](../rules/backend.md) (`엔티티·DTO의 Kotlin 함정`, `테스트 작성 보조 규칙` 절과 `equals`/`hashCode` 항목)
+- 적용 대상은 core의 JPA 엔티티·API 규칙과 테스트 공통 작성 규칙이다. [core 작성 지침](../rules/backend-core.md) · [백엔드 테스트 지침](../rules/backend-testing.md#공통-작성-규칙)
 
 ## 1. 반영 범위 결정
 
@@ -76,7 +76,7 @@
 
 - [ ] `SignUpRequest`에 필수 값을 누락·빈 문자열로 보내 `@field:` 제약이 동작하고 `INVALID_REQUEST`(또는 필드 오류 형식)로 응답되는지 `MockMvc` 테스트로 확인한다. 이미 있으면 재사용한다
 - [ ] 필수 non-null 필드를 JSON에서 누락했을 때 `HttpMessageNotReadableException`이 `ApiExceptionHandler`에서 어떻게 응답되는지 확인한다. 500이면 `code`가 있는 400으로 매핑하는 핸들러를 추가한다
-- [ ] 결과가 지침 문장(`엔티티·DTO의 Kotlin 함정` 3·4번째 항목)과 맞는지 대조하고 어긋나면 지침을 고친다
+- [ ] 결과가 [core API 지침](../rules/backend-core.md#api)의 검증 애노테이션·불변식 오류 규칙과 맞는지 대조하고 어긋나면 지침을 고친다
 
 완료 기준: 위 세 경로가 모두 4xx + 안정적 `code`로 응답된다.
 
@@ -97,8 +97,8 @@
 
 ### 단계 7. 마무리
 
-- [ ] `rules/backend.md`가 현재 코드와 어긋나는 곳이 없는지 대조한다 (특히 `protected set` 예외 범위, `hashCode` 항목)
-- [ ] `./scripts/agent/docs/check-docs.sh docs/rules/backend.md docs/plans`로 링크·경로를 검사한다
+- [ ] [core JPA 엔티티 지침](../rules/backend-core.md#jpa-엔티티)을 현재 코드와 대조한다 (특히 `protected set` 예외 범위, `hashCode` 항목)
+- [ ] `./scripts/agent/docs/check-docs.sh docs/rules docs/plans`로 링크·경로를 검사한다
 - [ ] 이 문서의 체크박스와 상태를 갱신한다
 
 ## 4. 위험과 주의

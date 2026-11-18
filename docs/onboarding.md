@@ -68,7 +68,7 @@ fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scr
 2. [architecture.md](./architecture.md) §1–§4: 구성과 모듈 규칙
 3. [flows.md](./architecture/flows.md): 대기열 → 좌석 선점 → 결제 → 확정 흐름
 4. [roadmap.md](./roadmap.md): 현재 단계와 다음 미완료 항목
-5. 작업 영역별 규칙(해당 경로를 고치기 전에 읽는다): [backend.md](./rules/backend.md), [frontend.md](./rules/frontend.md)
+5. 작업 영역별 지침을 확인한다. 백엔드는 공통 지침과 변경 모듈의 지침을 읽고, 테스트를 다룰 때는 테스트 지침도 읽는다. [백엔드 공통·모듈별 지침](./rules/backend.md) · [백엔드 테스트 지침](./rules/backend-testing.md) · [프런트엔드 지침](./rules/frontend.md)
 6. 궁금한 결정은 [adr/](./adr/README.md)에서 대안과 근거를 찾는다
 
 ## 6. 지켜야 할 규칙 요약
@@ -105,7 +105,7 @@ fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scr
 
 - 대화, 문서, 커밋 메시지는 한국어, 코드 식별자는 영어다.
 - 커밋 형식은 `<type>(<scope>): <요약>`이다. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, scope는 모듈명이다.
-- 테스트 이름은 한국어 백틱, `Clock` 고정, 코루틴은 `runTest`를 쓴다. 자세한 내용은 [backend.md](./rules/backend.md)에 있다.
+- 테스트 이름은 한국어 백틱 문장으로 쓰고, 시간 의존 테스트는 `Clock`을 고정하며, 코루틴 테스트는 `runTest`를 쓴다. [백엔드 테스트 지침](./rules/backend-testing.md)
 - 비밀 값은 저장소에 넣지 않는다. `.env`와 `application-local.yml`을 쓴다.
 
 ## 9. 첫 작업 체크리스트

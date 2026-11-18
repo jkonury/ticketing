@@ -10,7 +10,8 @@
 
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
-- `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`
+- [백엔드 공통 지침](docs/rules/backend.md): 공통 작성 규칙과 `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`별 지침. 변경 경로에 해당하는 지침도 읽는다.
+- [백엔드 테스트 지침](docs/rules/backend-testing.md): 백엔드 테스트·픽스처·E2E·부하 테스트를 다룰 때 읽는다.
 - `docs/rules/frontend.md`: `web`
 - `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
 
@@ -80,7 +81,7 @@ cd web && pnpm install && pnpm dev
 - 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
 - E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"]`. `core-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)가 별도 프로세스로 실행한다. 사전 조건은 `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18090 포트다. 로그는 `build/e2e/logs/`에 저장한다. 스크립트가 실행마다 관리자(ADMIN) 계정을 가입 후 DB에서 승격해 `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다(앱 코드에 E2E 전용 경로 없음). `--web`은 Playwright web 앱을 포트 13000에 추가하므로 해당 포트도 비어 있어야 한다. `build`·`check`에는 포함되지 않으므로 core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
 - 부하 테스트(`scripts/loadtest/run.sh`)는 `build`·`check`에 포함되지 않으며, 다른 Gradle 작업과 동시에 실행하지 않는다. 결과는 `build/loadtest/runs/`에 저장한다.
-- Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌리고, 다이어그램은 `./gradlew :core:modulithDocs`로 생성한다(`docs/rules/backend.md`). 테스트 규칙(한국어 백틱 이름, `Clock` 고정, `runTest`)도 같은 문서를 따른다.
+- Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌리고, 다이어그램은 `./gradlew :core:modulithDocs`로 생성한다. [core 작성 지침](docs/rules/backend-core.md)
 
 ## 8. 공통 규칙
 
