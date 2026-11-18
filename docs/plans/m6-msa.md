@@ -55,7 +55,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 
 | 단계 | 내용 | 완료 기준 | 검증 방법 |
 |---|---|---|---|
-| 1 | contract·common 추출 마무리(P3·P4 결과 반영), 이벤트별 외부화 대상 표 확정 | core 빌드와 기존 테스트 통과. 이벤트 JSON 스키마 예시가 문서에 있다 | `./scripts/agent/test/run-tests.sh`, Modulith 검증 |
+| 1 ✅ | contract·common 추출 마무리(P3·P4 결과 반영), 이벤트별 외부화 대상 표 확정([events.md](../architecture/events.md#kafka-외부화-대상-m6)) | core 빌드와 기존 테스트 통과. 이벤트 JSON 스키마 예시가 문서에 있다 | `./scripts/agent/test/run-tests.sh`, Modulith 검증 |
 | 2 | Kafka 외부화([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md))를 **모놀리스 상태에서** 먼저 적용: `@Externalized`, payment 리스너가 Kafka로 결제 계약 이벤트(`PaymentRequested`·`RefundRequested`)를 받고 결제 결과 3종을 Kafka로 발행, 소비자 멱등, `serialize-externalization`·outbox 모드 검토 | core 안에서 결제 계약 이벤트 5종이 Kafka를 거쳐도 기존 E2E 13개가 통과한다. 같은 이벤트를 두 번 받아도 결과가 같다. 브로커 중단·복구 후 미완료 이벤트가 재전달된다. 결제 확정 지연(`ticketing_booking_payment_confirmation_lag`) p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 결과 문서에 기록한다(회귀 허용 폭은 정하지 않고 기록·비교까지만). | 소비자 멱등 테스트, 브로커 장애 주입, Testcontainers Kafka, `./scripts/e2e/run.sh`, Gatling `hot-seats` 콜드 3회(01과 같은 조건)로 확정 지연 p95 측정 |
 | 3 | `payment` 분리: 별도 Gradle 앱, 별도 DB 이전([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)), **fake-pg 웹훅 수신 경로 이전**(아래 상세) | payment 앱이 독립 기동하고 자기 DB와 `event_publication`을 쓴다. 이전 후 건수·체크섬 일치. 웹훅 멱등 키(`webhook_event.event_id`) 처리가 유지되고 기존 E2E(웹훅 멱등, 만료 후 환불)가 통과한다. 결제 확정 지연(`ticketing_booking_payment_confirmation_lag`) p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 결과 문서에 기록한다(회귀 허용 폭은 정하지 않고 기록·비교까지만). | 이전 절차 체크, 결제 E2E, 웹훅 중복 전송, Gatling `hot-seats` 콜드 3회(01과 같은 조건)로 확정 지연 p95 측정 |
 | 4 | `settlement` 분리: `BookingConfirmed`·`BookingCancelled` 소비, 정산 Batch 구성 | 분리 후 정산 결과가 P2 기준선과 같다 | Batch E2E 비교 |
@@ -90,7 +90,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 | payment DB 분리 방식 | 같은 인스턴스의 별도 DB. 점검 창으로 이전 | [ADR 0040](../adr/0040-payment-separate-database-same-instance.md) |
 | 인증 구조 | 유지. SAS는 M6 후 별도 ADR | [ADR 0041](../adr/0041-auth-stays-in-core-sas-deferred.md) |
 
-미결 세부 사항(해당 단계에서 정한다): `serialize-externalization`·outbox 모드 채택(2단계), 결제 대사 Batch의 실행 구성, payment 서비스의 JWT 검증 방식(3단계), 웹훅 경로의 payment 앱 직접 노출 방식(3단계), 단일 브로커 vs 3대(2단계).
+미결 세부 사항(해당 단계에서 정한다): `serialize-externalization`·outbox 모드 채택(2단계), 결제 대사 Batch의 실행 구성, payment 서비스의 JWT 검증 방식(3단계), 웹훅 경로의 payment 앱 직접 노출 방식(3단계), 단일 브로커 vs 3대(2단계), 토픽당 파티션 수(초안 3, 2단계에서 측정 후 확정), 결제 계약 이벤트를 Kafka로 받을 때 core 안의 로컬 리스너 제거 방식(같은 이벤트 이중 처리 방지, [events.md](../architecture/events.md#kafka-외부화-대상-m6)), 브로커로 가는 본문 직렬화(value serializer) 고정 방법(2단계). 토픽 단위(이벤트별)·명명 규칙은 확정.
 
 ## 6. 문서 반영 계획
 

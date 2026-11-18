@@ -65,6 +65,38 @@
 
 상태 전이와 환불 조건은 [flows.md §6.3, §6.4](./flows.md#63-예매-상태-전이)를 본다.
 
+### Kafka 외부화 대상 (M6)
+
+프로세스 경계를 넘는 계약 이벤트 7종만 외부화한다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 아직 구현 전이며 2단계에서 `@Externalized`로 적용한다. 토픽 단위는 **이벤트별**로 확정했다(타입마다 JSON 스키마가 하나라 소비자가 단순하다).
+
+| 이벤트 | 발행 (현재 → 분리 후) | 구독 (현재 → 분리 후) | 외부화 단계 | 토픽 | 메시지 키 | 파티션 | 소비자 멱등 근거 | 비고 |
+|---|---|---|---|---|---|---|---|---|
+| `PaymentRequested` | booking(core) → booking(core) | payment(core) → payment 앱 | 2단계 | `ticketing.payment.payment-requested` | `orderId` | 3 | `orderId`·멱등 키로 기존 결제 재사용, `REQUESTED`이고 PG 거래 ID가 없을 때만 PG 재요청 | 결제 DB의 유니크 제약이 최종 방어선인지 2단계에서 확인 필요 |
+| `RefundRequested` | booking(core) → booking(core) | payment(core) → payment 앱 | 2단계 | `ticketing.payment.refund-requested` | `orderId` | 3 | 이미 `REFUNDED`면 건너뜀. 환불 진행 중 중복 도착 경합은 2단계에서 테스트 추가 필요 | |
+| `PaymentSucceeded` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 | `ticketing.payment.payment-succeeded` | `orderId` | 3 | 예매 상태 전이 검사(이미 `CONFIRMED`면 `AlreadyConfirmed` 무시, `EXPIRED`·`CANCELLED`면 환불 경로) | |
+| `PaymentFailed` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 | `ticketing.payment.payment-failed` | `orderId` | 3 | 예매 상태 전이 검사 | 토픽이 달라 같은 주문의 성공·실패·환불 간 순서는 보장되지 않는다. 상태 전이 검사에 의존 |
+| `PaymentRefunded` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 | `ticketing.payment.payment-refunded` | `orderId` | 3 | 로그만 남김(부작용 없음) | |
+| `BookingConfirmed` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계(settlement 분리 시) | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | settlement: `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음(로그만, 중복 가능) | notification은 core에 남으므로 **같은 JVM 로컬 리스너를 유지**한다. settlement만 Kafka 소비로 바꾼다 |
+| `BookingCancelled` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | settlement: `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음 | 위와 같다 |
+| 외부화 안 함 | | | | | | | | `ScheduleRegistered`(catalog→booking), 쿠폰 계약 이벤트 5종(booking↔coupon), `BookingExpired`, audit 이벤트(`MemberRoleChanged`, 쿠폰 관리자 행위 5종): 분리 후에도 core 한 JVM 안에서 소비한다. Modulith 이벤트 그대로 둔다 |
+
+`orderId`와 `bookingId`는 같은 값(예매 ID)이다. 같은 토픽 안에서는 같은 키가 같은 파티션으로 가 순서가 보장되지만, 토픽이 다르면 순서가 보장되지 않는다. 그래서 같은 예매의 이벤트 간 순서 의존은 소비자의 상태 전이 검사로 막는다.
+
+**규칙**
+
+- 토픽 이름: `ticketing.<이벤트 클래스가 속한 도메인>.<이벤트 이름 kebab-case>`. 도메인은 클래스의 루트 패키지이며, 결제 계약 이벤트 5종은 발행 모듈과 무관하게 `payment`다([ADR 0017](../adr/0017-payment-owns-payment-events.md)). 접두어 `ticketing.`은 한 브로커를 다른 용도와 나눠 쓸 때 충돌을 피한다.
+- 메시지 키: 같은 예매의 이벤트가 한 파티션에서 순서대로 처리되도록 `orderId`(`booking*`은 `bookingId`). 키 지정은 `@Externalized("토픽::#{#this.orderId}")` 형태다.
+- 파티션 수: 로컬 단일 브로커 초안은 토픽당 3. 처리량 측정 후 2단계에서 조정한다.
+- 페이로드는 §1의 JSON 규칙(골든 파일)을 따른다. 토픽 이름 변경은 소비자를 깨뜨리므로 필드 삭제와 같은 취급이다.
+
+**같은 JVM 리스너와 외부화**
+
+- Modulith 외부화는 `EventExternalizerModuleListener`라는 **추가 `@ApplicationModuleListener`**로 구현된다([소스](https://github.com/spring-projects/spring-modulith/blob/main/spring-modulith-events/spring-modulith-events-core/src/main/java/org/springframework/modulith/events/support/EventExternalizerModuleListener.java), 확인한 것은 main 브랜치이며 프로젝트는 2.1.1). 이벤트를 소비하지 않으므로 외부화한다고 로컬 `@ApplicationModuleListener`가 막히지 않는다. 발행 레지스트리는 리스너마다 행을 하나씩 만든다. 공식 레퍼런스에는 이 동작이 명시되어 있지 않고 소스로 확인한 사실이다.
+- 따라서 2단계에서 payment 리스너가 Kafka로 `PaymentRequested`를 받게 바꾸면 로컬 `@ApplicationModuleListener`를 함께 두면 같은 이벤트를 두 번 처리한다(멱등이라 결과는 같지만 낭비). 2단계에서 로컬 리스너를 제거하거나 비활성화해야 한다.
+- 외부화는 `event_publication`을 거치므로 브로커 전송 실패는 외부화 리스너 행만 미완료로 남고 로컬 리스너 행에는 영향이 없다.
+
+근거: [Spring Modulith 이벤트 외부화](https://docs.spring.io/spring-modulith/reference/events.html#externalization)(`@Externalized` 문법 `토픽::키`는 `#externalization.annotations`, 프로그래매틱 설정은 `#externalization.api`, 순서는 `#externalization.serialization`). Kafka 모듈은 라우팅 키를 토픽·메시지 키로 쓴다(`#externalization.infrastructure`). 브로커로 가는 본문 직렬화는 브로커 인프라 설정을 따르므로(Spring Kafka value serializer) 2단계에서 JSON으로 고정한다.
+
 ### 의존 방향
 
 `booking → catalog`, `booking → payment`, `booking → coupon`, `notification → booking`, `settlement → booking`, `audit → member`, `audit → coupon`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. `payment`는 예매를 모르고 `orderId`(=예매 ID)만 안다.
