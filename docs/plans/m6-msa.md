@@ -97,7 +97,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - [x] **2-3 소비 전환·멱등**: payment 리스너 2종, booking 리스너 3종을 `@KafkaListener`로 교체하고 로컬 리스너 제거. 실패 처리(재시도·DLT) 적용, 멱등 보강
   - 완료 기준: 같은 이벤트를 두 번 보내도 결과가 같다(중복 수신 테스트). 영구 실패는 DLT로 간다
   - 검증: 소비자 멱등·환불 경합·DLT 테스트, 기존 결제·예매 통합 테스트
-- [ ] **2-4 장애**: 브로커 중단·복구 후 미완료 이벤트 재전달, runbook §3.7 보강(DLT 포함)
+- [x] **2-4 장애**: 브로커 중단·복구 후 미완료 이벤트 재전달, runbook §3.7 보강(DLT 포함)
   - 완료 기준: 브로커 중단 중 발행한 이벤트가 `event_publication`에 남고 복구·재시작 후 소비된다
   - 검증: 장애 주입 테스트(Testcontainers 컨테이너 중지·재기동)
 - [ ] **2-5 회귀·측정**: 전체 테스트·check·E2E 13개, Gatling `hot-seats` 콜드 3회로 확정 지연 p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 `docs/performance/m6/` 아래 02번 문서로 기록. `scripts/e2e/run.sh`·`scripts/loadtest/run.sh`·`scripts/dev/run.sh`의 Kafka 사전 조건 반영

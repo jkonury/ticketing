@@ -87,7 +87,7 @@ Gateway의 Redis rate limiter가 응답을 429로 내린다. 부하 테스트 �
 
 ### 3.7 미완료 이벤트 발행이 쌓인다
 
-Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. 리스너가 실패했거나 처리 중 프로세스가 죽으면 남는다. 이후 Kafka 외부화(M6 2단계)의 전송 실패도 같은 테이블에 쌓인다.
+Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. 리스너가 실패했거나 처리 중 프로세스가 죽으면 남는다. Kafka 외부화 전송 실패도 같은 테이블에 쌓인다. Kafka 소비 실패는 별도의 DLT에서 확인한다.
 
 **증상·지표** (core만 수집한다. core-batch는 `ticketing.event-publication.metrics.enabled=false`로 중복 수집을 끈다)
 
@@ -116,6 +116,62 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 1. 원인을 먼저 고친다(리스너 버그, 외부 시스템 장애, 설정). 원인이 남은 채 재처리하면 같은 실패가 반복된다.
 2. core를 재시작한다. core는 `republish-outstanding-events-on-restart: true`라서 기동 시 미완료 발행을 다시 처리한다.
 3. 건수가 줄고 최고령이 0으로 돌아오는지 지표로 확인한다. 줄지 않으면 같은 SQL로 `completion_attempts`와 로그를 다시 본다.
+
+**Kafka 장애와 복구**
+
+Kafka가 내려간 상태에서도 core는 기동할 수 있다. 토픽 생성 실패 경고와 연결 오류를 로그에서 확인한다. 이때 결제 이벤트는 전달되지 않으며 외부화 실패 행이 위 레지스트리에 남는다. Kafka와 PostgreSQL을 기존 데이터 및 주소로 복구하고 브로커가 정상인지 확인한 다음 core를 재시작한다. 재기동 자동 재발행은 브로커 복구 자체만으로 실행되지 않는다. 위 SQL에서 해당 행의 완료 여부를 확인하고 결제·예매의 실제 상태도 확인한다. 다중 인스턴스에서는 다른 인스턴스가 처리 중인 발행과 겹칠 수 있으므로 재기동 전에 처리 상황을 확인한다.
+
+**DLT 확인과 재처리**
+
+소비자 처리 예외는 기본적으로 최초 1회와 지수 백오프 재시도 3회(1초부터 시작, 최대 간격 10초) 후 원본 토픽 이름에 `.dlt`를 붙인 토픽으로 보낸다. 역직렬화 오류 등 재시도 불가능한 예외는 바로 DLT로 간다. `ticketing_kafka_dead_letter_total`의 원본 토픽별 증가와 core 예외 로그를 함께 확인한다. 카운터는 DLT 전송 시도 시 증가하므로 적재 성공의 증거는 아니다.
+
+1. 브로커의 DLT를 별도 소비자 그룹으로 읽고 토픽·파티션·오프셋, 원본 키와 JSON 본문, 예외 헤더를 보관한다. 기존 소비자 그룹의 오프셋은 변경하지 않는다. 예를 들어 단일 토픽은 다음 명령으로 확인한다(출력에 결제 정보가 있으므로 접근을 제한한다).
+
+   ```bash
+   docker run --rm --network host apache/kafka:4.3.2 /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
+     --topic ticketing.payment.payment-requested.dlt --from-beginning \
+     --property print.key=true --property print.partition=true --property print.offset=true \
+     --property print.headers=true --property key.separator=' | '
+   ```
+
+2. 실패 원인과 해당 주문의 결제·예매 상태를 조사하고 먼저 수정한다. 이미 처리된 주문이나 순서가 뒤바뀐 이벤트가 있을 수 있으므로 각 건의 재처리 필요성을 판단한다. 소비자의 멱등성은 중복 부작용을 줄이지만 모든 순서 문제를 자동으로 해결하지 않는다.
+3. 선택한 레코드만 원본 토픽에 다시 발행한다. Kafka 클라이언트로 **원래 키와 JSON 바이트를 그대로** 전송하고 전송 성공을 확인한다. DLT 전체를 파이프로 원본에 밀어 넣거나 콘솔 출력의 구분자·예외 헤더를 본문에 포함하지 않는다. 역직렬화 오류로 JSON 자체가 잘못됐다면 원본을 보존하고 계약과 실제 상태를 조사해 수정 방안을 별도로 결정한다.
+4. 원본 토픽의 소비자 그룹 진행, core 로그, 주문별 결제·예매 상태를 확인한다. 같은 건이 DLT에 다시 추가되지 않았는지도 확인한다. DLT 레코드는 재발행해도 자동 삭제되지 않으므로 보관한 토픽·파티션·오프셋과 처리 결과로 중복 재처리를 방지한다.
+
+**제거된 로컬 리스너의 과거 행**
+
+Kafka 전환 전 결제 요청·환불 요청과 결제 결과 3종의 로컬 리스너가 남긴 미완료 행은 현재 리스너가 없어 재기동해도 처리되지 않는다. 외부화 리스너 행이나 다른 로컬 리스너 행은 대상이 아니다. 이전 구현(`fd05b3d`)의 다섯 `on` 메서드에 명시적 ID가 없어 기본 ID인 클래스·메서드·매개변수 타입을 사용한다. 아래 조회에서 ID·이벤트·본문과 업무 상태를 확인하고 대상 행을 별도 보관한다. 다른 버전에서 ID를 명시한 행은 이 조건에 포함되지 않으므로 별도로 조사한다.
+
+```sql
+select id, listener_id, event_type, serialized_event, publication_date, status
+from public.event_publication
+where completion_date is null
+  and listener_id in (
+    'io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener.on(io.github.ticketing.payment.PaymentRequested)',
+    'io.github.ticketing.payment.adapter.provided.event.RefundRequestListener.on(io.github.ticketing.payment.RefundRequested)',
+    'io.github.ticketing.booking.adapter.provided.event.PaymentResultListener.on(io.github.ticketing.payment.PaymentSucceeded)',
+    'io.github.ticketing.booking.adapter.provided.event.PaymentResultListener.on(io.github.ticketing.payment.PaymentFailed)',
+    'io.github.ticketing.booking.adapter.provided.event.PaymentResultListener.on(io.github.ticketing.payment.PaymentRefunded)'
+  )
+order by publication_date;
+```
+
+행마다 Kafka 외부화 완료 여부와 결제·예매 상태를 대조한다. 과거 로컬 처리 실패가 현재 Kafka 처리 성공을 뜻하지는 않는다. 미처리 업무는 원인과 복구 방안을 먼저 결정한다. 폐기해도 되는 행만 ID를 명시해 트랜잭션에서 삭제하고 건수와 잔여 행을 확인한 뒤 커밋한다. `completion_date`를 채워 성공처럼 위장하지 않는다. 예시는 확인한 ID 하나를 넣어 실행한다.
+
+```sql
+begin;
+delete from public.event_publication
+where id = '<확인한 UUID>' and completion_date is null
+  and listener_id in (
+    'io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener.on(io.github.ticketing.payment.PaymentRequested)',
+    'io.github.ticketing.payment.adapter.provided.event.RefundRequestListener.on(io.github.ticketing.payment.RefundRequested)',
+    'io.github.ticketing.booking.adapter.provided.event.PaymentResultListener.on(io.github.ticketing.payment.PaymentSucceeded)',
+    'io.github.ticketing.booking.adapter.provided.event.PaymentResultListener.on(io.github.ticketing.payment.PaymentFailed)',
+    'io.github.ticketing.booking.adapter.provided.event.PaymentResultListener.on(io.github.ticketing.payment.PaymentRefunded)'
+  )
+returning id, listener_id, event_type;
+-- 결과가 확인한 대상과 정확히 같으면 commit; 아니면 rollback;
+```
 
 **주의**
 
