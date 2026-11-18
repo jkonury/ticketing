@@ -1,4 +1,4 @@
-# Backend 리뷰 지침 (core, core-batch, realtime, gateway, fake-pg)
+# Backend 리뷰 지침 (core, core-batch, realtime, gateway, fake-pg, common, contract)
 
 백엔드 변경(diff, PR)을 리뷰할 때 쓰는 기준이다. 작성 규칙은 [backend.md](backend.md)가 정의하고, 이 문서는 **그 규칙이 diff에서 지켜졌는지 확인하는 순서와 판정 기준**만 다룬다. 규칙 자체를 여기서 다시 정의하지 않는다. 충돌하면 `backend.md`와 `AGENTS.md` 4절(설계 규칙)이 우선한다. web 변경은 [frontend-review.md](frontend-review.md)를 따른다.
 
@@ -40,7 +40,7 @@
 
 ### 보안
 - 인가를 URL 패턴·메서드 보안으로 서버에서 강제하는가. BFF·Gateway 통과를 신뢰하지 않는가.
-- 리소스 소유자 확인(내 예매인가)이 `application.service`에 있는가.
+- 리소스 소유자 확인(내 예매인가)이 헥사고날 모듈의 `application.service`나 계층형 모듈의 `service`에 있는가.
 - 비밀번호, 토큰, 결제 정보가 로그·응답·예외 메시지에 남지 않는가.
 - PG 웹훅 서명을 검증하는가.
 - 비밀 값이 저장소에 들어가지 않았는가.
@@ -70,7 +70,7 @@
 - JPA를 `JpaRepository`로만 쓰는가. `EntityManager` 직접 주입, `createNativeQuery`, `nativeQuery = true`, `JdbcTemplate` 문자열 쿼리가 없는가.
 - 연관관계가 같은 애그리거트 안에서만, `LAZY`로 쓰이는가. 다른 애그리거트·모듈은 ID로 참조하는가.
 - 금액이 `BigDecimal`/`numeric`, 시각이 `Instant`/`timestamptz`이고 현재 시각을 주입된 `Clock`에서 얻는가.
-- `@Transactional`이 `application.service`에만 있고 조회는 `readOnly = true`인가.
+- 유스케이스의 트랜잭션 경계가 헥사고날 모듈의 `application.service`나 계층형 모듈의 `service`에 있고 조회는 `readOnly = true`인가.
 
 ### Kotlin과 엔티티
 - `!!`가 없는가. ID가 `@JvmInline value class`로 감싸져 있는가. 상태 분기에 `else` 없는 `when`을 쓰는가.
@@ -87,14 +87,14 @@
 - API 계약(요청·응답, 오류 `code`)을 바꿨다면 BFF·Gateway·`docs/architecture/integrations.md`와 맞는가. 호환을 깨는 변경이 합의됐는가.
 
 ### realtime과 Gateway
-- 컨트롤러·서비스가 `suspend`/`Flow`이고 `Mono`/`Flux`는 프레임워크 경계에만 있는가.
-- SSE 이벤트에 `id`가 붙고 heartbeat가 있으며 `Last-Event-ID` 재연결을 지원하는가.
-- 연결 종료 시 Redis 구독과 대기열 자원을 정리하는가.
-- Gateway 필터가 검증과 라우팅만 하는가. 입장 토큰 검증 실패가 대기열 복귀용으로 구분된 오류 코드를 주는가.
+- `realtime`은 코루틴으로, Gateway 필터는 Reactor 계약에 맞춰 작성했는가.
+- SSE에 heartbeat가 있는가. 좌석 SSE는 Stream ID로 재연결하고 순번 SSE는 현재 상태를 보내는가.
+- 연결 종료 시 구독·리더 참조를 해제하고, 대기자는 마지막 신호와 유예 시간을 기준으로 정리하는가.
+- Gateway 필터의 변경이 검증·rate limit·라우팅 책임에 해당하는가. 입장 토큰 검증 실패가 대기열 복귀용 오류 코드를 주는가.
 
 ### Batch
-- 재실행해도 결과가 같은가(대상 날짜 JobParameter, upsert 또는 삭제 후 재적재).
-- reader가 jOOQ이고 chunk 지향인가. 전체를 메모리에 올리지 않는가.
+- Job별 파라미터와 쓰기 방식이 재시작·재실행의 정합성을 보장하는가.
+- 대량 읽기에서 jOOQ reader와 chunk 처리로 메모리 사용량을 제한하는가.
 - Job이 소유 모듈에 있는가([ADR 0019](../adr/0019-batch-jobs-in-owning-modules.md)).
 
 ### Virtual Thread
@@ -105,10 +105,10 @@
 
 ### 테스트
 - 변경한 동작에 맞는 테스트가 있는가: 도메인 상태 전이의 허용·금지 경로, 유스케이스(fake 포트), 어댑터(Testcontainers), 모듈(`Scenario`/`PublishedEvents`).
-- 좌석·결제처럼 경쟁이 있는 변경에는 실제 병렬 실행으로 "성공 1건, DB 확정 1건"을 단언하는 테스트가 있는가.
+- 경쟁이 있는 변경에는 실제 병렬 실행으로 대상 불변식을 단언하는 테스트가 있는가. 좌석 확정 경쟁에서는 "성공 1건, DB 확정 1건"을 확인하는가.
 - 이름이 한국어 백틱 문장이고, 시간은 `Clock` 고정, 코루틴은 `runTest`인가. `Thread.sleep`으로 기다리지 않는가.
 - AssertJ로 통일했고, 도메인 상태를 리플렉션·랜덤 생성으로 주입하지 않았는가.
-- 통합 테스트가 `IntegrationTestSupport`를 상속하고 컨텍스트·컨테이너를 불필요하게 늘리지 않는가(클래스별 `@Import`, 프로필, `@MockitoBean`, `@DirtiesContext`, 새 컨테이너).
+- 코어 통합 테스트가 `IntegrationTestSupport`를 재사용하고 컨텍스트·컨테이너를 불필요하게 늘리지 않는가(클래스별 `@Import`, 프로필, `@MockitoBean`, `@DirtiesContext`, 새 컨테이너).
 - 테스트를 지우거나 `@Disabled`로 통과시키지 않았는가.
 
 ## 3. 제안 항목

@@ -10,7 +10,7 @@
 
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
-- `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
+- `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`
 - `docs/rules/frontend.md`: `web`
 - `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
 
@@ -23,6 +23,8 @@
 | `realtime/` | WebFlux + Coroutines + SSE. 대기열. Redis만 사용 |
 | `gateway/` | Spring Cloud Gateway. 입장 토큰·SSE 티켓 검증 |
 | `fake-pg/` | 가짜 PG 서버 |
+| `common/` | JVM 앱에서 사용하는 공통 코드 |
+| `contract/` | 프로세스 간 이벤트 계약 |
 | `web/` | Next.js BFF + 화면 |
 | `docs/` | 설계서, 로드맵, 측정 결과 |
 
