@@ -33,7 +33,7 @@ M6 본 작업 전에 끝낸다. 로드맵의 "M6 사전 작업" 체크리스트�
 | P3 | 공용 클래스를 `common` Gradle 모듈로 추출 | payment가 core 소스를 참조하지 않고 독립 빌드되게 한다 |
 | P4 | 계약 이벤트를 `contract` 모듈로 추출하고 직렬화 형식 고정(JSON, 하위 호환 규칙. 버전 필드 없음, [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)). 쿠폰·`ScheduleRegistered`·audit 이벤트는 같은 JVM에 남아 대상이 아니다 | 프로세스 경계를 넘는 페이로드는 호환성 규칙이 필요하다([events.md §1](../architecture/events.md#1-공통-규칙)) |
 | P5 | `event_publication` 미완료 이벤트 관측(건수·최고령 지표)과 재처리 runbook | Kafka 외부화 후 전송 실패는 이 테이블에 쌓인다 |
-| P6 | (선택) 분리 전 성능 기준선 1회 측정 | 분리로 늘어나는 네트워크 홉의 비용을 비교한다 |
+| P6 | (선택) 분리 전 성능 기준선 1회 측정 | 분리로 늘어나는 네트워크 홉의 비용을 비교한다. 결과: [00-pre-split-baseline](../performance/m6/00-pre-split-baseline.md) |
 
 **P5 미완료 이벤트 관측**: Modulith 2.1.1은 `event_publication` 지표를 제공하지 않는다(staleness 모니터는 오래된 건을 `FAILED`로 표시할 뿐이다). 그래서 `EventPublicationMetrics`가 `ticketing_event_publication_incomplete`(건수)와 `ticketing_event_publication_oldest_incomplete_age_seconds`(최고령 경과)를 10초 캐시로 노출하고 core-batch에서는 끈다. Grafana `ticketing-overview`에 패널 2개를 추가했다. 재처리는 새 운영 API 없이 runbook([§3.7](../runbook.md#37-미완료-이벤트-발행이-쌓인다))의 SQL 조회와 core 재시작 재발행(`republish-outstanding-events-on-restart: true`)으로 한다. 재시작 없는 수동 재제출(`IncompleteEventPublications`를 쓰는 관리자 API)은 보안·감사 설계가 필요해 후속으로 미룬다.
 
