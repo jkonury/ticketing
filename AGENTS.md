@@ -50,7 +50,7 @@
 M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 이 절을 고친다.
 
 ```bash
-docker compose up -d                 # PostgreSQL, Redis (fake-pg는 scripts/dev/run.sh --fake-pg)
+docker compose up -d                 # PostgreSQL, Redis, Kafka (fake-pg는 scripts/dev/run.sh --fake-pg)
 docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 스택 (Prometheus, Tempo, Grafana 13001)
 ./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats>  # 부하 테스트 (k6, Gateway 18000 호출)
 ./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.<Simulation>  # Gatling 부하 시나리오 (loadtest/gatling/README.md)
@@ -67,7 +67,7 @@ cd web && pnpm install && pnpm dev
 
 **Claude Code와 Codex 모두** 저장소 루트에서 다음 스크립트를 실행합니다. 실패를 받으면 작업 중인 에이전트가 직접 고칩니다.
 
-- 사전 조건: Docker가 떠 있어야 한다. jOOQ 코드 생성(`:core:generateJooq`)과 Testcontainers PostgreSQL이 Docker를 쓴다. 에이전트 스크립트는 `fd`, `rg`를 쓰므로 설치되어 있어야 한다.
+- 사전 조건: Docker가 떠 있어야 한다. jOOQ 코드 생성(`:core:generateJooq`)과 Testcontainers PostgreSQL·Kafka가 Docker를 쓴다. 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)가 필요하다. 에이전트 스크립트는 `fd`, `rg`를 쓰므로 설치되어 있어야 한다.
 - test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
 - 품질 검사: Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). 작업 종료 시 Stop hook(`scripts/agent/hook/stop_quality.sh`, Claude Code·Codex 공용)과 커밋 시 `.githooks/pre-commit`이 같은 검사를 하며, 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행해 활성화한다. `@Suppress`·baseline 추가·`--no-verify`로 우회하지 않는다.

@@ -2,7 +2,7 @@
 
 - 기준 문서: [architecture.md](./architecture.md)
 - 작성일: 2026-11-10
-- 상태: M0~M5.5 완료. M5 완료 확정, M5.5 쿠폰 완료(M5.5-1·2·3 게이트 통과, coupon-drop p95 1초는 후속 항목, [결과](./performance/m5.5/coupon-drop.md)). M5 미달 성능 목표 3건(300ms·900ms 계열)은 장기 과제로 후속 항목에 이관. M6 미착수. (이력: [M0·M1](./backup/roadmap-completed-M0-M1.md), [M2·M3·M4·M5·M5.5](./backup/roadmap-completed-M2-M5.5.md))
+- 상태: M0~M5.5 완료. M5 완료 확정, M5.5 쿠폰 완료(M5.5-1·2·3 게이트 통과, coupon-drop p95 1초는 후속 항목, [결과](./performance/m5.5/coupon-drop.md)). M5 미달 성능 목표 3건(300ms·900ms 계열)은 장기 과제로 후속 항목에 이관. M6 진행 중: 사전 작업과 1·2단계 완료, payment 분리는 미착수. (이력: [M0·M1](./backup/roadmap-completed-M0-M1.md), [M2·M3·M4·M5·M5.5](./backup/roadmap-completed-M2-M5.5.md))
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 
@@ -36,7 +36,7 @@
 
 ### 본 작업
 
-- [ ] Modulith 이벤트 외부화로 Kafka 도입: 모놀리스 상태에서 먼저 적용·검증 (앱 간 Redis Streams는 유지: ADR 0039)
+- [x] Modulith 이벤트 외부화로 Kafka 도입: 모놀리스 상태에서 먼저 적용·검증 (앱 간 Redis Streams는 유지: ADR 0039)
 - [ ] `payment` 분리: 별도 배포 단위, 스키마를 별도 DB로 이전, fake-pg 웹훅 수신 경로 이전
 - [ ] `settlement` 분리
 - [ ] 예매–결제 Saga 정리 (보상 흐름 재검증, 쿠폰 보상(예약 해제·사용 확정) 포함)
@@ -57,7 +57,6 @@
 |---|---|
 | 소셜 로그인 (카카오/구글) | BFF 화면 완성 이후 |
 | Spring Authorization Server (OAuth2/OIDC) | M6 완료 후 새 ADR로 검토. [ADR 0041](./adr/0041-auth-stays-in-core-sas-deferred.md) |
-| Kafka (Modulith 이벤트 외부화) | M6. 좌석 스트림은 Redis Streams 유지. [ADR 0039](./adr/0039-kafka-externalizes-modulith-events-only.md) |
 | 실제 PG 연동 (테스트 모드) | 가짜 PG로 보상 흐름 검증 이후 |
 | 실제 이메일/SMS 알림 | 미정 |
 | 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |

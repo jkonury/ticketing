@@ -44,7 +44,7 @@
 | 모듈화 | Spring Modulith |
 | 영속성 | JPA(쓰기) + jOOQ(조회·집계), Flyway |
 | DB | PostgreSQL |
-| 캐시·메시징 | Redis (캐시, 좌석 선점, 대기열, Streams) |
+| 캐시·메시징 | Redis (캐시, 좌석 선점, 대기열, Streams), Kafka (결제 계약 이벤트 외부화) |
 | 배치 | Spring Batch |
 | 보안 | Spring Security, JWT |
 | 프런트 | Next.js 최신 안정판 (App Router) + TypeScript, BFF 역할 |
@@ -61,6 +61,7 @@
 | jOOQ | 3.21.9 | Boot BOM 관리. 코드 생성은 Testcontainers + Flyway 기반 |
 | Gradle | 9.8.2 | wrapper |
 | PostgreSQL / Redis | 18.3-alpine / 8.6.2-alpine | Compose, Testcontainers 공통 |
+| Kafka | apache/kafka 4.3.2 | Compose 단일 KRaft 브로커 |
 | Next.js | 16.4.6 | App Router |
 | Node.js | 24 | web 런타임 |
 
@@ -84,6 +85,8 @@
 
 코어 ──▶ PostgreSQL (모듈별 스키마)
 코어 ──▶ Redis (좌석 선점, 좌석 스냅샷, Streams 발행)
+코어 ──▶ Kafka ──▶ 코어 (결제 계약 이벤트 5종 발행·소비)
+core-batch ──▶ Kafka (이벤트 발행, 리스너 미기동)
 실시간 앱 ──▶ Redis (대기열, Streams 구독)   ※ PostgreSQL 접근 없음
 코어 ──▶ 가짜 PG 서버 (결제 요청) / 가짜 PG ──▶ 코어 (웹훅)
 ```
@@ -93,7 +96,7 @@
 | 단위 | 루트 패키지 | 역할 |
 |---|---|---|
 | `core` | `io.github.ticketing` | 도메인 로직 전체. Modulith |
-| `core-batch` | `io.github.ticketing` (core 코드 공유) | Spring Batch 실행 모듈. 추후 k8s CronJob |
+| `core-batch` | `io.github.ticketing` (core 코드 공유) | Spring Batch 실행 모듈. Kafka 발행 가능, 리스너 미기동. 추후 k8s CronJob |
 | `realtime` | `io.github.ticketing.realtime` | 대기열, SSE push. 상태 없음(Redis만 사용) |
 | `gateway` | `io.github.ticketing.gateway` | 라우팅, JWT·입장 토큰·SSE 티켓 검증, rate limit |
 | `fake-pg` | `io.github.ticketing.fakepg` | 지연·실패·중복 웹훅을 재현하는 가짜 PG |
@@ -120,7 +123,7 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 
 ### 모듈 규칙
 
-- 모듈 간 호출은 **Modulith 이벤트**(`ApplicationModuleListener` + 이벤트 발행 레지스트리)로 한다.
+- 모듈 간 호출은 **Modulith 이벤트**와 이벤트 발행 레지스트리로 한다. 결제 계약 5종은 Kafka로 외부화해 `@KafkaListener`로 소비하고, 나머지 로컬 이벤트는 `@ApplicationModuleListener`로 소비한다([이벤트 카탈로그](./architecture/events.md#kafka-외부화-대상-m6)).
 - 다른 모듈의 데이터는 ID 참조와 이벤트로만 접근한다.
 - 경계와 의존 방향은 Modulith 검증 테스트(`ApplicationModules.verify()`)와 ArchUnit으로 강제한다.
 - MSA 분리 1순위는 `payment`, `settlement`.
@@ -223,8 +226,8 @@ Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJ
 
 ## 11. 개발 환경과 테스트
 
-- 로컬 실행: Docker Compose (PostgreSQL, Redis, 가짜 PG)
-- 통합 테스트: Testcontainers
+- 로컬 실행: Docker Compose 기본 서비스 PostgreSQL·Redis·Kafka. 가짜 PG는 `scripts/dev/run.sh --fake-pg`로 별도 실행한다.
+- 통합 테스트: Testcontainers (PostgreSQL·Kafka 등)
 - 모듈 테스트: Modulith 모듈 단위 테스트(`@ApplicationModuleTest`)
 - 동시성 테스트: 같은 좌석에 대한 동시 선점·확정
 - E2E: `e2e` 모듈과 `scripts/e2e/run.sh`가 Compose 스택과 fake-pg·core·realtime 두 인스턴스(A, B)·gateway, 총 다섯 개의 JVM 프로세스를 띄워 대기열 → 입장 → 예매 확정 → 다른 사용자 좌석 SSE 도달 및 입장 토큰 차단을 검증한다. `./scripts/e2e/run.sh --web`은 여기에 web(Playwright)을 추가해 전체 예매 시나리오와 JWT 비노출을 검사한다. `build`·`check`에는 포함되지 않는다.

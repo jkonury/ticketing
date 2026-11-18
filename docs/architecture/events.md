@@ -7,21 +7,21 @@
 
 | 종류 | 범위 | 수단 | 전달 보장 |
 |---|---|---|---|
-| 도메인 이벤트 | 코어 모듈 사이 | Modulith 이벤트 + 발행 레지스트리 | 최소 1회. 중복 전달 가능 |
+| 도메인 이벤트 | 코어 모듈 사이 | Modulith 이벤트 + 발행 레지스트리 (결제 계약 5종은 Kafka 외부화) | 최소 1회. 중복 전달 가능 |
 | 좌석 변경 스트림 | 코어 → realtime | Redis Streams | 최근 약 10,000건 재생 가능 |
 | SSE 이벤트 | realtime → 브라우저 | Server-Sent Events | 재연결 시 재생 |
 
 ## 1. 공통 규칙
 
 - 이벤트 클래스는 **발행 모듈의 루트 패키지**에 둔다. 예외로 결제 계약 이벤트 5종은 `payment` 루트에 둔다([ADR 0017](../adr/0017-payment-owns-payment-events.md)).
-- 페이로드에는 ID와 단순 값만 담는다. 엔티티나 다른 모듈의 내부 타입을 싣지 않는다. 추후 Kafka로 외부화할 때 그대로 직렬화할 수 있어야 한다.
+- 페이로드에는 ID와 단순 값만 담는다. 엔티티나 다른 모듈의 내부 타입을 싣지 않는다. Kafka 외부화 대상도 그대로 직렬화할 수 있어야 한다.
 - 금액은 `BigDecimal`(원 단위), 시각은 `Instant`다.
 - **계약 이벤트**(결제 5종, `BookingConfirmed`, `BookingCancelled`)는 `contract` 모듈에 두고 패키지는 위 규칙대로 유지한다([ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)). JSON 규칙:
   - 필드 이름은 Kotlin 프로퍼티 이름 그대로(camelCase)다. 금액(`BigDecimal`)은 JSON 숫자, 시각(`Instant`)은 ISO-8601 UTC 문자열이다. ID는 숫자, 목록은 배열이다.
   - 버전 필드는 두지 않는다. 필드 **추가만** 허용하며 새 필드는 기본값을 가진다(구 페이로드를 읽을 수 있어야 한다). 소비자는 모르는 필드를 무시한다.
   - 필드 삭제·이름·타입·의미 변경은 금지한다. 필요하면 새 이벤트 타입(`…V2`)을 추가하고 한동안 둘을 함께 발행한다.
   - 예: `PaymentSucceeded` = `{"paymentId":11,"orderId":101,"amount":50000,"paidAt":"2026-01-02T03:04:05Z"}`. 전체 예시는 `contract/src/testFixtures/resources/contract-events/`이며 `ContractEventSerializationTests`가 형식을 강제한다.
-- 구독은 `adapter.provided.event`의 `@ApplicationModuleListener`로만 한다.
+- 구독은 `adapter.provided.event`에 둔다. 결제 계약 5종은 `@KafkaListener`, 나머지 로컬 이벤트는 `@ApplicationModuleListener`로 처리한다.
 - **리스너는 멱등이어야 한다.** 이벤트 발행 레지스트리(`public.event_publication`)는 완료되지 않은 이벤트를 다시 전달한다. 같은 이벤트가 두 번 와도 결과가 같아야 한다.
 - 이벤트를 바꿀 때는 호환성을 먼저 본다. 필드를 지우거나 의미를 바꾸면 구독 모듈이 깨지므로 필드는 추가를 기본으로 한다.
 - 새 이벤트를 추가하거나 의존 방향이 바뀌면 이 문서와 [architecture.md §4](../architecture.md#이벤트-목록)를 함께 고치고 Modulith 구조 검증을 돌린다. `./gradlew :core:modulithDocs`로 다이어그램을 다시 생성한다.
@@ -67,35 +67,35 @@
 
 ### Kafka 외부화 대상 (M6)
 
-프로세스 경계를 넘는 계약 이벤트 7종만 외부화한다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 아직 구현 전이며 2단계에서 `@Externalized`로 적용한다. 토픽 단위는 **이벤트별**로 확정했다(타입마다 JSON 스키마가 하나라 소비자가 단순하다).
+프로세스 경계를 넘는 계약 이벤트 7종이 대상이다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 2단계에서 결제 5종을 외부화했고, booking 2종은 4단계에 예정되어 있다. 토픽은 이벤트별이다. 현재 core에서 결제 이벤트를 발행·소비하며 core-batch는 발행 가능하지만 리스너를 기동하지 않는다.
 
 | 이벤트 | 발행 (현재 → 분리 후) | 구독 (현재 → 분리 후) | 외부화 단계 | 토픽 | 메시지 키 | 파티션 | 소비자 멱등 근거 | 비고 |
 |---|---|---|---|---|---|---|---|---|
-| `PaymentRequested` | booking(core) → booking(core) | payment(core) → payment 앱 | 2단계 | `ticketing.payment.payment-requested` | `orderId` | 3 | `orderId`·멱등 키로 기존 결제 재사용, `REQUESTED`이고 PG 거래 ID가 없을 때만 PG 재요청 | 결제 DB의 유니크 제약이 최종 방어선인지 2단계에서 확인 필요 |
-| `RefundRequested` | booking(core) → booking(core) | payment(core) → payment 앱 | 2단계 | `ticketing.payment.refund-requested` | `orderId` | 3 | 이미 `REFUNDED`면 건너뜀. 환불 진행 중 중복 도착 경합은 2단계에서 테스트 추가 필요 | |
-| `PaymentSucceeded` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 | `ticketing.payment.payment-succeeded` | `orderId` | 3 | 예매 상태 전이 검사(이미 `CONFIRMED`면 `AlreadyConfirmed` 무시, `EXPIRED`·`CANCELLED`면 환불 경로) | |
-| `PaymentFailed` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 | `ticketing.payment.payment-failed` | `orderId` | 3 | 예매 상태 전이 검사 | 토픽이 달라 같은 주문의 성공·실패·환불 간 순서는 보장되지 않는다. 상태 전이 검사에 의존 |
-| `PaymentRefunded` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 | `ticketing.payment.payment-refunded` | `orderId` | 3 | 로그만 남김(부작용 없음) | |
-| `BookingConfirmed` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계(settlement 분리 시) | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | settlement: `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음(로그만, 중복 가능) | notification은 core에 남으므로 **같은 JVM 로컬 리스너를 유지**한다. settlement만 Kafka 소비로 바꾼다 |
-| `BookingCancelled` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | settlement: `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음 | 위와 같다 |
+| `PaymentRequested` | booking(core) → booking(core) | payment(core) → payment 앱 | 2단계 완료 | `ticketing.payment.payment-requested` | `orderId` | 3 | `orderId`·멱등 키로 기존 결제 재사용, `REQUESTED`이고 PG 거래 ID가 없을 때만 PG 재요청 | 결제 DB의 `order_id`·`idempotency_key` 유니크 제약이 최종 방어선 |
+| `RefundRequested` | booking(core) → booking(core) | payment(core) → payment 앱 | 2단계 완료 | `ticketing.payment.refund-requested` | `orderId` | 3 | 이미 `REFUNDED`면 건너뜀. 환불 진행 중 중복 도착 경합을 테스트로 검증 | |
+| `PaymentSucceeded` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 완료 | `ticketing.payment.payment-succeeded` | `orderId` | 3 | 예매 상태 전이 검사(이미 `CONFIRMED`면 `AlreadyConfirmed` 무시, `EXPIRED`·`CANCELLED`면 환불 경로) | |
+| `PaymentFailed` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 완료 | `ticketing.payment.payment-failed` | `orderId` | 3 | 예매 상태 전이 검사 | 토픽이 달라 같은 주문의 성공·실패·환불 간 순서는 보장되지 않는다. 상태 전이 검사에 의존 |
+| `PaymentRefunded` | payment(core) → payment 앱 | booking(core) → booking(core) | 2단계 완료 | `ticketing.payment.payment-refunded` | `orderId` | 3 | 로그만 남김(부작용 없음) | |
+| `BookingConfirmed` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 예정(settlement 분리 시) | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | settlement: `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음(로그만, 중복 가능) | notification은 core에 남으므로 **같은 JVM 로컬 리스너를 유지**한다. settlement만 Kafka 소비로 바꾼다 |
+| `BookingCancelled` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 예정 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | settlement: `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음 | 위와 같다 |
 | 외부화 안 함 | | | | | | | | `ScheduleRegistered`(catalog→booking), 쿠폰 계약 이벤트 5종(booking↔coupon), `BookingExpired`, audit 이벤트(`MemberRoleChanged`, 쿠폰 관리자 행위 5종): 분리 후에도 core 한 JVM 안에서 소비한다. Modulith 이벤트 그대로 둔다 |
 
 `orderId`와 `bookingId`는 같은 값(예매 ID)이다. 같은 토픽 안에서는 같은 키가 같은 파티션으로 가 순서가 보장되지만, 토픽이 다르면 순서가 보장되지 않는다. 그래서 같은 예매의 이벤트 간 순서 의존은 소비자의 상태 전이 검사로 막는다.
 
 **규칙**
 
-- 토픽 이름: `ticketing.<이벤트 클래스가 속한 도메인>.<이벤트 이름 kebab-case>`. 도메인은 클래스의 루트 패키지이며, 결제 계약 이벤트 5종은 발행 모듈과 무관하게 `payment`다([ADR 0017](../adr/0017-payment-owns-payment-events.md)). 접두어 `ticketing.`은 한 브로커를 다른 용도와 나눠 쓸 때 충돌을 피한다.
-- 메시지 키: 같은 예매의 이벤트가 한 파티션에서 순서대로 처리되도록 `orderId`(`booking*`은 `bookingId`). 키 지정은 `@Externalized("토픽::#{#this.orderId}")` 형태다.
-- 파티션 수: 로컬 단일 브로커 초안은 토픽당 3. 처리량 측정 후 2단계에서 조정한다.
+- 토픽 이름: `ticketing.<이벤트 클래스가 속한 도메인>.<이벤트 이름 kebab-case>`. 도메인은 클래스의 루트 패키지이며, 결제 계약 이벤트 5종은 발행 모듈과 무관하게 `payment`다([ADR 0017](../adr/0017-payment-owns-payment-events.md)). 접두어는 `ticketing.kafka.topic-prefix`로 설정하며 기본값 `ticketing`은 한 브로커를 다른 용도와 나눠 쓸 때 충돌을 피한다.
+- 메시지 키: 같은 예매의 이벤트가 한 파티션에서 순서대로 처리되도록 `orderId`(예정된 `booking*`은 `bookingId`). Spring에 의존하지 않는 계약 클래스에 애노테이션을 붙이지 않고 `PaymentEventExternalizationConfig`가 결제 5종의 토픽과 문자열 키를 지정한다.
+- 파티션 수: 결제 원본 토픽당 3, DLT당 1, 복제본 1이다. [2-5 측정](../performance/m6/02-kafka-externalization-gatling.md) 후 현 설정을 유지했다. 다른 설정과의 비교 실험은 하지 않았다.
 - 페이로드는 §1의 JSON 규칙(골든 파일)을 따른다. 토픽 이름 변경은 소비자를 깨뜨리므로 필드 삭제와 같은 취급이다.
 
 **같은 JVM 리스너와 외부화**
 
 - Modulith 외부화는 `EventExternalizerModuleListener`라는 **추가 `@ApplicationModuleListener`**로 구현된다([소스](https://github.com/spring-projects/spring-modulith/blob/main/spring-modulith-events/spring-modulith-events-core/src/main/java/org/springframework/modulith/events/support/EventExternalizerModuleListener.java), 확인한 것은 main 브랜치이며 프로젝트는 2.1.1). 이벤트를 소비하지 않으므로 외부화한다고 로컬 `@ApplicationModuleListener`가 막히지 않는다. 발행 레지스트리는 리스너마다 행을 하나씩 만든다. 공식 레퍼런스에는 이 동작이 명시되어 있지 않고 소스로 확인한 사실이다.
-- 따라서 2단계에서 payment 리스너가 Kafka로 `PaymentRequested`를 받게 바꾸면 로컬 `@ApplicationModuleListener`를 함께 두면 같은 이벤트를 두 번 처리한다(멱등이라 결과는 같지만 낭비). 2단계에서 로컬 리스너를 제거하거나 비활성화해야 한다.
+- 2-3에서 payment 요청 리스너 2종과 booking 결과 리스너 3종을 `@KafkaListener`로 교체하고 해당 로컬 리스너를 제거했다. 같은 이벤트의 이중 처리를 피한다.
 - 외부화는 `event_publication`을 거치므로 브로커 전송 실패는 외부화 리스너 행만 미완료로 남고 로컬 리스너 행에는 영향이 없다.
 
-근거: [Spring Modulith 이벤트 외부화](https://docs.spring.io/spring-modulith/reference/events.html#externalization)(`@Externalized` 문법 `토픽::키`는 `#externalization.annotations`, 프로그래매틱 설정은 `#externalization.api`, 순서는 `#externalization.serialization`). Kafka 모듈은 라우팅 키를 토픽·메시지 키로 쓴다(`#externalization.infrastructure`). 브로커로 가는 본문 직렬화는 브로커 인프라 설정을 따르므로(Spring Kafka value serializer) 2단계에서 JSON으로 고정한다.
+근거: [Spring Modulith 이벤트 외부화](https://docs.spring.io/spring-modulith/reference/events.html#externalization)(`@Externalized` 문법 `토픽::키`는 `#externalization.annotations`, 프로그래매틱 설정은 `#externalization.api`, 순서는 `#externalization.serialization`). Kafka 모듈은 라우팅 키를 토픽·메시지 키로 쓴다(`#externalization.infrastructure`). 본문은 타입 헤더 없는 JSON 바이트이며 소비자는 리스너 파라미터 타입으로 역직렬화한다. 소비자 그룹은 `ticketing-payment`와 `ticketing-booking`이다. 재시도 소진 시 DLT로 보낸다. 장애 복구와 DLT 재처리는 [런북 §3.7](../runbook.md#37-미완료-이벤트-발행이-쌓인다)을 따른다.
 
 ### 의존 방향
 
