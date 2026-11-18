@@ -6,6 +6,7 @@ plugins {
 val jooqGenerator = sourceSets.create("jooqGenerator")
 
 dependencies {
+    implementation(project(":common"))
     implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-restclient")

@@ -69,6 +69,7 @@
 ### 빌드 구조 메모
 
 - 공통 빌드 설정은 `build-logic/`의 convention plugin(`ticketing.kotlin-conventions`, `ticketing.kotlin-quality`(ktlint·detekt), `ticketing.spring-conventions`, `ticketing.jpa-conventions`, `ticketing.no-database`(DB 의존성 금지 검증))에 둔다. DB가 없어야 하는 모듈(`realtime`, `gateway` 등)은 `no-database`를 적용한다.
+- `common` 모듈(`ticketing.library-conventions`)은 앱 간 공용 클래스(`DomainException`, `ApiExceptionHandler`, `KeysetItemReader`, `Clock` 빈)를 담는다. 패키지는 루트 `io.github.ticketing`를 유지해 Modulith 모듈로 잡히지 않고, 빈은 루트 패키지가 다른 앱도 쓸 수 있게 auto-configuration(`CommonAutoConfiguration`, `ApiExceptionHandler`)으로 노출한다. 루트 패키지가 같은 앱(core)에서는 `ApiExceptionHandler`가 컴포넌트 스캔으로 먼저 등록되고 imports 항목은 무시되며, 빈이 하나인 것은 `CommonBeansTests`가 검증한다. 웹·Batch 의존은 `compileOnly`다.
 - jOOQ 생성 코드의 패키지는 `ticketing.jooq`다. Modulith는 `io.github.ticketing`의 직계 하위 패키지를 모두 모듈로 보므로 루트 밖에 둔다.
 - Modulith 모듈 선언은 Kotlin에 `package-info`가 없어 `core/src/main/java/.../<모듈>/package-info.java`에 둔다 (Java 파일은 이것뿐).
 - Modulith 이벤트 발행 레지스트리 테이블(`event_publication`)은 `public` 스키마에 둔다.

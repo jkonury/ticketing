@@ -1,5 +1,6 @@
 package io.github.ticketing
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
@@ -12,6 +13,7 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 
 /** 예외 → RFC 9457 ProblemDetail 변환은 이 클래스 한 곳에서만 한다. */
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @RestControllerAdvice
 class ApiExceptionHandler {
 
