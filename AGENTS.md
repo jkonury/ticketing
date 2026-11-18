@@ -12,6 +12,7 @@
 
 - `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
 - `docs/rules/frontend.md`: `web`
+- `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
 
 ## 2. 저장소 구조
 
