@@ -51,7 +51,3 @@ Scouter OFF(별도 표기 제외)·관측 ON·Gatling 힙 2g, CPU 배치 발생�
 ## 검증
 
 Python 회귀 12개, 셸 구문, ktlint·detekt, 문서 검사를 통과했다. 변경이 셸·Python·문서뿐이고 서버 코드는 바꾸지 않아 전체 `run-tests.sh`·E2E는 다시 돌리지 않았다.
-
-## 다음 단계
-
-[콜드 판정 재정의 인계](../../../.handoff/2026-11-15-hot-seats-cold-300ms-feasibility.md) 7절 2번(ADR 0028, 내부 예열)으로 진행한다. 설계 변경이므로 진행 전에 사용자와 합의한다.
