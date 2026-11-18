@@ -36,9 +36,9 @@
 
 ### 본 작업
 
-- [ ] `payment` 분리: 별도 배포 단위, 스키마를 별도 DB로 이전
+- [ ] Modulith 이벤트 외부화로 Kafka 도입: 모놀리스 상태에서 먼저 적용·검증 (앱 간 Redis Streams는 유지: ADR 0039)
+- [ ] `payment` 분리: 별도 배포 단위, 스키마를 별도 DB로 이전, fake-pg 웹훅 수신 경로 이전
 - [ ] `settlement` 분리
-- [ ] Modulith 이벤트 외부화로 Kafka 도입 (앱 간 Redis Streams는 유지: ADR 0039)
 - [ ] 예매–결제 Saga 정리 (보상 흐름 재검증, 쿠폰 보상(예약 해제·사용 확정) 포함)
 - [x] 인증 구조 재검토 (Spring Authorization Server 도입 여부): M6에서는 유지, SAS는 후속 (ADR 0041)
 - [ ] 컨테이너 이미지 빌드

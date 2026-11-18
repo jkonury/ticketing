@@ -36,14 +36,14 @@ M6에서 `payment`·`settlement`를 별도 배포 단위로 분리하면 모듈 
 - 좌석 변경 스트림(`booking:seat-events:{scheduleId}`)과 스냅샷은 Redis Streams를 유지한다. 짧게 재생하고 버리는 팬아웃이라 Redis가 맞고, [ADR 0038](0038-queue-stays-on-redis-not-kafka.md)과 같은 논리다.
 - 외부화 대상은 프로세스 경계를 넘는 이벤트로 한정한다(계획서의 이벤트 표). 같은 JVM 안에 남는 이벤트(`booking`↔`coupon` 등)는 Modulith 이벤트 그대로 둔다.
 - 소비자는 멱등으로 만들고, 이벤트 페이로드는 JSON과 버전 필드로 고정한다.
-- `serialize-externalization` 사용 여부와 outbox 모드(Namastack, JobRunr) 도입 여부는 계획서 3단계에서 측정·검증 후 정한다.
+- `serialize-externalization` 사용 여부와 outbox 모드(Namastack, JobRunr) 도입 여부는 계획서 2단계에서 측정·검증 후 정한다.
 - B는 좌석 스트림에 Redis로 풀 수 없는 요구가 생기면 새 ADR로 다시 검토한다.
 
 ## 결과
 
 - 얻는 것: ADR 0009의 "realtime은 Redis만 사용"과 단일 실시간 경로 유지, 변경 범위 최소화.
 - 감수하는 것: 메시징 수단 두 가지(Kafka, Redis Streams)를 운영한다. 최소 1회 전달이므로 소비자 멱등 검증이 필요하다.
-- 바뀌는 문서·지침: 구현 단계(계획서 3단계)에서 `docs/architecture/events.md`의 이벤트 종류 표와 `docs/architecture.md` §3을 고친다. 지금은 바꾸지 않는다.
+- 바뀌는 문서·지침: 구현 단계(계획서 2단계)에서 `docs/architecture/events.md`의 이벤트 종류 표와 `docs/architecture.md` §3을 고친다. 지금은 바꾸지 않는다.
 
 ## 변경 이력
 
