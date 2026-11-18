@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (build, ktlint, detekt)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6
+      # jOOQ 코드 생성과 Testcontainers가 러너의 Docker를 쓴다. ktlintCheck·detekt는 check에 포함된다.
+      - name: Gradle build
+        run: ./gradlew build --no-daemon
+      - name: 테스트 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: "**/build/reports/tests"
+          if-no-files-found: ignore
+
+  web:
+    name: web (lint, typecheck, test, format, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    env:
+      # .env.example 기준 CI 전용 더미 값. 비밀 값이 아니다.
+      GATEWAY_URL: http://localhost:18000
+      GATEWAY_PUBLIC_URL: http://localhost:18000
+      REDIS_URL: redis://localhost:16379
+      WEB_ORIGIN: http://localhost:13000
+      SESSION_COOKIE_SECURE: "false"
+    steps:
+      - uses: actions/checkout@v7
+      # pnpm 버전은 web/package.json의 packageManager를 따른다.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+      - run: pnpm run test
+      - run: pnpm run format:check
+      - run: pnpm run build
+
+  docs:
+    name: docs (링크, 경로 참조)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --config lychee.toml docs README.md CLAUDE.md AGENTS.md
+            web/AGENTS.md
+          fail: true
+      - name: 문서 백틱 경로 검사
+        run: ./scripts/agent/docs/check-doc-refs.sh

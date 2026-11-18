@@ -27,7 +27,7 @@
 
 ### 사전 작업 (본 작업 전에 완료)
 
-- [ ] P1 CI 파이프라인(GitHub Actions)
+- [x] P1 CI 파이프라인(GitHub Actions)
 - [ ] P2 Batch E2E 기준선(정산·대사·미결제 정리)
 - [ ] P3 공용 클래스 `common` Gradle 모듈 추출
 - [ ] P4 계약 이벤트 `contract` 모듈 추출, 직렬화 형식(JSON, 버전 필드) 고정
