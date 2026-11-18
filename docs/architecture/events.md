@@ -16,6 +16,11 @@
 - 이벤트 클래스는 **발행 모듈의 루트 패키지**에 둔다. 예외로 결제 계약 이벤트 5종은 `payment` 루트에 둔다([ADR 0017](../adr/0017-payment-owns-payment-events.md)).
 - 페이로드에는 ID와 단순 값만 담는다. 엔티티나 다른 모듈의 내부 타입을 싣지 않는다. 추후 Kafka로 외부화할 때 그대로 직렬화할 수 있어야 한다.
 - 금액은 `BigDecimal`(원 단위), 시각은 `Instant`다.
+- **계약 이벤트**(결제 5종, `BookingConfirmed`, `BookingCancelled`)는 `contract` 모듈에 두고 패키지는 위 규칙대로 유지한다([ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)). JSON 규칙:
+  - 필드 이름은 Kotlin 프로퍼티 이름 그대로(camelCase)다. 금액(`BigDecimal`)은 JSON 숫자, 시각(`Instant`)은 ISO-8601 UTC 문자열이다. ID는 숫자, 목록은 배열이다.
+  - 버전 필드는 두지 않는다. 필드 **추가만** 허용하며 새 필드는 기본값을 가진다(구 페이로드를 읽을 수 있어야 한다). 소비자는 모르는 필드를 무시한다.
+  - 필드 삭제·이름·타입·의미 변경은 금지한다. 필요하면 새 이벤트 타입(`…V2`)을 추가하고 한동안 둘을 함께 발행한다.
+  - 예: `PaymentSucceeded` = `{"paymentId":11,"orderId":101,"amount":50000,"paidAt":"2026-01-02T03:04:05Z"}`. 전체 예시는 `contract/src/testFixtures/resources/contract-events/`이며 `ContractEventSerializationTests`가 형식을 강제한다.
 - 구독은 `adapter.provided.event`의 `@ApplicationModuleListener`로만 한다.
 - **리스너는 멱등이어야 한다.** 이벤트 발행 레지스트리(`public.event_publication`)는 완료되지 않은 이벤트를 다시 전달한다. 같은 이벤트가 두 번 와도 결과가 같아야 한다.
 - 이벤트를 바꿀 때는 호환성을 먼저 본다. 필드를 지우거나 의미를 바꾸면 구독 모듈이 깨지므로 필드는 추가를 기본으로 한다.

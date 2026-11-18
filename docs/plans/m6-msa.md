@@ -31,7 +31,7 @@ M6 본 작업 전에 끝낸다. 로드맵의 "M6 사전 작업" 체크리스트�
 | P1 | CI 파이프라인(GitHub Actions): `build`(ktlint·detekt 포함), web 검사, 문서 검사 | 분리 후 모듈이 늘어 로컬 검사만으로는 회귀를 놓친다 |
 | P2 | Batch E2E 기준선: 정산·대사·미결제 정리 Job을 실제 DB로 실행해 결과를 고정 | 분리 전후 결과를 비교할 기준이 없다 |
 | P3 | 공용 클래스를 `common` Gradle 모듈로 추출 | payment가 core 소스를 참조하지 않고 독립 빌드되게 한다 |
-| P4 | 계약 이벤트를 `contract` 모듈로 추출하고 직렬화 형식 고정(JSON, 버전 필드) | 프로세스 경계를 넘는 페이로드는 호환성 규칙이 필요하다([events.md §1](../architecture/events.md#1-공통-규칙)) |
+| P4 | 계약 이벤트를 `contract` 모듈로 추출하고 직렬화 형식 고정(JSON, 하위 호환 규칙. 버전 필드 없음, [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)). 쿠폰·`ScheduleRegistered`·audit 이벤트는 같은 JVM에 남아 대상이 아니다 | 프로세스 경계를 넘는 페이로드는 호환성 규칙이 필요하다([events.md §1](../architecture/events.md#1-공통-규칙)) |
 | P5 | `event_publication` 미완료 이벤트 관측(건수·최고령 지표)과 재처리 runbook | Kafka 외부화 후 전송 실패는 이 테이블에 쌓인다 |
 | P6 | (선택) 분리 전 성능 기준선 1회 측정 | 분리로 늘어나는 네트워크 홉의 비용을 비교한다 |
 

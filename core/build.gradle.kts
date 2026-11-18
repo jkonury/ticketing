@@ -7,6 +7,7 @@ val jooqGenerator = sourceSets.create("jooqGenerator")
 
 dependencies {
     implementation(project(":common"))
+    implementation(project(":contract"))
     implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
@@ -32,6 +33,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation(libs.archunit.junit5)
+    testImplementation(testFixtures(project(":contract")))
+    testImplementation("org.springframework.modulith:spring-modulith-events-core")
 
     "jooqGeneratorImplementation"(kotlin("stdlib"))
     "jooqGeneratorImplementation"("org.jooq:jooq-codegen")

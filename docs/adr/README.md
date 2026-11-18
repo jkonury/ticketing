@@ -54,3 +54,4 @@
 | [0039](0039-kafka-externalizes-modulith-events-only.md) | Kafka는 Modulith 이벤트 외부화에만 쓰고 좌석 스트림은 Redis Streams 유지 | 합의 |
 | [0040](0040-payment-separate-database-same-instance.md) | payment는 같은 PostgreSQL 인스턴스의 별도 DB로 분리 | 합의 |
 | [0041](0041-auth-stays-in-core-sas-deferred.md) | M6에서는 인증 구조를 유지하고 Spring Authorization Server는 후속으로 미룸 | 합의 |
+| [0042](0042-contract-module-keeps-packages-and-json-compat-rules.md) | 계약 이벤트는 기존 패키지를 유지한 채 contract 모듈로 옮기고 JSON 형식은 골든 파일로 고정 | 합의 |

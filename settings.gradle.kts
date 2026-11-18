@@ -11,6 +11,6 @@ dependencyResolutionManagement {
     }
 }
 
-include("common", "core", "core-batch", "realtime", "gateway", "fake-pg", "e2e")
+include("common", "contract", "core", "core-batch", "realtime", "gateway", "fake-pg", "e2e")
 include("loadtest-gatling")
 project(":loadtest-gatling").projectDir = file("loadtest/gatling")
