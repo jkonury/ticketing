@@ -71,6 +71,41 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - 따라서 이전 때 할 일: ① fake-pg의 웹훅 URL을 payment 앱 주소로 바꾸고, ② 웹훅은 Gateway를 거치지 않으므로 웹훅용 Gateway 라우팅은 만들지 않는다(payment 앱의 보안 설정에서 해당 경로를 `permitAll`로 이전), ③ Gateway `core-api` 라우트(`/api/v1/**` → core)는 `GET /api/v1/payments/me` 같은 사용자 결제 API가 payment로 옮겨가므로 `/api/v1/payments/**`를 payment 앱으로 보내는 라우트를 추가한다, ④ E2E 스크립트(`scripts/e2e/run.sh`)와 부하 스크립트(`scripts/loadtest/`)의 포트·URL·프로세스 구성을 갱신한다.
 - 완료 기준에 포함: 웹훅 멱등 키 처리 유지, 서명 검증 유지, 기존 E2E(웹훅 멱등, 만료 후 환불) 통과.
 
+**2단계 세부 체크리스트** (작성 2026-11-18. 하위 작업 하나씩 진행하고 검증 통과 후 체크한다. 결정 항목은 합의 전 초안이다)
+
+결정 초안(합의 후 확정, 확정되면 events.md·필요 시 ADR에 반영):
+
+| 결정 | 초안 | 근거·확인 필요 |
+|---|---|---|
+| 로컬 리스너 전환 | 로컬 `@ApplicationModuleListener`를 **제거하고 같은 클래스에서 `@KafkaListener`로 교체**한다. 프로퍼티·프로필 토글은 두지 않는다 | 3단계 분리 후에도 코드가 그대로 쓰인다. 토글은 이중 처리 위험과 테스트 조합만 늘린다 |
+| 본문 직렬화 | JSON 고정. 타입 헤더를 쓰지 않고 소비자가 리스너 파라미터 타입으로 역직렬화한다 | 헤더에 클래스명이 들어가면 분리 후 패키지·모듈이 달라질 때 깨진다. 공식 문서로 Modulith Kafka 외부화가 값을 어떻게 `KafkaTemplate`에 넘기는지 먼저 확인한다 |
+| 골든 일치 확인 | 테스트에서 실제 브로커로 나간 메시지를 `String`으로 소비해 `contract` 골든 JSON과 트리 비교한다 | ADR 0042의 호환 규칙과 같은 골든 파일을 재사용한다 |
+| 컨슈머 실패 처리 | `DefaultErrorHandler` + 지수 백오프 재시도(초안 3회, 1s 시작) 후 **DLT(`<토픽>.dlt`)로 보낸다**. DLT 적재 건수는 지표로 노출하고 runbook에 재처리 절차를 둔다 | 재시도만 하고 버리면 결제 결과 유실로 예매가 `PENDING`에 남는다 |
+| 소비자 멱등 보강 | `PaymentRequested`: `order_id`·`idempotency_key` 유니크 충돌을 정상 중복으로 처리하는지 확인. `RefundRequested`: 환불 진행 중 중복 도착 경합 테스트 추가 | events.md가 "2단계에서 추가 필요"로 표시한 항목 |
+| `serialize-externalization`·outbox | **둘 다 채택하지 않는다**(초안). 키가 `orderId`이고 소비자가 상태 전이 검사로 순서 역전을 흡수하며, 직렬화는 처리량을 낮춘다. 측정에서 확정 지연이 나쁘거나 순서 문제가 나오면 재검토한다 | 5번 측정 결과로 확정 |
+| Kafka 기동 | compose 기본 서비스로 추가(프로필 분리 안 함, core가 항상 필요). 이미지는 공식 `apache/kafka`의 확인한 안정 버전, KRaft 단일 브로커, 호스트 포트 `127.0.0.1:19092`. 테스트는 Testcontainers `KafkaContainer`를 `SharedContainers`에 추가 | 2단계 이후 core는 Kafka 없이 결제가 안 된다. 계획 4절의 "프로필 분리"는 observability처럼 부가 스택에 해당하므로 조정 |
+| 파티션·브로커 | 토픽당 3, 단일 브로커 | 측정 후 조정 |
+
+체크리스트:
+
+- [ ] **2-1 Kafka 인프라**: `compose.yaml` Kafka 서비스·`.env.example`, Gradle 의존성(`spring-modulith-events-kafka`, `spring-boot-starter-kafka`, 테스트용 Testcontainers Kafka), `application.yml`·테스트 설정, 토픽 생성(`NewTopic` 빈) 
+  - 완료 기준: `docker compose up -d` 후 core가 기동하고 토픽 5종이 존재한다. 테스트 컨텍스트가 Kafka 컨테이너를 공유한다
+  - 검증: `bootRun` 기동 확인, `--tests` 필터로 컨텍스트 로딩 테스트
+- [ ] **2-2 발행**: 결제 계약 5종 `@Externalized`(토픽·키는 events.md 표), JSON 직렬화 고정
+  - 완료 기준: 브로커로 나간 메시지가 골든 JSON과 같고 키가 `orderId`다. 로컬 리스너는 아직 유지(이중 소비 허용 상태)
+  - 검증: 발행 테스트(Testcontainers Kafka), Modulith 구조 검증
+- [ ] **2-3 소비 전환·멱등**: payment 리스너 2종, booking 리스너 3종을 `@KafkaListener`로 교체하고 로컬 리스너 제거. 실패 처리(재시도·DLT) 적용, 멱등 보강
+  - 완료 기준: 같은 이벤트를 두 번 보내도 결과가 같다(중복 수신 테스트). 영구 실패는 DLT로 간다
+  - 검증: 소비자 멱등·환불 경합·DLT 테스트, 기존 결제·예매 통합 테스트
+- [ ] **2-4 장애**: 브로커 중단·복구 후 미완료 이벤트 재전달, runbook §3.7 보강(DLT 포함)
+  - 완료 기준: 브로커 중단 중 발행한 이벤트가 `event_publication`에 남고 복구·재시작 후 소비된다
+  - 검증: 장애 주입 테스트(Testcontainers 컨테이너 중지·재기동)
+- [ ] **2-5 회귀·측정**: 전체 테스트·check·E2E 13개, Gatling `hot-seats` 콜드 3회로 확정 지연 p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 `docs/performance/m6/` 아래 02번 문서로 기록. `scripts/e2e/run.sh`·`scripts/loadtest/run.sh`·`scripts/dev/run.sh`의 Kafka 사전 조건 반영
+  - 완료 기준: 2단계 완료 기준 전부. `serialize-externalization`·outbox 채택 여부 확정
+  - 검증: `./scripts/agent/test/run-tests.sh`, `check-summary.sh`, `./scripts/e2e/run.sh`, Gatling(단독 실행)
+- [ ] **2-6 문서**: architecture.md(§3 구성도·기술 스택), events.md(외부화 구현 반영·"구현 전" 문구 제거), AGENTS.md(§6 명령·§7 사전 조건), 필요 시 ADR(직렬화·실패 처리), 이 문서 갱신
+  - 검증: `./scripts/agent/docs/check-docs.sh`
+
 각 단계의 세부 체크리스트는 단계를 시작할 때 이 문서에 추가한다. 한 단계의 완료 기준을 만족하기 전에는 다음 단계를 시작하지 않는다.
 
 ## 4. 위험과 대응
