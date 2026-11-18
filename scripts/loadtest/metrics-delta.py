@@ -8,6 +8,7 @@
 collect는 각 앱의 /actuator/prometheus를 직접 읽어 누적 시계열(_total/_count/_sum/_bucket)만 저장한다.
 diff 규칙: 이후에만 있는 시계열은 사전값 0, 둘 다 있으면 사전값 차감, 이후에 값이 줄었거나(reset)
 이전에 있던 시계열이 사라졌으면 오류로 표시하고 종료 코드 2를 돌려준다(값은 0으로 채우지 않는다).
+Kafka 소비자의 값 0인 토픽 미지정 시계열이 같은 라벨의 토픽별 시계열로 바뀐 경우는 예외다.
 게이지 최대값과 Timer max는 두 시점 사이의 최대를 알 수 없어 이 파일에 넣지 않는다.
 """
 import json
@@ -169,6 +170,26 @@ def check(name, expected, observed, op="eq"):
     return {"name": name, "expectedFromK6": expected, "observedServerDelta": observed, "op": op, "ok": ok}
 
 
+def kafka_topic_series_replaced(key, before, post_series):
+    match = LINE.match(f"{key} 0")
+    if before != 0 or not match or match.group(1) not in (
+        "kafka_consumer_fetch_manager_bytes_consumed_total",
+        "kafka_consumer_fetch_manager_records_consumed_total",
+    ):
+        return False
+    labels = parse_labels(match.group(2))
+    if "topic" in labels:
+        return False
+    for candidate in post_series:
+        candidate_match = LINE.match(f"{candidate} 0")
+        if not candidate_match or candidate_match.group(1) != match.group(1):
+            continue
+        candidate_labels = parse_labels(candidate_match.group(2))
+        if candidate_labels.pop("topic", None) is not None and candidate_labels == labels:
+            return True
+    return False
+
+
 def diff(pre_path, post_path, out, scenario, k6_summary, label):
     pre, post = json.load(open(pre_path)), json.load(open(post_path))
     errors, deltas = [], {}
@@ -178,7 +199,7 @@ def diff(pre_path, post_path, out, scenario, k6_summary, label):
             errors.append({"app": app, "type": "collect_failed"})
             continue
         for key, before in pre_app["series"].items():
-            if key not in post_app["series"]:
+            if key not in post_app["series"] and not kafka_topic_series_replaced(key, before, post_app["series"]):
                 errors.append({"app": app, "type": "series_missing", "series": key})
         app_delta = {}
         for key, after in post_app["series"].items():

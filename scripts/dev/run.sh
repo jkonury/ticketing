@@ -8,7 +8,7 @@ usage() {
   cat <<'HELP'
 사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--realtime] [--gateway] [--web]
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
---infra: PostgreSQL, Redis  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
+--infra: PostgreSQL, Redis, Kafka  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
 앱 옵션은 조합할 수 있습니다. 의존 인프라는 별도로 선택해야 합니다.
 Java 앱은 Scouter를 기본으로 연결합니다. .env 또는 환경 변수에 SCOUTER_AGENT_DIR을 지정하세요.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
@@ -63,7 +63,7 @@ $core && tasks+=(:core:bootJar)
 $realtime && tasks+=(:realtime:bootJar)
 $gateway && tasks+=(:gateway:bootJar)
 if ((${#tasks[@]})); then ./gradlew "${tasks[@]}"; fi
-if $infra; then docker compose up -d --wait; fi
+if $infra; then docker compose up -d --wait postgres redis kafka; fi
 if $observability; then docker compose -f compose.yaml -f compose.observability.yaml up -d --wait prometheus tempo grafana; fi
 start() {
   local name=$1

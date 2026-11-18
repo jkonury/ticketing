@@ -58,7 +58,7 @@ if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:boot
   tail -n 30 "$LOG_DIR/build.log" >&2
   exit 1
 fi
-docker compose up -d --wait > "$LOG_DIR/compose.log" 2>&1 || { echo "Compose 기동 실패: $LOG_DIR/compose.log" >&2; tail -n 30 "$LOG_DIR/compose.log" >&2; exit 1; }
+docker compose up -d --wait postgres redis kafka > "$LOG_DIR/compose.log" 2>&1 || { echo "Compose 기동 실패: $LOG_DIR/compose.log" >&2; tail -n 30 "$LOG_DIR/compose.log" >&2; exit 1; }
 start() {
   local name=$1 jar=$2
   shift 2

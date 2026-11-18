@@ -220,7 +220,7 @@ if ! ./gradlew -q "${build_tasks[@]}" > "$RUN_ROOT/build.log" 2>&1; then
 fi
 
 compose=(docker compose)
-services=(postgres redis)
+services=(postgres redis kafka)
 if $OBSERVABILITY; then
   compose+=(-f compose.yaml -f compose.observability.yaml)
   services+=(prometheus tempo grafana redis-exporter postgres-exporter loadtest-exporter)
