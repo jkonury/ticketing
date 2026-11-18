@@ -51,3 +51,6 @@
 | [0036](0036-settlement-list-price-platform-discount.md) | 정산 정가 기준과 플랫폼 할인 부담 | 합의 |
 | [0037](0037-limited-coupon-claim-redis-lua.md) | 선착순 쿠폰 발급 방식(Redis Lua + 동기 DB INSERT) | 합의 |
 | [0038](0038-queue-stays-on-redis-not-kafka.md) | 대기열 저장소는 Redis를 유지하고 Kafka로 옮기지 않는다 | 제안 |
+| [0039](0039-kafka-externalizes-modulith-events-only.md) | Kafka는 Modulith 이벤트 외부화에만 쓰고 좌석 스트림은 Redis Streams 유지 | 합의 |
+| [0040](0040-payment-separate-database-same-instance.md) | payment는 같은 PostgreSQL 인스턴스의 별도 DB로 분리 | 합의 |
+| [0041](0041-auth-stays-in-core-sas-deferred.md) | M6에서는 인증 구조를 유지하고 Spring Authorization Server는 후속으로 미룸 | 합의 |

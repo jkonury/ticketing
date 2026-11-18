@@ -23,11 +23,24 @@
 
 ## M6. MSA + k8s
 
+계획: [m6-msa.md](./plans/m6-msa.md). 결정: [ADR 0039](./adr/0039-kafka-externalizes-modulith-events-only.md), [0040](./adr/0040-payment-separate-database-same-instance.md), [0041](./adr/0041-auth-stays-in-core-sas-deferred.md).
+
+### 사전 작업 (본 작업 전에 완료)
+
+- [ ] P1 CI 파이프라인(GitHub Actions)
+- [ ] P2 Batch E2E 기준선(정산·대사·미결제 정리)
+- [ ] P3 공용 클래스 `common` Gradle 모듈 추출
+- [ ] P4 계약 이벤트 `contract` 모듈 추출, 직렬화 형식(JSON, 버전 필드) 고정
+- [ ] P5 `event_publication` 미완료 이벤트 관측과 재처리 runbook
+- [ ] P6 (선택) 분리 전 성능 기준선 1회 측정
+
+### 본 작업
+
 - [ ] `payment` 분리: 별도 배포 단위, 스키마를 별도 DB로 이전
 - [ ] `settlement` 분리
-- [ ] Modulith 이벤트 외부화로 Kafka 도입, 앱 간 Redis Streams 대체 범위 결정
+- [ ] Modulith 이벤트 외부화로 Kafka 도입 (앱 간 Redis Streams는 유지: ADR 0039)
 - [ ] 예매–결제 Saga 정리 (보상 흐름 재검증, 쿠폰 보상(예약 해제·사용 확정) 포함)
-- [ ] 인증 구조 재검토 (Spring Authorization Server 도입 여부)
+- [x] 인증 구조 재검토 (Spring Authorization Server 도입 여부): M6에서는 유지, SAS는 후속 (ADR 0041)
 - [ ] 컨테이너 이미지 빌드
 - [ ] k8s 매니페스트: Deployment, Service, Ingress, Batch는 CronJob
 - [ ] 실시간 앱 수평 확장(HPA) 검증
@@ -43,8 +56,8 @@
 | 항목 | 도입 시점 |
 |---|---|
 | 소셜 로그인 (카카오/구글) | BFF 화면 완성 이후 |
-| Spring Authorization Server (OAuth2/OIDC) | MSA 전환 시 |
-| Kafka (Modulith 이벤트 외부화) | MSA 전환 시. 그 전까지 앱 간 통신은 Redis Streams |
+| Spring Authorization Server (OAuth2/OIDC) | M6 완료 후 새 ADR로 검토. [ADR 0041](./adr/0041-auth-stays-in-core-sas-deferred.md) |
+| Kafka (Modulith 이벤트 외부화) | M6. 좌석 스트림은 Redis Streams 유지. [ADR 0039](./adr/0039-kafka-externalizes-modulith-events-only.md) |
 | 실제 PG 연동 (테스트 모드) | 가짜 PG로 보상 흐름 검증 이후 |
 | 실제 이메일/SMS 알림 | 미정 |
 | 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |
