@@ -1,7 +1,7 @@
 # M6 MSA + k8s 계획
 
 - 작성일: 2026-11-18
-- 상태: 초안. 열린 결정 3건은 합의 완료(ADR 0039~0041). 구현 미착수
+- 상태: 초안. 열린 결정 3건은 합의 완료(ADR 0039~0041). 2단계 구현 결정은 ADR 0043. 구현 진행 중
 - 관련: [로드맵](../roadmap.md), [아키텍처](../architecture.md), [이벤트 카탈로그](../architecture/events.md), [데이터 소유](../architecture/data-ownership.md), [ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [ADR 0040](../adr/0040-payment-separate-database-same-instance.md), [ADR 0041](../adr/0041-auth-stays-in-core-sas-deferred.md)
 
 ## 1. 배경과 범위
@@ -71,24 +71,24 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - 따라서 이전 때 할 일: ① fake-pg의 웹훅 URL을 payment 앱 주소로 바꾸고, ② 웹훅은 Gateway를 거치지 않으므로 웹훅용 Gateway 라우팅은 만들지 않는다(payment 앱의 보안 설정에서 해당 경로를 `permitAll`로 이전), ③ Gateway `core-api` 라우트(`/api/v1/**` → core)는 `GET /api/v1/payments/me` 같은 사용자 결제 API가 payment로 옮겨가므로 `/api/v1/payments/**`를 payment 앱으로 보내는 라우트를 추가한다, ④ E2E 스크립트(`scripts/e2e/run.sh`)와 부하 스크립트(`scripts/loadtest/`)의 포트·URL·프로세스 구성을 갱신한다.
 - 완료 기준에 포함: 웹훅 멱등 키 처리 유지, 서명 검증 유지, 기존 E2E(웹훅 멱등, 만료 후 환불) 통과.
 
-**2단계 세부 체크리스트** (작성 2026-11-18. 하위 작업 하나씩 진행하고 검증 통과 후 체크한다. 결정 항목은 합의 전 초안이다)
+**2단계 세부 체크리스트** (작성 2026-11-18. 하위 작업 하나씩 진행하고 검증 통과 후 체크한다. 결정은 합의 완료)
 
-결정 초안(합의 후 확정, 확정되면 events.md·필요 시 ADR에 반영):
+결정(2026-11-18 합의, [ADR 0043](../adr/0043-kafka-externalization-step2-decisions.md). `serialize-externalization`·outbox는 2-5 측정 후 확정):
 
-| 결정 | 초안 | 근거·확인 필요 |
+| 결정 | 선택 | 근거·확인 필요 |
 |---|---|---|
 | 로컬 리스너 전환 | 로컬 `@ApplicationModuleListener`를 **제거하고 같은 클래스에서 `@KafkaListener`로 교체**한다. 프로퍼티·프로필 토글은 두지 않는다 | 3단계 분리 후에도 코드가 그대로 쓰인다. 토글은 이중 처리 위험과 테스트 조합만 늘린다 |
 | 본문 직렬화 | JSON 고정. 타입 헤더를 쓰지 않고 소비자가 리스너 파라미터 타입으로 역직렬화한다 | 헤더에 클래스명이 들어가면 분리 후 패키지·모듈이 달라질 때 깨진다. 공식 문서로 Modulith Kafka 외부화가 값을 어떻게 `KafkaTemplate`에 넘기는지 먼저 확인한다 |
 | 골든 일치 확인 | 테스트에서 실제 브로커로 나간 메시지를 `String`으로 소비해 `contract` 골든 JSON과 트리 비교한다 | ADR 0042의 호환 규칙과 같은 골든 파일을 재사용한다 |
-| 컨슈머 실패 처리 | `DefaultErrorHandler` + 지수 백오프 재시도(초안 3회, 1s 시작) 후 **DLT(`<토픽>.dlt`)로 보낸다**. DLT 적재 건수는 지표로 노출하고 runbook에 재처리 절차를 둔다 | 재시도만 하고 버리면 결제 결과 유실로 예매가 `PENDING`에 남는다 |
+| 컨슈머 실패 처리 | `DefaultErrorHandler` + 지수 백오프 재시도(3회, 1s 시작) 후 **DLT(`<토픽>.dlt`)로 보낸다**. DLT 적재 건수는 지표로 노출하고 runbook에 재처리 절차를 둔다 | 재시도만 하고 버리면 결제 결과 유실로 예매가 `PENDING`에 남는다 |
 | 소비자 멱등 보강 | `PaymentRequested`: `order_id`·`idempotency_key` 유니크 충돌을 정상 중복으로 처리하는지 확인. `RefundRequested`: 환불 진행 중 중복 도착 경합 테스트 추가 | events.md가 "2단계에서 추가 필요"로 표시한 항목 |
-| `serialize-externalization`·outbox | **둘 다 채택하지 않는다**(초안). 키가 `orderId`이고 소비자가 상태 전이 검사로 순서 역전을 흡수하며, 직렬화는 처리량을 낮춘다. 측정에서 확정 지연이 나쁘거나 순서 문제가 나오면 재검토한다 | 5번 측정 결과로 확정 |
-| Kafka 기동 | compose 기본 서비스로 추가(프로필 분리 안 함, core가 항상 필요). 이미지는 공식 `apache/kafka`의 확인한 안정 버전, KRaft 단일 브로커, 호스트 포트 `127.0.0.1:19092`. 테스트는 Testcontainers `KafkaContainer`를 `SharedContainers`에 추가 | 2단계 이후 core는 Kafka 없이 결제가 안 된다. 계획 4절의 "프로필 분리"는 observability처럼 부가 스택에 해당하므로 조정 |
+| `serialize-externalization`·outbox | **둘 다 채택하지 않는다**(잠정). 키가 `orderId`이고 소비자가 상태 전이 검사로 순서 역전을 흡수하며, 직렬화는 처리량을 낮춘다. 측정에서 확정 지연이 나쁘거나 순서 문제가 나오면 재검토한다 | 5번 측정 결과로 확정 |
+| Kafka 기동 | compose 기본 서비스로 추가(프로필 분리 안 함, core가 항상 필요). 이미지는 공식 `apache/kafka`의 확인한 안정 버전, KRaft 단일 브로커, 호스트 포트 `127.0.0.1:19092`. 테스트는 Testcontainers `KafkaContainer`를 `SharedContainers`에 추가 | 2단계 이후 core는 Kafka 없이 결제가 안 된다. 계획 4절의 "프로필 분리"는 observability처럼 부가 스택에 해당하므로 조정(4절 수정 완료) |
 | 파티션·브로커 | 토픽당 3, 단일 브로커 | 측정 후 조정 |
 
 체크리스트:
 
-- [ ] **2-1 Kafka 인프라**: `compose.yaml` Kafka 서비스·`.env.example`, Gradle 의존성(`spring-modulith-events-kafka`, `spring-boot-starter-kafka`, 테스트용 Testcontainers Kafka), `application.yml`·테스트 설정, 토픽 생성(`NewTopic` 빈) 
+- [x] **2-1 Kafka 인프라**: `compose.yaml` Kafka 서비스(데이터 볼륨 `KAFKA_LOG_DIRS`), Gradle 의존성(`spring-modulith-events-kafka`, `spring-boot-starter-kafka`, 테스트용 Testcontainers Kafka), `application.yml`·테스트 설정, 토픽 생성(`NewTopic` 빈) 
   - 완료 기준: `docker compose up -d` 후 core가 기동하고 토픽 5종이 존재한다. 테스트 컨텍스트가 Kafka 컨테이너를 공유한다
   - 검증: `bootRun` 기동 확인, `--tests` 필터로 컨텍스트 로딩 테스트
 - [ ] **2-2 발행**: 결제 계약 5종 `@Externalized`(토픽·키는 events.md 표), JSON 직렬화 고정
@@ -114,7 +114,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 |---|---|
 | 분리 중 이벤트 유실·중복 | 소비자 멱등, 미완료 이벤트 관측(P5), 최종 방어선은 DB 제약(결제·웹훅 멱등 키 유지) |
 | DB 이전 중 데이터 불일치 | 점검 창과 대조 절차([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)) |
-| 로컬 자원 부족(Kafka·앱 증가) | 단일 브로커 KRaft로 시작하고 compose 프로필로 분리 |
+| 로컬 자원 부족(Kafka·앱 증가) | 단일 브로커 KRaft로 시작한다. Kafka는 결제 흐름의 필수 인프라이므로 compose 기본 서비스로 둔다([ADR 0043](../adr/0043-kafka-externalization-step2-decisions.md)) |
 | E2E 시간 증가 | 사전 작업의 CI에서 단계별 분리 실행 |
 
 ## 5. 열린 결정과 ADR
@@ -125,7 +125,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 | payment DB 분리 방식 | 같은 인스턴스의 별도 DB. 점검 창으로 이전 | [ADR 0040](../adr/0040-payment-separate-database-same-instance.md) |
 | 인증 구조 | 유지. SAS는 M6 후 별도 ADR | [ADR 0041](../adr/0041-auth-stays-in-core-sas-deferred.md) |
 
-미결 세부 사항(해당 단계에서 정한다): `serialize-externalization`·outbox 모드 채택(2단계), 결제 대사 Batch의 실행 구성, payment 서비스의 JWT 검증 방식(3단계), 웹훅 경로의 payment 앱 직접 노출 방식(3단계), 단일 브로커 vs 3대(2단계), 토픽당 파티션 수(초안 3, 2단계에서 측정 후 확정), 결제 계약 이벤트를 Kafka로 받을 때 core 안의 로컬 리스너 제거 방식(같은 이벤트 이중 처리 방지, [events.md](../architecture/events.md#kafka-외부화-대상-m6)), 브로커로 가는 본문 직렬화(value serializer) 고정 방법(2단계). 토픽 단위(이벤트별)·명명 규칙은 확정.
+미결 세부 사항(해당 단계에서 정한다): `serialize-externalization`·outbox 모드 최종 확정(2-5 측정 후, 잠정 미채택은 [ADR 0043](../adr/0043-kafka-externalization-step2-decisions.md)), 결제 대사 Batch의 실행 구성, payment 서비스의 JWT 검증 방식(3단계), 웹훅 경로의 payment 앱 직접 노출 방식(3단계), 토픽당 파티션 수(3으로 시작, 2-5 측정 후 확정). 토픽 단위(이벤트별)·명명 규칙, 로컬 리스너 제거 방식, 본문 직렬화, 단일 브로커는 ADR 0043에서 확정.
 
 ## 6. 문서 반영 계획
 

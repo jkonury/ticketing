@@ -55,3 +55,4 @@
 | [0040](0040-payment-separate-database-same-instance.md) | payment는 같은 PostgreSQL 인스턴스의 별도 DB로 분리 | 합의 |
 | [0041](0041-auth-stays-in-core-sas-deferred.md) | M6에서는 인증 구조를 유지하고 Spring Authorization Server는 후속으로 미룸 | 합의 |
 | [0042](0042-contract-module-keeps-packages-and-json-compat-rules.md) | 계약 이벤트는 기존 패키지를 유지한 채 contract 모듈로 옮기고 JSON 형식은 골든 파일로 고정 | 합의 |
+| [0043](0043-kafka-externalization-step2-decisions.md) | 모놀리스 상태의 Kafka 외부화(M6 2단계) 구현 결정 | 합의 |

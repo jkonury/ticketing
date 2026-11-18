@@ -21,6 +21,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: 16379
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:19092
   jpa:
     open-in-view: false
     hibernate:
