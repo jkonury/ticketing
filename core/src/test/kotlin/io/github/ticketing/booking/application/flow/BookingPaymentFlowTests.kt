@@ -19,6 +19,7 @@ import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
 import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
 import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
@@ -56,6 +57,7 @@ class BookingPaymentFlowTests(
     private val tx: TransactionTemplate,
     private val clock: MutableClock,
     private val collector: EventCollector,
+    private val meters: MeterRegistry,
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
@@ -121,9 +123,14 @@ class BookingPaymentFlowTests(
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(statusOf(token, bookingId)).isEqualTo(expected) }
     }
 
-    private fun succeed(bookingId: Long, paymentId: Long = bookingId, amount: BigDecimal = BigDecimal(100000)) {
+    private fun succeed(
+        bookingId: Long,
+        paymentId: Long = bookingId,
+        amount: BigDecimal = BigDecimal(100000),
+        paidAt: Instant = Instant.now(),
+    ) {
         tx.executeWithoutResult {
-            publisher.publishEvent(PaymentSucceeded(paymentId, bookingId, amount, Instant.now()))
+            publisher.publishEvent(PaymentSucceeded(paymentId, bookingId, amount, paidAt))
         }
     }
 
@@ -235,6 +242,28 @@ class BookingPaymentFlowTests(
         assertThat(cancelled.refundRequired).isFalse()
 
         book(token(), schedule, listOf(1))
+    }
+
+    @Test
+    fun `예매를 확정하면 paidAt부터 확정 시각까지를 확정 지연으로 한 번만 기록한다`() {
+        val lag = meters.timer("ticketing.booking.payment.confirmation.lag")
+        val countBefore = lag.count()
+        val totalBefore = lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1))
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
+        val now = clock.now
+        clock.now = now
+
+        succeed(id, paidAt = now.minusMillis(1500))
+        awaitStatus(token, id, "CONFIRMED")
+        succeed(id, paymentId = 999)
+
+        await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
+            assertThat(lag.count() - countBefore).isEqualTo(1L)
+            assertThat(lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) - totalBefore).isEqualTo(1500.0)
+        }
     }
 
     @Test

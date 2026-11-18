@@ -14,6 +14,8 @@ import io.github.ticketing.booking.domain.CouponState
 import io.github.ticketing.booking.domain.PaymentOutcome
 import io.github.ticketing.coupon.CouponUseConfirmed
 import io.github.ticketing.payment.RefundRequested
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -22,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -42,8 +45,13 @@ class PaymentResultService(
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
     private val clock: Clock,
+    registry: MeterRegistry,
 ) : HandlePaymentResultUseCase {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    // PG 승인(웹훅 발생 시각) → 예매 확정까지. 실제로 확정한 경우만 기록한다
+    private val confirmationLag: Timer =
+        Timer.builder("ticketing.booking.payment.confirmation.lag").publishPercentileHistogram().register(registry)
 
     private sealed interface After {
         data object Nothing : After
@@ -51,13 +59,13 @@ class PaymentResultService(
         data class Release(val booking: Booking) : After
     }
 
-    override fun onPaymentSucceeded(paymentId: Long, bookingId: Long, amount: BigDecimal) {
+    override fun onPaymentSucceeded(paymentId: Long, bookingId: Long, amount: BigDecimal, paidAt: Instant) {
         tx.executeWithoutResult {
-            applyAfterCommit(confirm(paymentId, BookingId(bookingId), amount), paymentId)
+            applyAfterCommit(confirm(paymentId, BookingId(bookingId), amount, paidAt), paymentId)
         }
     }
 
-    private fun confirm(paymentId: Long, bookingId: BookingId, amount: BigDecimal): After {
+    private fun confirm(paymentId: Long, bookingId: BookingId, amount: BigDecimal, paidAt: Instant): After {
         val booking = bookings.findById(bookingId) ?: return unknownBooking(paymentId, bookingId)
         val now = clock.instant()
         val before = booking.status
@@ -91,6 +99,7 @@ class PaymentResultService(
                     booking.appliedCoupon?.takeIf { it.state == CouponState.RESERVED }?.let {
                         events.publishEvent(CouponUseConfirmed(bookingId.value, it.issuedCouponId, now))
                     }
+                    confirmationLag.record(Duration.between(paidAt, now).coerceAtLeast(Duration.ZERO))
                     log.info("예매 확정 bookingId={} paymentId={}", bookingId.value, paymentId)
                     After.MarkSold(saved)
                 } else {

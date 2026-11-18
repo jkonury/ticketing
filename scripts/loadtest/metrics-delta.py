@@ -42,6 +42,7 @@ HISTOGRAMS = (
     ("hikaricp_connections_acquire_seconds", ("pool",)),
     ("ticketing_gateway_stage_seconds", ("stage", "route")),
     ("ticketing_booking_create_stage_seconds", ("stage",)),
+    ("ticketing_booking_payment_confirmation_lag_seconds", ()),
     ("reactor_netty_connection_provider_pending_connections_time_seconds", ("name",)),
 )
 

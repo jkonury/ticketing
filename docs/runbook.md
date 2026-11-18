@@ -98,6 +98,8 @@ Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `com
 
 Grafana `Ticketing Overview` 하단의 "미완료 이벤트 발행 건수", "최고령 미완료 이벤트 경과" 패널에서 본다. 값은 10초 캐시이고 조회 실패 시 직전 값을 쓰며, 처음부터 실패하면 `NaN`이다. 정상 상태는 건수가 0이거나 잠깐 올랐다 내려오는 것이다. 최고령이 계속 늘면 재처리가 필요한 건이다.
 
+결제 확정 지연은 `ticketing_booking_payment_confirmation_lag_seconds`(Timer, 히스토그램)다. PG가 알린 결제 발생 시각(`PaymentSucceeded.paidAt`)부터 booking이 예매를 확정한 시각까지이며, 실제로 확정한 건만 기록한다(중복·만료 후 승인·환불 경로 제외). `Ticketing Overview`의 "결제 확정 지연" 패널과 부하 측정의 `server-delta.json`에서 p50·p95·p99를 본다. PG와 core의 시계가 다르면 오차가 섞인다(로컬은 같은 호스트).
+
 **확인 SQL**
 
 ```bash

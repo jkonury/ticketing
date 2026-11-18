@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component
 class PaymentResultListener(private val handlePaymentResult: HandlePaymentResultUseCase) {
     @ApplicationModuleListener
     fun on(event: PaymentSucceeded) {
-        handlePaymentResult.onPaymentSucceeded(event.paymentId, event.orderId, event.amount)
+        handlePaymentResult.onPaymentSucceeded(event.paymentId, event.orderId, event.amount, event.paidAt)
     }
 
     @ApplicationModuleListener
