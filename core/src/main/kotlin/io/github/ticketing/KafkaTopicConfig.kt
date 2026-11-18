@@ -1,39 +1,42 @@
 package io.github.ticketing
 
 import org.apache.kafka.clients.admin.NewTopic
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.config.TopicBuilder
+import org.springframework.stereotype.Component
 
 /**
- * 결제 계약 이벤트 5종의 토픽. 이름·파티션 규칙은 docs/architecture/events.md "Kafka 외부화 대상 (M6)"를 따른다.
- * 브로커 자동 생성에 맡기면 파티션 수가 브로커 기본값에 묶이므로 명시적으로 만든다.
+ * 결제 계약 이벤트 5종의 토픽 이름. 규칙은 docs/architecture/events.md "Kafka 외부화 대상 (M6)"를 따른다.
+ * 접두어(`ticketing.kafka.topic-prefix`, 기본 `ticketing`)는 한 브로커를 여러 환경이 나눠 쓸 때 충돌을 막는다.
+ * 테스트는 컨텍스트마다 접두어를 달리해 컨텍스트 사이에 이벤트가 섞이지 않게 한다. 리스너는 `#{@kafkaTopics.paymentRequested}`로 참조한다.
  */
-@Configuration(proxyBeanMethods = false)
-class KafkaTopicConfig {
-    @Bean
-    fun paymentRequestedTopic(): NewTopic = topic(KafkaTopics.PAYMENT_REQUESTED)
+@Component("kafkaTopics")
+class KafkaTopics(@Value($$"${ticketing.kafka.topic-prefix:ticketing}") prefix: String) {
+    val paymentRequested = "$prefix.payment.payment-requested"
+    val refundRequested = "$prefix.payment.refund-requested"
+    val paymentSucceeded = "$prefix.payment.payment-succeeded"
+    val paymentFailed = "$prefix.payment.payment-failed"
+    val paymentRefunded = "$prefix.payment.payment-refunded"
 
-    @Bean
-    fun refundRequestedTopic(): NewTopic = topic(KafkaTopics.REFUND_REQUESTED)
+    val all = listOf(paymentRequested, refundRequested, paymentSucceeded, paymentFailed, paymentRefunded)
 
-    @Bean
-    fun paymentSucceededTopic(): NewTopic = topic(KafkaTopics.PAYMENT_SUCCEEDED)
+    /** 재시도를 소진한 레코드가 가는 토픽. 원본과 같은 키로 보존한다. */
+    fun deadLetterOf(topic: String) = "$topic.dlt"
 
-    @Bean
-    fun paymentFailedTopic(): NewTopic = topic(KafkaTopics.PAYMENT_FAILED)
-
-    @Bean
-    fun paymentRefundedTopic(): NewTopic = topic(KafkaTopics.PAYMENT_REFUNDED)
-
-    private fun topic(name: String): NewTopic = TopicBuilder.name(name).partitions(KafkaTopics.PARTITIONS).replicas(1).build()
+    companion object {
+        const val PARTITIONS = 3
+    }
 }
 
-object KafkaTopics {
-    const val PARTITIONS = 3
-    const val PAYMENT_REQUESTED = "ticketing.payment.payment-requested"
-    const val REFUND_REQUESTED = "ticketing.payment.refund-requested"
-    const val PAYMENT_SUCCEEDED = "ticketing.payment.payment-succeeded"
-    const val PAYMENT_FAILED = "ticketing.payment.payment-failed"
-    const val PAYMENT_REFUNDED = "ticketing.payment.payment-refunded"
+@Configuration(proxyBeanMethods = false)
+class KafkaTopicConfig {
+    /** 브로커 자동 생성에 맡기면 파티션 수가 브로커 기본값에 묶이므로 명시적으로 만든다. */
+    @Bean
+    fun kafkaTopicDeclarations(topics: KafkaTopics): org.springframework.kafka.core.KafkaAdmin.NewTopics {
+        val sources = topics.all.map { TopicBuilder.name(it).partitions(KafkaTopics.PARTITIONS).replicas(1).build() }
+        val deadLetters = topics.all.map { TopicBuilder.name(topics.deadLetterOf(it)).partitions(1).replicas(1).build() }
+        return org.springframework.kafka.core.KafkaAdmin.NewTopics(*(sources + deadLetters).toTypedArray<NewTopic>())
+    }
 }

@@ -23,6 +23,16 @@ spring:
       port: 16379
   kafka:
     bootstrap-servers: ${KAFKA_HOST:localhost}:19092
+    producer:
+      # 본문은 JSON 바이트 배열이다(KafkaMessageConfig). DLT도 원본 바이트를 그대로 보존한다
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+    consumer:
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      # 컨슈머 그룹이 처음 붙기 전에 발행된 이벤트도 받는다
+      auto-offset-reset: earliest
+    listener:
+      # 토픽 파티션 수와 같게 둔다(측정 후 조정)
+      concurrency: 3
   jpa:
     open-in-view: false
     hibernate:
@@ -75,6 +85,8 @@ server:
   port: 18080
 
 ticketing:
+  kafka:
+    topic-prefix: ticketing
   startup-warmup:
     enabled: ${STARTUP_WARMUP_ENABLED:false}
     max-duration: ${STARTUP_WARMUP_MAX_DURATION:30s}

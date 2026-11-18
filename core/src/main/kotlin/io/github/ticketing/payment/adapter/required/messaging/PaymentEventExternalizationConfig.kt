@@ -8,6 +8,7 @@ import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.env.Environment
 import org.springframework.modulith.events.EventExternalizationConfiguration
 import org.springframework.modulith.events.RoutingTarget
 
@@ -19,17 +20,21 @@ import org.springframework.modulith.events.RoutingTarget
 @Configuration(proxyBeanMethods = false)
 class PaymentEventExternalizationConfig {
     @Bean
-    fun eventExternalizationConfiguration(): EventExternalizationConfiguration = EventExternalizationConfiguration.externalizing()
-        .select { event -> event.javaClass in EXTERNALIZED }
-        .routeAll { event -> route(event) }
-        .build()
+    fun eventExternalizationConfiguration(environment: Environment): EventExternalizationConfiguration {
+        // Modulith 외부화 인프라가 이 빈을 BeanPostProcessor 등록 단계에서 만들므로 KafkaTopics 빈 대신 접두어로 직접 만든다
+        val topics by lazy { KafkaTopics(environment.getProperty("ticketing.kafka.topic-prefix", "ticketing")) }
+        return EventExternalizationConfiguration.externalizing()
+            .select { event -> event.javaClass in EXTERNALIZED }
+            .routeAll { event -> route(topics, event) }
+            .build()
+    }
 
-    private fun route(event: Any): RoutingTarget = when (event) {
-        is PaymentRequested -> to(KafkaTopics.PAYMENT_REQUESTED, event.orderId)
-        is RefundRequested -> to(KafkaTopics.REFUND_REQUESTED, event.orderId)
-        is PaymentSucceeded -> to(KafkaTopics.PAYMENT_SUCCEEDED, event.orderId)
-        is PaymentFailed -> to(KafkaTopics.PAYMENT_FAILED, event.orderId)
-        is PaymentRefunded -> to(KafkaTopics.PAYMENT_REFUNDED, event.orderId)
+    private fun route(topics: KafkaTopics, event: Any): RoutingTarget = when (event) {
+        is PaymentRequested -> to(topics.paymentRequested, event.orderId)
+        is RefundRequested -> to(topics.refundRequested, event.orderId)
+        is PaymentSucceeded -> to(topics.paymentSucceeded, event.orderId)
+        is PaymentFailed -> to(topics.paymentFailed, event.orderId)
+        is PaymentRefunded -> to(topics.paymentRefunded, event.orderId)
         else -> error("외부화 대상이 아닌 이벤트: ${event.javaClass.name}")
     }
 

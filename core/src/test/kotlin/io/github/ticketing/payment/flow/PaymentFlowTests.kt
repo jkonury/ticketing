@@ -18,7 +18,8 @@ import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRefunded
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
-import io.github.ticketing.payment.RefundRequested
+import io.github.ticketing.payment.application.port.provided.RequestPaymentCommand
+import io.github.ticketing.payment.application.port.provided.RequestPaymentUseCase
 import io.github.ticketing.payment.application.port.required.PgPaymentRequest
 import io.github.ticketing.payment.application.port.required.PgPort
 import io.github.ticketing.payment.application.port.required.PgRequestResult
@@ -27,7 +28,6 @@ import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
@@ -36,12 +36,10 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.modulith.events.IncompleteEventPublications
 import org.springframework.stereotype.Component
 import org.springframework.test.web.servlet.assertj.MockMvcTester
 import org.springframework.test.web.servlet.assertj.MvcTestResult
 import org.springframework.transaction.support.TransactionSynchronizationManager
-import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.time.Clock
@@ -60,13 +58,11 @@ import javax.crypto.spec.SecretKeySpec
 
 class PaymentFlowTests(
     private val pg: TestPg,
-    private val incomplete: IncompleteEventPublications,
+    private val requestPayment: RequestPaymentUseCase,
     private val mockMvcTester: MockMvcTester,
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
     private val jdbc: JdbcTemplate,
-    private val publisher: ApplicationEventPublisher,
-    private val tx: TransactionTemplate,
     private val clock: MutableClock,
     private val collector: EventCollector,
 ) : IntegrationTestSupport() {
@@ -137,28 +133,26 @@ class PaymentFlowTests(
     private fun paymentStatus(id: Long): String? =
         jdbc.queryForList("select status from payment.payment where order_id = ?", String::class.java, id).firstOrNull()
 
-    private fun publicationStatus(id: Long, listener: String): String? = jdbc.queryForList(
-        "select status from event_publication where listener_id like ? and serialized_event like ?",
-        String::class.java,
-        "%$listener%",
-        "%\"orderId\":$id,%",
-    ).firstOrNull()
-
     private fun awaitPayment(id: Long, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted {
         assertThat(paymentStatus(id)).isEqualTo(expected)
     }
 
-    private fun awaitPublication(id: Long, listener: String, expected: String) = await().atMost(Duration.ofSeconds(10)).untilAsserted {
-        assertThat(publicationStatus(id, listener)).isEqualTo(expected)
+    private fun pgTransactionOf(id: Long): String? =
+        jdbc.queryForList("select pg_transaction_id from payment.payment where order_id = ?", String::class.java, id).firstOrNull()
+
+    /** 결제 요청 이벤트를 Kafka에서 받아 PG가 접수해 거래가 연결될 때까지 기다린다. */
+    private fun awaitRequestHandled(id: Long) = await().atMost(Duration.ofSeconds(15)).untilAsserted {
+        assertThat(pgTransactionOf(id)).isNotNull()
     }
 
-    private fun resubmit(id: Long) = incomplete.resubmitIncompletePublications { publication ->
-        when (val event = publication.event) {
-            is PaymentRequested -> event.orderId == id
-            is RefundRequested -> event.orderId == id
-            else -> false
-        }
+    /** 환불 요청 이벤트를 Kafka에서 받아 PG 환불이 요청될 때까지 기다린다. */
+    private fun awaitRefundRequested(id: Long) = await().atMost(Duration.ofSeconds(15)).untilAsserted {
+        assertThat(pg.refunds).contains("tx-$id" to "refund-$id")
     }
+
+    private fun pgRequestsOf(id: Long) = pg.requests.filter { it.orderId == id.toString() }
+
+    private fun refundsOf(id: Long) = pg.refunds.filter { it.first == "tx-$id" }
 
     private fun webhook(id: Long, type: String, eventId: String = UUID.randomUUID().toString()): MvcTestResult {
         val timestamp = clock.instant().epochSecond.toString()
@@ -193,7 +187,7 @@ class PaymentFlowTests(
     @Test
     fun `승인 웹훅은 결제와 예매를 확정하고 중복을 무시한다`() {
         val (token, id) = start()
-        awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+        awaitRequestHandled(id)
         val event = UUID.randomUUID().toString()
 
         webhook(id, "PAYMENT_APPROVED", event).expectStatus(HttpStatus.OK)
@@ -221,7 +215,7 @@ class PaymentFlowTests(
 
         pg.paymentResult = "accepted"
         val (otherToken, other) = start()
-        awaitPublication(other, "PaymentRequestListener", "COMPLETED")
+        awaitRequestHandled(other)
         webhook(other, "PAYMENT_FAILED").expectStatus(HttpStatus.OK)
         awaitStatus(otherToken, other, "CANCELLED")
 
@@ -230,20 +224,15 @@ class PaymentFlowTests(
     }
 
     @Test
-    fun `미확정 결제는 원 발행 재제출로 같은 키를 재사용해 복구한다`() {
+    fun `미확정 결제는 컨슈머 재시도로 같은 키를 재사용해 복구한다`() {
         pg.paymentResult = "unknown"
         val (token, id) = start()
-        awaitPublication(id, "PaymentRequestListener", "FAILED")
+        await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pgRequestsOf(id)).isNotEmpty() }
 
         pg.paymentResult = "accepted"
-        resubmit(id)
-        awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+        awaitRequestHandled(id)
 
-        assertThat(
-            pg.requests.filter {
-                it.orderId == id.toString()
-            }.map { it.idempotencyKey },
-        ).containsExactly("booking-$id", "booking-$id")
+        assertThat(pgRequestsOf(id).map { it.idempotencyKey }).hasSizeGreaterThanOrEqualTo(2).containsOnly("booking-$id")
 
         webhook(id, "PAYMENT_APPROVED").expectStatus(HttpStatus.OK)
         awaitStatus(token, id, "CONFIRMED")
@@ -252,7 +241,7 @@ class PaymentFlowTests(
     @Test
     fun `확정 취소와 만료 후 승인은 환불을 완료한다`() {
         val (token, id) = start()
-        awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+        awaitRequestHandled(id)
         webhook(id, "PAYMENT_APPROVED").expectStatus(HttpStatus.OK)
         awaitStatus(token, id, "CONFIRMED")
 
@@ -260,7 +249,7 @@ class PaymentFlowTests(
 
         assertThat(statusOf(token, id)).isEqualTo("CANCELLED")
         awaitPayment(id, "REFUND_REQUESTED")
-        awaitPublication(id, "RefundRequestListener", "COMPLETED")
+        awaitRefundRequested(id)
         assertThat(pg.refunds).contains("tx-$id" to "refund-$id")
 
         webhook(id, "REFUND_COMPLETED").expectStatus(HttpStatus.OK)
@@ -272,32 +261,36 @@ class PaymentFlowTests(
         assertThat(count(PaymentRefunded::class.java, id)).isEqualTo(1)
 
         val (lateToken, late) = start()
-        awaitPublication(late, "PaymentRequestListener", "COMPLETED")
+        awaitRequestHandled(late)
         clock.now = clock.now.plus(Duration.ofMinutes(6))
         webhook(late, "PAYMENT_APPROVED").expectStatus(HttpStatus.OK)
         awaitStatus(lateToken, late, "EXPIRED")
-        awaitPublication(late, "RefundRequestListener", "COMPLETED")
+        awaitRefundRequested(late)
         webhook(late, "REFUND_COMPLETED").expectStatus(HttpStatus.OK)
         awaitPayment(late, "REFUNDED")
     }
 
     @Test
-    fun `환불 거절과 미확정은 원 발행 재제출로 같은 키를 재사용한다`() {
+    fun `환불 거절과 미확정은 컨슈머 재시도로 같은 키를 재사용한다`() {
         for (failure in listOf("unknown", "rejected")) {
             pg.refundResult = failure
             val (token, id) = start()
-            awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+            awaitRequestHandled(id)
             webhook(id, "PAYMENT_APPROVED").expectStatus(HttpStatus.OK)
             awaitStatus(token, id, "CONFIRMED")
             cancel(token, id).expectStatus(HttpStatus.OK)
-            awaitPublication(id, "RefundRequestListener", "FAILED")
+            await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(refundsOf(id)).isNotEmpty() }
             assertThat(paymentStatus(id)).isEqualTo("REFUND_REQUESTED")
 
             pg.refundResult = "accepted"
-            resubmit(id)
-            awaitPublication(id, "RefundRequestListener", "COMPLETED")
+            await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(refundsOf(id)).hasSizeGreaterThanOrEqualTo(2) }
+            // 접수되면 재시도가 멈춘다
+            val attempts = refundsOf(id).size
+            await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted {
+                assertThat(refundsOf(id)).hasSize(attempts)
+            }
 
-            assertThat(pg.refunds.filter { it.first == "tx-$id" }.map { it.second }).containsExactly("refund-$id", "refund-$id")
+            assertThat(refundsOf(id).map { it.second }).containsOnly("refund-$id")
 
             webhook(id, "REFUND_COMPLETED").expectStatus(HttpStatus.OK)
             awaitPayment(id, "REFUNDED")
@@ -316,7 +309,7 @@ class PaymentFlowTests(
             awaitStatus(token, id, "CONFIRMED")
 
             gate.countDown()
-            awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+            awaitRequestHandled(id)
 
             assertThat(paymentStatus(id)).isEqualTo("SUCCEEDED")
             assertThat(count(PaymentSucceeded::class.java, id)).isEqualTo(1)
@@ -329,7 +322,7 @@ class PaymentFlowTests(
     @Test
     fun `같은 웹훅의 병렬 전달과 재전송은 하나의 확정으로 수렴한다`() {
         val (token, id) = start()
-        awaitPublication(id, "PaymentRequestListener", "COMPLETED")
+        awaitRequestHandled(id)
         val same = UUID.randomUUID().toString()
         val ids = listOf(same, same, UUID.randomUUID().toString(), UUID.randomUUID().toString())
         val pool = Executors.newFixedThreadPool(ids.size)
@@ -358,39 +351,28 @@ class PaymentFlowTests(
     }
 
     @Test
-    fun `병렬 결제 요청과 실패 발행 재제출은 하나의 거래와 결제로 수렴한다`() {
+    fun `같은 결제 요청을 병렬로 처리해도 하나의 거래와 결제로 수렴한다`() {
         val gate = CountDownLatch(1)
         pg.gate = gate
-        pg.paymentResult = "unknown"
         try {
             val (token, id) = start()
-            await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pg.requests.any { it.orderId == id.toString() }).isTrue() }
+            await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pgRequestsOf(id)).isNotEmpty() }
             val request = collector.of(PaymentRequested::class.java) { it.orderId == id }.single()
+            val command =
+                RequestPaymentCommand(request.orderId, request.memberId, request.amount, request.idempotencyKey, request.requestedAt)
 
-            publishConcurrently(request)
-
-            await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                assertThat(pg.requests.count { it.orderId == id.toString() }).isGreaterThanOrEqualTo(2)
+            // Kafka 리스너가 PG 응답을 기다리는 동안 같은 요청이 다른 스레드에서 중복 처리된다(재전달·리밸런스 상황을 가정)
+            val pool = Executors.newFixedThreadPool(2)
+            val futures = try {
+                (1..2).map { pool.submit { runCatching { requestPayment.request(command) } } }
+            } finally {
+                pool.shutdown()
             }
+            await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(pgRequestsOf(id)).hasSizeGreaterThanOrEqualTo(2) }
 
             gate.countDown()
-            await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                val statuses = requestListenerStatuses(id)
-                assertThat(statuses).hasSize(3).allMatch { it == "FAILED" }
-            }
-
-            pg.paymentResult = "accepted"
-            repeat(3) {
-                resubmit(id)
-                await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                    val statuses = requestListenerStatuses(id)
-                    assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" || it == "FAILED" }
-                }
-            }
-            await().atMost(Duration.ofSeconds(10)).untilAsserted {
-                val statuses = requestListenerStatuses(id)
-                assertThat(statuses).hasSize(3).allMatch { it == "COMPLETED" }
-            }
+            futures.forEach { it.get(15, TimeUnit.SECONDS) }
+            awaitRequestHandled(id)
 
             assertThat(pg.transactions.keys.count { it == "booking-$id" }).isEqualTo(1)
             assertThat(jdbc.queryForObject("select count(*) from payment.payment where order_id = ?", Int::class.java, id)).isEqualTo(1)
@@ -400,33 +382,6 @@ class PaymentFlowTests(
         } finally {
             gate.countDown()
             pg.gate = null
-        }
-    }
-
-    private fun requestListenerStatuses(orderId: Long): List<String> = jdbc.queryForList(
-        "select status from event_publication where listener_id like ? and serialized_event like ?",
-        String::class.java,
-        "%PaymentRequestListener%",
-        "%\"orderId\":$orderId,%",
-    ).filterNotNull()
-
-    // 같은 결제 요청 이벤트를 두 스레드가 동시에 다시 발행한다
-    private fun publishConcurrently(request: PaymentRequested) {
-        val pool = Executors.newFixedThreadPool(2)
-        try {
-            val ready = CountDownLatch(1)
-            val futures = (1..2).map { index ->
-                pool.submit {
-                    ready.await()
-                    tx.executeWithoutResult {
-                        publisher.publishEvent(request.copy(requestedAt = request.requestedAt.plusMillis(index.toLong())))
-                    }
-                }
-            }
-            ready.countDown()
-            futures.forEach { it.get(10, TimeUnit.SECONDS) }
-        } finally {
-            pool.shutdownNow()
         }
     }
 

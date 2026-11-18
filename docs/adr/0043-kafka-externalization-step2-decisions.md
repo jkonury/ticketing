@@ -35,6 +35,15 @@
 - 감수하는 것: `docker compose up -d`가 Kafka까지 띄운다(로컬 메모리 증가). Kafka가 내려가면 결제·예매 확정이 지연된다(미완료 이벤트로 남아 복구 후 재전달).
 - 후속: `serialize-externalization`·outbox 최종 여부는 2-5 측정 후 이 ADR을 갱신한다.
 
+## 구현 중 추가로 정한 것 (2-3)
+
+- 토픽 이름은 접두어 프로퍼티(`ticketing.kafka.topic-prefix`, 기본 `ticketing`)를 앞에 붙인다. 테스트는 컨텍스트마다 접두어를 달리한다. 컨텍스트마다 DB가 따로인데 예매 ID(시퀀스)가 겹쳐서, 토픽을 나누지 않으면 다른 컨텍스트의 이벤트가 엉뚱한 예매를 바꾼다.
+- 컨슈머 그룹은 `ticketing-payment`(결제 요청·환불 요청)와 `ticketing-booking`(결제 결과 3종)이다. 리스너 동시성은 파티션 수와 같은 3이다.
+- 재시도는 지수 백오프(1s 시작, 최대 10s, 3회)이고 소진하면 `<토픽>.dlt`(파티션 1)로 보낸다. 건수는 `ticketing.kafka.dead.letter{topic}` 카운터로 노출한다.
+- `core-batch`(`batch` 프로필)는 이벤트를 발행만 하고 소비하지 않는다(`spring.kafka.listener.auto-startup: false`). 짧게 뜨는 배치가 컨슈머 그룹에 끼어 리밸런스를 일으키지 않게 한다.
+- 알려진 한계: `PaymentContractMismatchException`처럼 재시도로 낫지 않는 도메인 예외도 재시도 후 DLT로 간다. 컨슈머 설정이 루트 패키지에 있어 payment 예외를 참조할 수 없기 때문이다(Modulith 순환). 분리 후 payment 앱에서 재검토한다.
+
 ## 변경 이력
 
 - 2026-11-18: 작성(합의)
+- 2026-11-18: 2-3 구현 중 결정 추가(토픽 접두어, 컨슈머 그룹, 재시도·DLT 값, batch 리스너 비활성)

@@ -22,15 +22,16 @@ class PaymentEventExternalizationTests(
     private val publisher: ApplicationEventPublisher,
     private val transactions: TransactionTemplate,
     private val kafkaProperties: KafkaProperties,
+    private val topics: KafkaTopics,
 ) : IntegrationTestSupport() {
     private val tree = JsonMapper()
 
     private val expectedTopics = mapOf(
-        "PaymentRequested" to KafkaTopics.PAYMENT_REQUESTED,
-        "RefundRequested" to KafkaTopics.REFUND_REQUESTED,
-        "PaymentSucceeded" to KafkaTopics.PAYMENT_SUCCEEDED,
-        "PaymentFailed" to KafkaTopics.PAYMENT_FAILED,
-        "PaymentRefunded" to KafkaTopics.PAYMENT_REFUNDED,
+        "PaymentRequested" to topics.paymentRequested,
+        "RefundRequested" to topics.refundRequested,
+        "PaymentSucceeded" to topics.paymentSucceeded,
+        "PaymentFailed" to topics.paymentFailed,
+        "PaymentRefunded" to topics.paymentRefunded,
     )
 
     @Test

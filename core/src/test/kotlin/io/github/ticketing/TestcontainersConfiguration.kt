@@ -32,6 +32,11 @@ class TestcontainersConfiguration {
         registry.add("spring.datasource.password", postgres::getPassword)
         registry.add("spring.datasource.hikari.minimum-idle") { 0 }
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers)
+        // 컨텍스트마다 토픽을 분리해 다른 컨텍스트의 이벤트(같은 DB 시퀀스 ID)를 받지 않게 한다.
+        registry.add("ticketing.kafka.topic-prefix") { "test$namespace" }
+        // 재시도 간격을 줄여 실패 처리 테스트를 빠르게 한다.
+        registry.add("ticketing.kafka.consumer.retry.initial-interval") { "300ms" }
+        registry.add("ticketing.kafka.consumer.retry.max-interval") { "1s" }
         registry.add("spring.data.redis.host", redis::getHost)
         registry.add("spring.data.redis.port", redis::getFirstMappedPort)
         registry.add("spring.data.redis.database") { namespace }
