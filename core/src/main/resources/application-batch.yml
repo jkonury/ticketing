@@ -9,3 +9,8 @@ spring:
   modulith:
     events:
       republish-outstanding-events-on-restart: false
+ticketing:
+  event-publication:
+    metrics:
+      # core가 같은 DB의 지표를 이미 수집한다
+      enabled: false

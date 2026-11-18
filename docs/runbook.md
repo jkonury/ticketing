@@ -85,6 +85,44 @@ docker compose exec redis redis-cli HGETALL 'booking:seats:{1}'     # 좌석 스
 
 Gateway의 Redis rate limiter가 응답을 429로 내린다. 부하 테스트 중이면 정상이다. 일반 사용 중에도 걸리면 Gateway의 rate limit 설정을 확인한다.
 
+### 3.7 미완료 이벤트 발행이 쌓인다
+
+Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. 리스너가 실패했거나 처리 중 프로세스가 죽으면 남는다. 이후 Kafka 외부화(M6 2단계)의 전송 실패도 같은 테이블에 쌓인다.
+
+**증상·지표** (core만 수집한다. core-batch는 `ticketing.event-publication.metrics.enabled=false`로 중복 수집을 끈다)
+
+| 메트릭 | 의미 |
+|---|---|
+| `ticketing_event_publication_incomplete` | 미완료 발행 건수 |
+| `ticketing_event_publication_oldest_incomplete_age_seconds` | 가장 오래된 미완료 발행의 경과 시간(초). 없으면 0 |
+
+Grafana `Ticketing Overview` 하단의 "미완료 이벤트 발행 건수", "최고령 미완료 이벤트 경과" 패널에서 본다. 값은 10초 캐시이고 조회 실패 시 직전 값을 쓰며, 처음부터 실패하면 `NaN`이다. 정상 상태는 건수가 0이거나 잠깐 올랐다 내려오는 것이다. 최고령이 계속 늘면 재처리가 필요한 건이다.
+
+**확인 SQL**
+
+```bash
+docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" -c \
+  "select listener_id, event_type, status, completion_attempts, publication_date, last_resubmission_date
+     from public.event_publication where completion_date is null order by publication_date limit 20;"
+```
+
+- `listener_id`로 어느 리스너가 실패했는지, `event_type`으로 어떤 이벤트인지 본다. 원인은 core 로그에서 해당 리스너의 예외를 찾는다.
+- `status`는 `PUBLISHED`, `PROCESSING`, `FAILED`, `RESUBMITTED`다(Modulith 2.x). 과거 행은 null일 수 있다.
+
+**재처리 절차** (별도 운영 API는 두지 않는다. 결정은 [m6-msa.md](./plans/m6-msa.md) P5)
+
+1. 원인을 먼저 고친다(리스너 버그, 외부 시스템 장애, 설정). 원인이 남은 채 재처리하면 같은 실패가 반복된다.
+2. core를 재시작한다. core는 `republish-outstanding-events-on-restart: true`라서 기동 시 미완료 발행을 다시 처리한다.
+3. 건수가 줄고 최고령이 0으로 돌아오는지 지표로 확인한다. 줄지 않으면 같은 SQL로 `completion_attempts`와 로그를 다시 본다.
+
+**주의**
+
+- 재처리는 같은 이벤트를 다시 전달한다. 리스너는 멱등해야 하며, 중복으로 부작용이 생기는 리스너는 먼저 고친다.
+- 재시작 재발행은 core가 여러 인스턴스일 때 인스턴스마다 실행되어 같은 발행이 겹쳐 처리될 수 있다. 멱등 소비자가 전제다.
+- core-batch는 `republish-outstanding-events-on-restart: false`라서 Batch 실행으로는 재처리되지 않는다.
+- 행을 직접 `delete`하거나 `completion_date`를 수동으로 채우는 것은 이벤트를 버리는 일이다. 의도적으로 폐기할 때만 하고, 대상 행을 먼저 조회해 확인한다.
+- 완료된 행은 계속 쌓인다. 정리(삭제) 정책은 아직 없고, 필요 시점은 [m6-msa.md](./plans/m6-msa.md) 후속 항목에 적었다.
+
 ## 4. Batch 실행
 
 Job은 `core-batch`에서 하나씩 실행한다. 규칙과 파라미터의 기준은 [batch.md](./architecture/batch.md)다.

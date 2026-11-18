@@ -1065,6 +1065,62 @@
           "legendFormat": "{{application}} 최대"
         }
       ]
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "미완료 이벤트 발행 건수 (event_publication)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 96
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (application) (ticketing_event_publication_incomplete{application=~\"$application\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "timeseries",
+      "title": "최고령 미완료 이벤트 경과 (초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 96
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (application) (ticketing_event_publication_oldest_incomplete_age_seconds{application=~\"$application\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
     }
   ]
 }

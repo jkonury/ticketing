@@ -31,7 +31,7 @@
 - [x] P2 Batch E2E 기준선(정산·대사·미결제 정리)
 - [x] P3 공용 클래스 `common` Gradle 모듈 추출
 - [x] P4 계약 이벤트 `contract` 모듈 추출, 직렬화 형식(JSON, 하위 호환 규칙) 고정
-- [ ] P5 `event_publication` 미완료 이벤트 관측과 재처리 runbook
+- [x] P5 `event_publication` 미완료 이벤트 관측과 재처리 runbook
 - [ ] P6 (선택) 분리 전 성능 기준선 1회 측정
 
 ### 본 작업

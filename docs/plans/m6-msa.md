@@ -35,6 +35,10 @@ M6 본 작업 전에 끝낸다. 로드맵의 "M6 사전 작업" 체크리스트�
 | P5 | `event_publication` 미완료 이벤트 관측(건수·최고령 지표)과 재처리 runbook | Kafka 외부화 후 전송 실패는 이 테이블에 쌓인다 |
 | P6 | (선택) 분리 전 성능 기준선 1회 측정 | 분리로 늘어나는 네트워크 홉의 비용을 비교한다 |
 
+**P5 미완료 이벤트 관측**: Modulith 2.1.1은 `event_publication` 지표를 제공하지 않는다(staleness 모니터는 오래된 건을 `FAILED`로 표시할 뿐이다). 그래서 `EventPublicationMetrics`가 `ticketing_event_publication_incomplete`(건수)와 `ticketing_event_publication_oldest_incomplete_age_seconds`(최고령 경과)를 10초 캐시로 노출하고 core-batch에서는 끈다. Grafana `ticketing-overview`에 패널 2개를 추가했다. 재처리는 새 운영 API 없이 runbook([§3.7](../runbook.md#37-미완료-이벤트-발행이-쌓인다))의 SQL 조회와 core 재시작 재발행(`republish-outstanding-events-on-restart: true`)으로 한다. 재시작 없는 수동 재제출(`IncompleteEventPublications`를 쓰는 관리자 API)은 보안·감사 설계가 필요해 후속으로 미룬다.
+
+후속(미포함): 완료된 `event_publication` 행 정리(삭제·`CompletedEventPublications` 이용). 현재는 행이 계속 쌓이며 `completion_date` 인덱스가 있어 지표 조회에는 영향이 작다. Kafka 외부화 후 이벤트량이 늘면 정리 정책과 알림 임계값을 정한다.
+
 **P2 Batch 기준선**: `BatchBaselineE2eTests`가 `core-batch.jar`를 별도 프로세스(`java -jar`, k8s CronJob과 같은 형태)로 실행한다. `scripts/e2e/run.sh`가 jar 경로와 DB 접속 정보를 넘기고, 검증은 `docker compose exec psql`로 한다(정산·대사 결과 API가 없고 `batch` 스키마 상태도 읽어야 하므로). 같은 DB에 이전 실행 데이터가 남으므로 테스트가 만든 회차·주문으로만 검증한다. 분리 후(4단계 등)에도 같은 값이 나와야 한다.
 
 | Job | 시나리오 | 기준선 |
