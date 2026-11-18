@@ -13,6 +13,7 @@
 - `docs/rules/backend.md`: `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`
 - `docs/rules/frontend.md`: `web`
 - `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
+- `docs/rules/herdr-workflow.md`: 메인 세션이 구현자·리뷰어 에이전트에게 위임하는 오케스트레이션 절차와 `scripts/agent/herdr/` 스크립트. 사용자가 위임을 명시적으로 지시할 때만 쓰며, 그때 먼저 읽는다
 
 ## 2. 저장소 구조
 
