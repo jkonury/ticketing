@@ -28,4 +28,8 @@ tasks.register<Test>("e2eTest") {
     systemProperty("e2e.realtimeBUrl", realtimeBUrl.get())
     providers.systemProperty("e2e.adminEmail").orNull?.let { systemProperty("e2e.adminEmail", it) }
     providers.systemProperty("e2e.adminPassword").orNull?.let { systemProperty("e2e.adminPassword", it) }
+    // Batch E2E: core-batch jar를 별도 프로세스로 실행하고 psql로 결과를 검증한다
+    listOf("e2e.projectDir", "e2e.coreBatchJar", "e2e.dbUser", "e2e.dbName").forEach { key ->
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
 }

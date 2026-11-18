@@ -20,7 +20,7 @@
 - `payment`는 다른 도메인 모듈을 import하지 않는다. 루트 공용 클래스(`DomainException`, `ApiExceptionHandler`, `ClockConfig`, `KeysetItemReader`, 위치 `core/src/main/kotlin/io/github/ticketing/`)와 payment 루트의 결제 계약 이벤트 5종만 booking과 공유한다.
 - `settlement`는 `booking.BookingConfirmed`·`BookingCancelled`만 import한다.
 - Spring Modulith 2.1.1. `@Externalized`와 `spring-modulith-events-kafka`는 쓰지 않는다. `event_publication`을 쓰고 `republish-outstanding-events-on-restart: true`다(batch 프로필은 false).
-- E2E는 `core/src/test/.../e2e` 7개(예매·동시성·결제 실패·웹훅 멱등·만료 후 환불)와 `e2e/` 6개(대기열·입장 토큰·SSE·쿠폰 Saga 3종)다. Batch(정산·대사·미결제 정리) E2E는 없다.
+- E2E는 `core/src/test/.../e2e` 7개(예매·동시성·결제 실패·웹훅 멱등·만료 후 환불)와 `e2e/` 6개(대기열·입장 토큰·SSE·쿠폰 Saga 3종)다. Batch는 P2의 `e2e/` `BatchBaselineE2eTests` 3개(아래 기준선)가 있다.
 
 ## 2. 사전 작업
 
@@ -34,6 +34,16 @@ M6 본 작업 전에 끝낸다. 로드맵의 "M6 사전 작업" 체크리스트�
 | P4 | 계약 이벤트를 `contract` 모듈로 추출하고 직렬화 형식 고정(JSON, 버전 필드) | 프로세스 경계를 넘는 페이로드는 호환성 규칙이 필요하다([events.md §1](../architecture/events.md#1-공통-규칙)) |
 | P5 | `event_publication` 미완료 이벤트 관측(건수·최고령 지표)과 재처리 runbook | Kafka 외부화 후 전송 실패는 이 테이블에 쌓인다 |
 | P6 | (선택) 분리 전 성능 기준선 1회 측정 | 분리로 늘어나는 네트워크 홉의 비용을 비교한다 |
+
+**P2 Batch 기준선**: `BatchBaselineE2eTests`가 `core-batch.jar`를 별도 프로세스(`java -jar`, k8s CronJob과 같은 형태)로 실행한다. `scripts/e2e/run.sh`가 jar 경로와 DB 접속 정보를 넘기고, 검증은 `docker compose exec psql`로 한다(정산·대사 결과 API가 없고 `batch` 스키마 상태도 읽어야 하므로). 같은 DB에 이전 실행 데이터가 남으므로 테스트가 만든 회차·주문으로만 검증한다. 분리 후(4단계 등)에도 같은 값이 나와야 한다.
+
+| Job | 시나리오 | 기준선 |
+|---|---|---|
+| `dailySettlementJob` (`targetDate`=오늘 KST) | 정가 10000 좌석 3개: 일반 확정 1, 쿠폰 3000 할인 확정 1, 확정 후 취소(환불) 1 | 종료 코드 0, 실행 `COMPLETED`. 공연 행: 판매 3건·30000(정가 합), 환불 1건·10000, 순액 20000, 수수료율 0.10·수수료 2000, 정산액 18000, 플랫폼 할인 부담 3000 |
+| `paymentReconciliationJob` (`targetDate`=오늘 KST) | 위 3건 결제(1건 환불 완료) | 종료 코드 0, `COMPLETED`. PG 스냅샷에 3건 존재, 3건의 불일치 0건 |
+| `expirePendingBookingsJob` | PENDING 예매 1건의 `expires_at`을 DB에서 과거로 돌린 뒤 실행(보유 5분이 상수라 기다리지 않기 위함) | 종료 코드 0, `COMPLETED`. 예매 `EXPIRED`, 같은 좌석을 다른 구매자가 예매 가능 |
+
+후속(미포함): `ReconcileSeatSnapshotJob`·`ReconcileCouponStockJob`·`ReleaseStaleCouponReservationsJob`, 대사 불일치 의도 검출 시나리오. 한계: `targetDate` 계산이 KST 자정 직전·직후에 걸리면 flaky할 수 있다.
 
 P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModules.verify()`)과 ArchUnit을 반드시 통과시킨다.
 

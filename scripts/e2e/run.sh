@@ -53,7 +53,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
-if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar > "$LOG_DIR/build.log" 2>&1; then
+if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar :core-batch:bootJar > "$LOG_DIR/build.log" 2>&1; then
   echo "빌드 실패: $LOG_DIR/build.log" >&2
   tail -n 30 "$LOG_DIR/build.log" >&2
   exit 1
@@ -131,7 +131,10 @@ if $WEB; then
 fi
 args=()
 if [[ -n $TEST_PATTERN ]]; then args=(--tests "$TEST_PATTERN"); fi
-if ./gradlew -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" -De2e.adminEmail="$E2E_ADMIN_EMAIL" -De2e.adminPassword="$E2E_ADMIN_PASSWORD" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
+# Batch E2E는 core-batch를 별도 프로세스로 실행하고 psql(읽기·시각 조정)로 검증한다
+db_user=$(set -a; source .env; set +a; printf '%s' "$TICKETING_POSTGRES_USER")
+db_name=$(set -a; source .env; set +a; printf '%s' "$TICKETING_POSTGRES_DB")
+if ./gradlew -De2e.projectDir="$ROOT" -De2e.coreBatchJar="$ROOT/core-batch/build/libs/core-batch.jar" -De2e.dbUser="$db_user" -De2e.dbName="$db_name" -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" -De2e.adminEmail="$E2E_ADMIN_EMAIL" -De2e.adminPassword="$E2E_ADMIN_PASSWORD" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
   echo 'E2E 테스트 통과'
 else
   shopt -s nullglob

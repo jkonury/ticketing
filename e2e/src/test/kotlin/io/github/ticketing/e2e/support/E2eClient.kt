@@ -179,6 +179,27 @@ class E2eClient(private val gatewayUrl: String) {
         return request("POST", "/api/v1/bookings", member, mapOf("scheduleId" to scheduleId, "seatIds" to seatIds), headers)
     }
 
+    /** 대기열 입장 후 좌석을 선점해 PENDING 예매를 만든다. */
+    suspend fun reserve(member: Member, schedule: Schedule, seatIds: List<Long>): Long {
+        awaitSeatSnapshot(member, schedule.id)
+        enterQueue(member, schedule.id)
+        val token = awaitAdmission(member, schedule.id)
+        val booking = createBooking(member, schedule.id, seatIds, token)
+        check(booking.status == 201) { "예매 생성 실패: ${booking.status}" }
+        return booking.body["bookingId"].asLong()
+    }
+
+    suspend fun payAndAwaitConfirmed(member: Member, bookingId: Long) {
+        val payment = request(
+            "POST",
+            "/api/v1/bookings/$bookingId/payments",
+            member,
+            headers = mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
+        )
+        check(payment.status == 202) { "결제 요청 실패: ${payment.status}" }
+        poll { bookingDetail(member, bookingId)["status"].asString() == "CONFIRMED" }
+    }
+
     suspend fun sseTicket(member: Member): String {
         val result = request("POST", "/api/v1/sse-tickets", member)
         check(result.status == 201) { "SSE 티켓 발급 실패: ${result.status}" }
