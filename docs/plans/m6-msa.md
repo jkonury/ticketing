@@ -91,7 +91,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - [x] **2-1 Kafka 인프라**: `compose.yaml` Kafka 서비스(데이터 볼륨 `KAFKA_LOG_DIRS`), Gradle 의존성(`spring-modulith-events-kafka`, `spring-boot-starter-kafka`, 테스트용 Testcontainers Kafka), `application.yml`·테스트 설정, 토픽 생성(`NewTopic` 빈) 
   - 완료 기준: `docker compose up -d` 후 core가 기동하고 토픽 5종이 존재한다. 테스트 컨텍스트가 Kafka 컨테이너를 공유한다
   - 검증: `bootRun` 기동 확인, `--tests` 필터로 컨텍스트 로딩 테스트
-- [ ] **2-2 발행**: 결제 계약 5종 `@Externalized`(토픽·키는 events.md 표), JSON 직렬화 고정
+- [x] **2-2 발행**: 결제 계약 5종 `@Externalized`(토픽·키는 events.md 표), JSON 직렬화 고정
   - 완료 기준: 브로커로 나간 메시지가 골든 JSON과 같고 키가 `orderId`다. 로컬 리스너는 아직 유지(이중 소비 허용 상태)
   - 검증: 발행 테스트(Testcontainers Kafka), Modulith 구조 검증
 - [ ] **2-3 소비 전환·멱등**: payment 리스너 2종, booking 리스너 3종을 `@KafkaListener`로 교체하고 로컬 리스너 제거. 실패 처리(재시도·DLT) 적용, 멱등 보강
