@@ -32,7 +32,7 @@
 - [x] P3 공용 클래스 `common` Gradle 모듈 추출
 - [x] P4 계약 이벤트 `contract` 모듈 추출, 직렬화 형식(JSON, 하위 호환 규칙) 고정
 - [x] P5 `event_publication` 미완료 이벤트 관측과 재처리 runbook
-- [x] P6 (선택) 분리 전 성능 기준선 1회 측정 — [결과](performance/m6/00-pre-split-baseline.md) (B 3회 완료, A는 오류율 미달 1회·결제 확정 지연 지표 없음)
+- [x] P6 (선택) 분리 전 성능 기준선 1회 측정 — [k6](performance/m6/00-pre-split-baseline.md), [Gatling·결제 확정 지연(비교 기준)](performance/m6/01-pre-split-baseline-gatling.md)
 
 ### 본 작업
 
