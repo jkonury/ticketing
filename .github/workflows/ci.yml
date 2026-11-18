@@ -25,7 +25,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       # jOOQ 코드 생성과 Testcontainers가 러너의 Docker를 쓴다. ktlintCheck·detekt는 check에 포함된다.
       - name: Gradle build
-        run: ./gradlew build --no-daemon
+        run: ./gradlew build --no-daemon --profile
+      - name: Gradle 프로파일 업로드
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-profile
+          path: build/reports/profile/
+          if-no-files-found: warn
+          retention-days: 7
       - name: 테스트 리포트 업로드
         if: failure()
         uses: actions/upload-artifact@v7
