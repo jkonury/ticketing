@@ -1,7 +1,6 @@
 # realtime 작성 지침
 
 - [WebFlux 공통 지침](backend.md#webflux)을 적용한다. PostgreSQL에 접근하지 않으며 JPA, JDBC, jOOQ 의존성을 추가하지 않는다.
-
 - 컨트롤러와 서비스는 `suspend` 함수와 `Flow`로 작성한다. `Mono`/`Flux`는 프레임워크 경계에서 쓴다.
 - `GlobalScope`를 쓰지 않는다. 구조화된 동시성을 지키고, `CancellationException`을 삼키지 않는다.
 - SSE는 `Flow<ServerSentEvent<T>>`로 내보내고 주기적 heartbeat를 보낸다. 좌석 SSE는 Redis Stream ID로 재생하며, `Last-Event-ID` 헤더를 우선하고 없으면 `lastEventId` 쿼리를 사용한다. 해당 ID가 Stream에 남아 있지 않으면 스냅샷부터 보낸다. 순번 SSE는 연결 시 현재 상태를 보낸다. [SSE 이벤트 계약](../architecture/events.md#4-sse-이벤트-realtime--브라우저)

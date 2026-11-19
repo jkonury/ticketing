@@ -15,7 +15,7 @@ cd "$ROOT" || exit 0
 if git status --porcelain | rg -q '\.(kt|kts)$'; then
   if ! OUT="$(./scripts/agent/test/check-summary.sh ktlintCheck detekt 2>&1)"; then
     {
-      echo "ktlintCheck/detekt 실패. ./gradlew ktlintFormat 후 남은 지적을 코드로 고친다. @Suppress·baseline 추가로 우회하지 않는다."
+      echo "ktlintCheck/detekt 실패. ./gradlew ktlintFormat 후 남은 지적을 코드로 고친다. 사용자 합의 없이 @Suppress·baseline을 추가하지 않는다."
       printf '%s\n' "$OUT" | head -60
     } >&2
     exit 2

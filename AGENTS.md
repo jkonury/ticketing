@@ -12,7 +12,8 @@
 
 - [백엔드 공통 지침](docs/rules/backend.md): 공통 작성 규칙과 `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`별 지침. 변경 경로에 해당하는 지침도 읽는다.
 - [백엔드 테스트 지침](docs/rules/backend-testing.md): 백엔드 테스트·픽스처·E2E·부하 테스트를 다룰 때 읽는다.
-- `docs/rules/frontend.md`: `web`
+- [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
+- 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
 - `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
 
 ## 2. 저장소 구조
@@ -48,9 +49,9 @@
 6. 좌석 확정의 최종 방어선은 DB의 `(회차, 좌석)` 유니크 제약이다. Redis 선점만 믿고 확정하지 않는다.
 7. 결제 요청과 웹훅 처리는 멱등 키로 중복을 걸러낸다.
 
-## 6. 명령
+## 5. 명령
 
-M0(프로젝트 뼈대) 완료 후 유효하다. 실제 구성이 달라지면 이 절을 고친다.
+실제 구성이 달라지면 이 절을 고친다.
 
 ```bash
 docker compose up -d                 # PostgreSQL, Redis, Kafka (fake-pg는 scripts/dev/run.sh --fake-pg)
@@ -66,42 +67,50 @@ cp web/.env.example web/.env.local
 cd web && pnpm install && pnpm dev
 ```
 
-## 7. 테스트 실행
+## 6. 테스트 실행
 
 **Claude Code와 Codex 모두** 저장소 루트에서 다음 스크립트를 실행합니다. 실패를 받으면 작업 중인 에이전트가 직접 고칩니다.
+
+### 사전 조건과 기본 실행
 
 - 사전 조건: Docker가 떠 있어야 한다. jOOQ 코드 생성(`:core:generateJooq`)과 Testcontainers PostgreSQL·Kafka가 Docker를 쓴다. 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)가 필요하다. 에이전트 스크립트는 `fd`, `rg`를 쓰므로 설치되어 있어야 한다.
 - test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
-- 품질 검사: Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). 작업 종료 시 Stop hook(`scripts/agent/hook/stop_quality.sh`, Claude Code·Codex 공용)과 커밋 시 `.githooks/pre-commit`이 같은 검사를 하며, 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행해 활성화한다. `@Suppress`·baseline 추가·`--no-verify`로 우회하지 않는다.
+### 품질·문서 검사
+
+- 품질 검사: Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). 작업 종료 시 Stop hook(`scripts/agent/hook/stop_quality.sh`, Claude Code·Codex 공용)과 커밋 시 `.githooks/pre-commit`이 같은 검사를 하며, 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행해 활성화한다. `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 하고, `--no-verify`로는 우회하지 않는다.
 - web 변경 후 `./scripts/agent/test/web-check.sh`(빌드 확인은 `--build`)를 통과시킨다. Stop hook·pre-commit이 같은 검사를 한다.
 - 같은 작업 디렉터리의 test와 check는 순차 실행한다. 동시에 실행하면 Gradle 테스트 결과 파일이 충돌할 수 있다. 성능 측정도 다른 Gradle 검사가 끝난 뒤 단독 실행한다.
 - 문서 검사: `./scripts/agent/docs/check-docs.sh [경로...]` (lychee 오프라인으로 상대 경로 링크와 `#anchor`를, `check-doc-refs.sh`로 문서의 백틱 경로를 검사). 문서를 옮기거나 제목·링크를 바꾸면 실행합니다. 설정은 `lychee.toml`입니다.
+### CI와 실패 보고
+
 - CI: `.github/workflows/ci.yml`이 push(main)·pull_request마다 `backend`(`./gradlew build`, ktlint·detekt 포함), `web`(lint·typecheck·test·format:check·build), `docs`(lychee·`check-doc-refs.sh`)를 병렬로 돌린다. E2E·부하 테스트는 포함하지 않는다.
 - 실패 보고: 테스트가 실패하면 실패한 그대로 보고한다. 로그의 실패 메시지 일부와 실패한 테스트 이름을 함께 전달한다. 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
+### E2E·부하·구조 검증
+
 - E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"]`. `core-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)가 별도 프로세스로 실행한다. 사전 조건은 `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18090 포트다. 로그는 `build/e2e/logs/`에 저장한다. 스크립트가 실행마다 관리자(ADMIN) 계정을 가입 후 DB에서 승격해 `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다(앱 코드에 E2E 전용 경로 없음). `--web`은 Playwright web 앱을 포트 13000에 추가하므로 해당 포트도 비어 있어야 한다. `build`·`check`에는 포함되지 않으므로 core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
 - 부하 테스트(`scripts/loadtest/run.sh`)는 `build`·`check`에 포함되지 않으며, 다른 Gradle 작업과 동시에 실행하지 않는다. 결과는 `build/loadtest/runs/`에 저장한다.
 - Modulith 구조 검증은 모듈 의존을 바꿨을 때 필수로 돌리고, 다이어그램은 `./gradlew :core:modulithDocs`로 생성한다. [core 작성 지침](docs/rules/backend-core.md)
 
-## 8. 공통 규칙
+## 7. 공통 규칙
 
 - 대화, 문서, 커밋 메시지는 한국어. 코드 식별자는 영어.
 - 주석은 "왜"가 코드에서 드러나지 않을 때만 쓴다.
 - 커밋은 사용자가 요청할 때만 한다. 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
 - 커밋 메시지 형식: `<type>(<scope>): <요약>`. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`. scope는 모듈명(`booking`, `gateway`, `web` 등).
-- 테스트가 실패하면 실패한 그대로 보고한다. 테스트를 지우거나 비활성화해서 통과시키지 않는다.
 - 비밀 값은 저장소에 넣지 않는다. 로컬 설정은 `.env`(git 제외)와 `application-local.yml`을 쓴다.
 
-## 9. 조회·출력 분량 관리
+## 8. 조회·출력 분량 관리
 
 - **필수 지침은 처음에 모두 읽고, 문서·코드는 필요한 범위만 읽습니다.** `rg --files`로 경로를 찾고 `rg -n`으로 관련 절·심볼을 찾은 뒤 `sed -n '시작,끝p' 파일`로 해당 구간을 확인합니다. 대용량 파일이나 여러 문서를 한꺼번에 `cat`하지 않습니다.
 - **한 번 읽은 내용은 재사용합니다.** 확인한 경로·행·결론을 작업 중 짧게 기록하고, 같은 문서·코드·diff는 변경됐거나 새 의문이 생긴 경우에만 다시 조회합니다. 다시 볼 때는 달라진 구간이나 의문과 관련된 부분만 읽습니다.
 - **diff는 범위를 좁혀 확인합니다.** 먼저 `git diff --stat`·`git status --short`로 범위를 확인하고 `git diff -- 경로`로 검토합니다. 같은 전체 diff를 중간 점검마다 출력하지 않습니다. 새 파일은 필요한 구간을 별도로 확인합니다.
-- **테스트·로그는 요약 스크립트를 우선 사용합니다.** 7절의 전용 스크립트가 있으면 그것을 쓰고, 그 밖의 명령은 `run-summary.sh`로 실행합니다. 출력이 많다는 이유로 필수 검사나 실패 처리를 생략하지 않습니다. pipeline은 `bash -o pipefail -c '...'`로 감싸 실패가 가려지지 않게 합니다.
+- **테스트·로그는 요약 스크립트를 우선 사용합니다.** 6절의 전용 스크립트가 있으면 그것을 쓰고, 그 밖의 명령은 `scripts/agent/test/run-summary.sh [-C 디렉터리] -- 명령`으로 실행합니다. 출력이 많다는 이유로 필수 검사나 실패 처리를 생략하지 않습니다. pipeline은 `bash -o pipefail -c '...'`로 감싸 실패가 가려지지 않게 합니다.
 - **실패 분석은 저장된 로그에서 좁혀 갑니다.** 성공 로그·전체 trace를 대화에 출력하지 않습니다. 먼저 실패 요약을 보고, 부족하면 해당 로그에서 `rg -n -m 20 '오류 패턴' 로그경로`로 위치를 찾은 뒤 필요한 주변 줄만 조회합니다. 끝부분만으로 원인을 알 수 없으면 앞부분과 원인 예외도 확인합니다. 수정·새 근거 없이 같은 검사를 반복 실행하지 않습니다.
 - **도구 출력은 호출 전에 제한합니다.** 검색 경로·패턴·문맥 줄 수와 출력 한도를 정하고, 잘렸다면 같은 명령을 더 큰 한도로 반복하지 않고 파일·구간을 좁힙니다. 완료 보고에는 변경 내용, 검증 결과와 건너뛴 항목, 필요한 로그 경로만 적습니다.
 
-## 10. 모델 분담
+## 9. 모델 분담
+
 - rg 한 번으로 끝나는 탐색은 메인에서 직접 처리하고, 여러 디렉터리·모듈·호출 관계를 조사해야 할 때만 위임한다.
 - 파일 탐색과 검색은 Explore, 테스트와 빌드 실행은 runner에 맡긴다. 결과는 결론과 `경로:줄번호`만 받는다.
 - 빠짐없이 찾아야 하는 탐색(리팩터링 전 전체 사용처 등)은 검색 결과 원문을 함께 받거나 메인에서 직접 확인한다.
