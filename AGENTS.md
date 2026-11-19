@@ -15,6 +15,7 @@
 - [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
 - 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
 - `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
+- `docs/rules/herdr-workflow.md`: 메인 세션이 구현자·리뷰어 에이전트에게 위임하는 오케스트레이션 절차와 `scripts/agent/herdr/` 스크립트. 사용자가 위임을 명시적으로 지시할 때만 쓰며, 그때 먼저 읽는다
 
 ## 2. 저장소 구조
 
