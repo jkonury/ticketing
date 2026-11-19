@@ -4,16 +4,17 @@
 ADR(설계 결정 기록) 템플릿 (Claude Code, Codex, 사람 공용).
 
 ■ 위치와 번호
-- 새 문서는 이 파일을 복사해 `docs/adr/NNNN-<kebab-case-주제>.md`로 만든다. 예: `0015-tracking-alert-channel.md`
+- 새 문서는 이 파일을 복사해 `docs/adr/NNNN-<kebab-case-주제>.md`로 만든다. 예: `0044-payment-service-split.md`
 - 번호는 기존 최대 번호 + 1이며 폐기된 번호도 다시 쓰지 않는다.
-- 작성 후 `docs/adr/README.md` 목록에 `- [ADR NNNN: 제목](NNNN-주제.md)` 한 줄을 추가한다. 상태는 목록에 적지 않는다(문서 상단과 이중 관리하지 않기 위해).
+- 작성 후 `docs/adr/README.md` 목록 표에 `| [NNNN](NNNN-주제.md) | 결정 요약 | 상태 |` 한 줄을 추가한다. 상태가 바뀌면 문서 상단과 목록을 같은 변경에서 고친다.
 
 ■ 상태 값 (하나만 쓴다)
 - 제안: 작성했지만 사용자와 합의하지 않았다.
 - 합의: 사용자와 합의했다. 합의일을 적는다.
 - 대체됨: 다른 ADR이 결정 전체를 바꿨다. "대체됨·일부 변경" 필드에 그 ADR을 적는다.
 - 폐기: 합의하지 않고 접었거나 더는 유효하지 않다. 이유를 변경 이력에 적는다.
-- 구현 여부(구현 중, 구현함, 일부 남음)는 상태에 쓰지 않는다. 구현 상태의 원본은 `docs/architecture.md`의 구현 차이다.
+- 구현 여부(구현 중, 구현함, 일부 남음)는 상태에 쓰지 않는다. 진행 상태의 원본은 `docs/roadmap.md`, 구현된 구조는 `docs/architecture.md`다.
+- 0001~0032는 `## 상태` 절에 "수락"으로 적었다. 수락은 합의와 같은 뜻이며 기존 ADR은 그대로 둔다. 새 ADR은 이 템플릿의 머리말 형식과 "합의"를 쓴다.
 
 ■ 작성 원칙
 1. 설계 결정을 바꾸려면 사용자와 먼저 합의한 뒤 ADR을 추가하거나 수정한다(AGENTS.md 3절).
@@ -27,7 +28,7 @@ ADR(설계 결정 기록) 템플릿 (Claude Code, Codex, 사람 공용).
 9. 한국어로 쓰고 `docs/glossary.md`의 표준 표기를 따른다. 코드 식별자·설정 키는 원문을 유지한다. 비밀 값·실제 도메인·개인정보는 쓰지 않는다.
 10. 포트·모듈·이벤트·외부 API·배포 방식이 바뀌면 `docs/architecture.md`와 관련 AGENTS.md를 같은 변경에서 고치고 "바뀌는 문서·지침"에 적는다.
 11. 해당 없는 절은 지우지 말고 "없음"으로 적는다.
-12. 작성 후 `./scripts/agent/check-docs.sh docs/adr`로 링크와 경로를 확인한다.
+12. 작성 후 `./scripts/agent/docs/check-docs.sh docs/adr`로 링크와 경로를 확인한다.
 -->
 
 - 상태: <제안 | 합의 | 대체됨 | 폐기>
@@ -36,7 +37,7 @@ ADR(설계 결정 기록) 템플릿 (Claude Code, Codex, 사람 공용).
 - 결정 주체: <사용자 합의 | 사용자 요청 반영 | …>
 - 대체: <[ADR NNNN](NNNN-주제.md)의 결정 N | 없음>
 - 대체됨·일부 변경: <[ADR NNNN](NNNN-주제.md)(결정 N) | 없음>
-- 관련: <[제품 계획](../flight-search-plan.md), [설계](../architecture.md), 다른 ADR 링크>
+- 관련: <[계획](../plans/<계획>.md), [설계](../architecture.md), 다른 ADR 링크>
 
 ## 배경
 

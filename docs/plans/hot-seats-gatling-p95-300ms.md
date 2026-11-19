@@ -1,7 +1,7 @@
 # Gatling hot-seats 1,000명 예매 생성 p95 300ms 달성 계획
 
 - 작성일: 2026-11-15
-- 상태: 측정 기반 확장·전용 대시보드 추가 후 사용자 요청으로 중단. 실행 결과·미검증 항목·재개 순서는 [인계 문서](./hot-seats-gatling-handoff.md)를 따른다. 최종 측정은 미완료다.
+- 상태: 장기 과제로 보류(로드맵 후속 항목). 측정 기반 확장·전용 대시보드 추가 후 사용자 요청으로 중단. 실행 결과·미검증 항목·재개 순서는 [인계 문서](./hot-seats-gatling-handoff.md)를 따른다. 최종 측정은 미완료다.
 - 목표: 단일 Gateway·core 구조에서 **15회 예열 후 예매 생성 p95 < 300ms를 독립 실행 5회 모두 달성**한다.
 - 실행 도구: Gatling. 기존 k6 결과는 가설의 근거이며 Gatling 개선율의 기준선으로 사용하지 않는다.
 - 관련 문서: [로드맵](../roadmap.md), [M5 최종 보고서](../performance/m5/11-step8-final-report.md), [Gatling 실행 안내](../../loadtest/gatling/README.md), [기존 1,000명 진단](../performance/m5/04-1000-user-steps-a-c.md).

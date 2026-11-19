@@ -6,7 +6,7 @@
 - 결정 주체: 2026-11-17 M5.5 설계 인터뷰(Q13)
 - 대체: 없음
 - 대체됨·일부 변경: 없음
-- 관련: [계획](../plans/m5-5-coupon.md), [ADR 0035](0035-coupon-module-reservation-saga.md)
+- 관련: [계획](../backup/plans/m5-5-coupon.md), [ADR 0035](0035-coupon-module-reservation-saga.md)
 
 ## 배경
 
@@ -40,3 +40,4 @@ M5.5-3은 선착순 한정 발급의 경합을 다룬다. 많은 사용자가 �
 ## 변경 이력
 
 - 2026-11-17: 작성, 합의
+- 2026-11-19: M5.5 계획 문서를 `docs/backup/plans/`로 옮겨 관련 링크 정정

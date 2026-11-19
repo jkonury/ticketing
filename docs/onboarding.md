@@ -23,7 +23,7 @@ git clone <저장소> && cd ticketing
 ./scripts/setup-hooks.sh            # pre-commit(ktlint, detekt, web 검사) 활성화. 클론 후 1회
 sudo ./scripts/setup-firewall.sh      # Linux+UFW: compose 브릿지(br-ticketing)에서 호스트로의 웹훅·수집 허용. 1회
 cp .env.example .env                # 로컬 비밀 값. git 제외
-docker compose up -d --wait         # PostgreSQL 15432, Redis 16379
+docker compose up -d --wait         # PostgreSQL 15432, Redis 16379, Kafka 19092
 ./gradlew build                     # 전체 빌드 + 테스트
 ```
 
@@ -43,7 +43,7 @@ cd web && pnpm install && pnpm dev  # 13000
 | realtime | 18081 | `curl localhost:18081/actuator/health` |
 | gateway | 18000 | `curl localhost:18000/actuator/health` |
 | web | 13000 | 브라우저 |
-| fake-pg | 18090 | Compose 상태 |
+| fake-pg | 18090 | `curl localhost:18090/actuator/health` |
 
 시드 데이터는 공연장 2곳, 공연 3편, 회차 각 3개이며 다시 실행해도 늘지 않는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)다.
 
@@ -94,7 +94,8 @@ fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scr
 | Kotlin 포맷·정적 분석 | `./gradlew ktlintFormat` 후 `./gradlew ktlintCheck detekt` |
 | web | `./scripts/agent/test/web-check.sh` (`--build`로 빌드 확인) |
 | E2E | `./scripts/e2e/run.sh [--web] [--keep] [--tests "패턴"]` |
-| Modulith 구조 검증·다이어그램 | `./gradlew :core:modulithDocs` |
+| Modulith 구조 검증 | `ModularityTests` (기본 test에 포함) |
+| Modulith 다이어그램 | `./gradlew :core:modulithDocs` (모듈 의존 변경 시) |
 | 문서 링크 | `./scripts/agent/docs/check-docs.sh [경로...]` |
 
 - 같은 작업 디렉터리에서 test와 check는 순차 실행한다. 동시에 실행하면 결과 파일이 충돌한다.

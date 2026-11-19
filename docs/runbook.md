@@ -7,19 +7,20 @@
 | 구성 | 포트 | 의존 | 상태 확인 |
 |---|---|---|---|
 | gateway | 18000 | Redis, core, realtime | `/actuator/health` |
-| core | 18080 | PostgreSQL, Redis, fake-pg | `/actuator/health` |
+| core | 18080 | PostgreSQL, Redis, Kafka, fake-pg | `/actuator/health` |
 | realtime | 18081 | Redis | `/actuator/health` |
 | web | 13000 | Gateway, Redis(BFF 세션) | 브라우저 |
-| fake-pg | 18090 | core(웹훅) | `docker compose ps` |
+| fake-pg | 18090 | core(웹훅) | `/actuator/health` (호스트 jar) |
 | PostgreSQL | 15432 | - | `pg_isready` |
 | Redis | 16379 | - | `redis-cli ping` |
+| Kafka | 19092 | - | `docker compose ps` (healthy) |
 
-기동 순서는 PostgreSQL·Redis·fake-pg → core·realtime → gateway → web이다. 종료는 역순이다.
+기동 순서는 PostgreSQL·Redis·Kafka·fake-pg → core·realtime → gateway → web이다. 종료는 역순이다.
 
 ## 2. 기동·종료·초기화
 
 ```bash
-docker compose up -d --wait         # 인프라(PostgreSQL, Redis) 기동
+docker compose up -d --wait         # 인프라(PostgreSQL, Redis, Kafka) 기동
 ./scripts/dev/run.sh --fake-pg      # fake-pg는 호스트 jar로 기동(로그: build/dev/logs/fake-pg.log)
 docker compose ps                   # 상태
 docker compose down                 # 종료 (데이터 유지)
@@ -36,8 +37,8 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 
 ### 3.1 앱이 뜨지 않는다
 
-1. `docker compose ps`에서 postgres, redis가 `healthy`인지 본다.
-2. `.env`가 있고 `POSTGRES_*`, `TICKETING_JWT_SECRET`, `FAKE_PG_WEBHOOK_SECRET`이 채워져 있는지 본다. `.env.example`과 비교한다.
+1. `docker compose ps`에서 postgres, redis, kafka가 `healthy`인지 본다.
+2. `.env`가 있고 `TICKETING_POSTGRES_*`, `TICKETING_JWT_SECRET`, `FAKE_PG_WEBHOOK_SECRET`이 채워져 있는지 본다. `.env.example`과 비교한다.
 3. 빌드가 `:core:generateJooq`에서 실패하면 Docker가 떠 있는지 확인한다. 코드 생성이 Docker를 쓴다.
 4. E2E로 띄웠다면 `build/e2e/logs/`의 앱별 로그를 본다.
 
@@ -250,7 +251,7 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 | Tempo | http://localhost:13200 | trace 조회. 보통은 Grafana Explore에서 본다 |
 
 - Grafana는 13000이 아니라 13001을 쓴다(13000은 web).
-- 앱은 span을 기본으로 내보내지 않는다. 켜려면 앱을 띄울 때 `TRACING_EXPORT_ENABLED=true`를 주고, 비율은 `TRACING_SAMPLING_PROBABILITY`(기본 1.0)로 정한다. 내보내는 주소는 `OTLP_TRACES_ENDPOINT`(기본 `http://localhost:14318/v1/traces`)다. `run.sh --observability`는 이 값을 `true`와 `0.1`로 넣는다.
+- 앱은 span을 기본으로 내보내지 않는다. 켜려면 앱을 띄울 때 `TRACING_EXPORT_ENABLED=true`를 주고, 비율은 `TRACING_SAMPLING_PROBABILITY`(기본 1.0)로 정한다. 내보내는 주소는 `OTLP_TRACES_ENDPOINT`(기본 `http://localhost:14318/v1/traces`)다. `scripts/loadtest/run.sh --observability`는 이 값을 `true`와 `0.1`로 넣는다.
 - 지표는 모든 Spring 앱의 `/actuator/prometheus`에서 Prometheus가 수집한다. 앱별 포트는 `application.yml`을 본다.
 
 부하 테스트는 `scripts/loadtest/run.sh`로 실행한다. 필요한 것은 `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18090 포트다. k6 바이너리(`build/loadtest/k6`)는 실행 전에 `build-k6.sh`로 빌드된다. smoke는 없을 때만 빌드한다.

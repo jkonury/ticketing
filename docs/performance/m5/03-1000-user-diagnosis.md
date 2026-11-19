@@ -51,7 +51,7 @@ JFR(`20261114-131040`)의 Gateway 폭주 구간 실행 샘플 823건 중 약 25%
 
 ## 입장 배치 규모(50명) 기준 측정 (조건당 3회)
 
-[기준 분리](../../plans/m5-2-improvements.md)에 따라 300ms 기준을 판정하는 조건이다. `hot-seats --vus 50 --observability --no-scouter`, 코어 배분 4/12, 예매 시도 인원 49~50명, `http_req_failed` 0, 정합성 모두 통과.
+[기준 분리](../../backup/plans/m5-2-improvements.md)에 따라 300ms 기준을 판정하는 조건이다. `hot-seats --vus 50 --observability --no-scouter`, 코어 배분 4/12, 예매 시도 인원 49~50명, `http_req_failed` 0, 정합성 모두 통과.
 
 | 조건 | 예매 p95 ms (실행 1·2·3) | 예매 p50 ms | 실행 디렉터리 |
 | --- | --- | --- | --- |

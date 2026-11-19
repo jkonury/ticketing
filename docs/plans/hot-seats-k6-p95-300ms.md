@@ -1,5 +1,8 @@
 # hot-seats 1,000명 예매 생성 p95 300ms 도달 계획
 
+- 작성일: 2026-11-14
+- 상태: 장기 과제로 보류(로드맵 후속 항목). Step A~C 결과는 [문서 04](../performance/m5/04-1000-user-steps-a-c.md)에 있고, 이후 측정은 Gatling 계획 [hot-seats-gatling-p95-300ms](./hot-seats-gatling-p95-300ms.md)로 이어졌다
+
 ## Context
 
 `docs/performance/m5-improvements.md`의 진단은 "1,000명 동시 도착은 앱 CPU 포화, 핫스팟 없음, 콜드 스타트는 주원인 아님"으로 끝났고 300ms 기준은 50명 조건으로 분리됐다. 보존된 산출물을 다시 분석한 결과 이 결론의 마지막 부분이 틀렸을 가능성이 높다.
@@ -54,7 +57,7 @@ Step C의 JFR·단계 타이머에서 남은 몫이 큰 순서로 고른다. 미
 ## 문서 갱신
 
 - `docs/performance/m5-improvements.md`: 인터프리터 비율 근거, "콜드 스타트는 주원인이 아니다" 정정, Step A~C의 모든 실행 값·디렉터리·실패 이력.
-- `docs/plans/m5-2-improvements.md` 측정 계약 6항: 1,000명 조건의 판정 방식(콜드 + AOT 캐시)을 결과에 맞춰 고친다. 미달이면 기준 분리를 유지하고 수치를 보고한다.
+- `docs/backup/plans/m5-2-improvements.md` 측정 계약 6항: 1,000명 조건의 판정 방식(콜드 + AOT 캐시)을 결과에 맞춰 고친다. 미달이면 기준 분리를 유지하고 수치를 보고한다.
 - `docs/roadmap.md` 체크박스는 기준을 실제로 충족했을 때만 갱신한다.
 
 ## 검증

@@ -4,7 +4,7 @@
 
 ## Step A. 예열 횟수별 상한 진단 (1,000명, 각 1회, 2026-11-14)
 
-계획 [hot-seats 1,000명 p95 300ms 도달 계획](../../plans/docs-performance-m5-improvements-md-hot-recursive-lighthouse.md)의 Step A. 코드 변경 없이 `run.sh --warmup --warmup-rounds N`(같은 앱에 부하 N회 뒤 새 회차로 측정)만 다르게 했다. `hot-seats --observability --no-scouter`, 코어 4/12, 풀 10. 모든 실행에서 정시 준비 1,000명, `http_req_failed` 0, 정합성 통과. n=1이므로 방향만 본다.
+계획 [hot-seats 1,000명 p95 300ms 도달 계획](../../plans/hot-seats-k6-p95-300ms.md)의 Step A. 코드 변경 없이 `run.sh --warmup --warmup-rounds N`(같은 앱에 부하 N회 뒤 새 회차로 측정)만 다르게 했다. `hot-seats --observability --no-scouter`, 코어 4/12, 풀 10. 모든 실행에서 정시 준비 1,000명, `http_req_failed` 0, 정합성 통과. n=1이므로 방향만 본다.
 
 | 예열 횟수 | 측정 p50 | 측정 p95 | 측정 최소 | 실행 디렉터리 |
 | --- | --- | --- | --- | --- |

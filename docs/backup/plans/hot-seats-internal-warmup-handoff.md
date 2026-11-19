@@ -1,8 +1,10 @@
 # 내부 예열 3.2 구현 인계 (2026-11-16)
 
+- 상태: 완료 (보관). 후속 진행은 [내부 예열 콜드 900ms 계획](../../plans/hot-seats-internal-warmup-cold-900ms.md)을 따른다
+
 ## 후속 세션 완료 상태 (2026-11-16)
 
-아래 본문은 재개 전 인계 기록이다. 최초 구현 결과는 [구현·검증 보고](../performance/m5/15-layered-startup-warmup.md), 이후 사용자 요청에 따른 강화 결과는 [HTTP 예열 확대 보고](../performance/m5/16-startup-warmup-burst-volume.md)를 따른다.
+아래 본문은 재개 전 인계 기록이다. 최초 구현 결과는 [구현·검증 보고](../../performance/m5/15-layered-startup-warmup.md), 이후 사용자 요청에 따른 강화 결과는 [HTTP 예열 확대 보고](../../performance/m5/16-startup-warmup-burst-volume.md)를 따른다.
 
 - 최종 컴파일·전체 테스트·ktlintCheck·detekt·예열 활성 E2E·셸/Python 회귀 검증을 완료했다. 전체 테스트에서 드러난 기존 PaymentFlowTests의 주문 ID 접두사 조회 충돌도 수정했다.
 - 내부 예열 JFR 진단 1회, JFR OFF 독립 3회를 완료했다. core Interpreted 31.8%, p95 1,505·1,448·1,242ms로 계획의 JFR·300ms 완료 기준은 미달이다. 정합성·오류·SSE 검사는 통과했다.
@@ -21,9 +23,9 @@
 
 AGENTS.md, backend 규칙을 따른다. 아키텍처·로드맵 확인 뒤 아래 자료와 현재 diff 범위부터 읽는다. 이전 전체 로그나 JFR을 먼저 다시 출력하지 않는다.
 
-- [구현 계획](hot-seats-internal-warmup-cold-900ms.md): 3.2 구현 승인과 기본 설정을 반영했다.
-- [ADR 0029](../adr/0029-layered-startup-warmup.md): 이번 구현 선택과 취소·격리·관측의 한계.
-- [이전 JFR 진단](../performance/m5/14-cold-jfr-diagnosis.md): 기준 1.0 / 0.1 콜드 p95 1,664 / 2,006ms. core 최상위 Interpreted 53.1% / 41.0%, 기존 외부 15회 예열 0/58. 서로 다른 계열을 합치지 않는다.
+- [구현 계획](../../plans/hot-seats-internal-warmup-cold-900ms.md): 3.2 구현 승인과 기본 설정을 반영했다.
+- [ADR 0029](../../adr/0029-layered-startup-warmup.md): 이번 구현 선택과 취소·격리·관측의 한계.
+- [이전 JFR 진단](../../performance/m5/14-cold-jfr-diagnosis.md): 기준 1.0 / 0.1 콜드 p95 1,664 / 2,006ms. core 최상위 Interpreted 53.1% / 41.0%, 기존 외부 15회 예열 0/58. 서로 다른 계열을 합치지 않는다.
 
 ## 구현된 작업 트리
 

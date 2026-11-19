@@ -1,8 +1,8 @@
 # M5-2 병목 개선과 전후 비교 계획
 
 - 작성일: 2026-11-13
-- 상태: 계획. 이 문서 작성으로 구현·측정이나 M5 완료를 처리하지 않는다.
-- 선행 결과: [M5-1 기준 측정](../performance/m5-baseline.md), [로드맵 M5](../backup/roadmap-completed-M2-M5.5.md#m5-부하-테스트와-관측)
+- 상태: 완료 (보관). M5 완료와 함께 종료했다. 결과는 [M5 개선 기록](../../performance/m5-improvements.md)에 있다
+- 선행 결과: [M5-1 기준 측정](../../performance/m5-baseline.md), [로드맵 M5](../../backup/roadmap-completed-M2-M5.5.md#m5-부하-테스트와-관측)
 - 작성 기준: 로컬 계획 작성 지침(build/prompt.md)의 step 형식
 
 ## 범위와 판단 기준
@@ -34,7 +34,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 | 7 | `verify-compensation-under-load` | Step 6 | 중복 결제·웹훅 및 좌석 충돌 환불 검증 |
 | 8 | `publish-m5-results` | Step 7 | 최종 비교 문서, JFR·풀 결론, 로드맵 갱신 |
 
-각 step은 저장소와 [백엔드 지침](../rules/backend.md)을 따른다. 독립 세션에서 시작할 때 앞 step의 변경 경로·검증 결과·실행 디렉터리를 후술할 결과 문서에서 확인한다. 결과 문서는 Step 1에서 새로 만들 **docs/performance/m5-improvements.md**이며, 이후 step이 같은 문서에 근거와 진행 상태를 덧붙인다. M5-1 문서는 과거 기준으로 보존한다.
+각 step은 저장소와 [백엔드 지침](../../rules/backend.md)을 따른다. 독립 세션에서 시작할 때 앞 step의 변경 경로·검증 결과·실행 디렉터리를 후술할 결과 문서에서 확인한다. 결과 문서는 Step 1에서 새로 만들 **docs/performance/m5-improvements.md**이며, 이후 step이 같은 문서에 근거와 진행 상태를 덧붙인다. M5-1 문서는 과거 기준으로 보존한다.
 
 구현 검증은 다음 순서로 한다. 실제 변경 범위에 맞게 적용하고 같은 작업 디렉터리에서 Gradle 검사와 부하를 동시에 실행하지 않는다.
 
@@ -57,8 +57,8 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 3. 성능 비교는 같은 관측·시나리오·설정으로 전후 각 3회 실행하고 모든 값과 중앙값을 남긴다. 진단 1회는 원인 확인용으로 구분한다. 변경 하나의 효과를 판정한 뒤 다음 변경을 적용하며 효과가 없거나 악화된 변경은 되돌린다. 실패·중단 실행과 재실행 사유도 보존한다.
 4. 서버 수정 후 부하가 더 많이 도달할 수 있다. B는 등록·입장 완료·시작 시각 내 준비·예매 시도 인원을 기록한다. 지연 개선뿐 아니라 오류로 사라진 요청이 복구된 효과를 분리한다. 준비 인원이 1,000명에 못 미치거나 시작 시각을 넘긴 실행은 실패 근거로 남기고, 온전한 1,000명 동시 경합의 성능 합격 근거로 쓰지 않는다. A도 등록 → 입장 → 매진 이탈·예매 → 결제·확정의 인원 흐름을 남긴다.
 5. 기존 오류 분류·재시도 수·threshold를 유지한다. 등록 404, `removed`, Gateway 500을 정상 처리로 바꾸거나 재시도로 숨겨 수치를 맞추지 않는다. 실패 주입·보상 시나리오만 기대 업무 결과를 별도로 정의한다.
-6. 잠정 성능 기준은 예매 생성 p95 < 300ms, 예상 밖 오류율 < 1%, SSE 연결 성공률 > 99.9%다. 최종 문서에서 콜드 A·B 각각의 달성 여부와 워밍업 B의 달성 여부를 분리한다. 1,000명 조건(콜드 + AOT 캐시 기동, [측정](../performance/m5/04-1000-user-steps-a-c.md#step-c-aot-캐시-기동-콜드-3회))의 예매 생성 p95 기준은 **1,500ms**로 완화한다(2026-11-14 합의). 근거는 콜드 AOT 3회 861~1,167ms와 Step B 3회 1,158~1,415ms이며, 변경 전 기준 1,575~1,766ms는 넘는다. 300ms는 후속 튜닝 목표로 남기고 15회 예열 상태 274ms(1회)를 상한 참고값으로 둔다. 오류율·SSE 성공률·정합성 기준은 그대로다.
-   - **기준 분리(2026-11-14 합의).** 진단 결과 B의 1,000명 동시 도착 p95는 앱 CPU 포화로 정해지며(코어 12개에서도 약 1.5~1.8초, [진단](../performance/m5-improvements.md)) 요청당 CPU를 한두 곳 줄여서는 움직이지 않았다. 대기열은 입장 배치로 동시 예매 인원을 제한하는 것이 설계다. 그래서 300ms 기준은 **입장 배치 규모의 동시 예매(B `--vus 50`, 콜드·워밍업 각 3회)**로 판정하고, 1,000명 동시 도착은 **스트레스 진단**으로 남긴다. 1,000명 조건에는 절대 기준(중복 판매 0건, 정합성, 오류율 < 1%)과 위의 완화된 p95 1,500ms를 적용한다. 두 조건의 p95를 서로 비교하거나 한 표에 섞지 않는다. 중복 판매 0건과 DB·Redis 정합성은 매 실행의 절대 기준이다. 잠정 성능 기준 달성과 로드맵의 M5 완료 기준 충족은 구분하고, 미달 수치와 한계도 보고한다.
+6. 잠정 성능 기준은 예매 생성 p95 < 300ms, 예상 밖 오류율 < 1%, SSE 연결 성공률 > 99.9%다. 최종 문서에서 콜드 A·B 각각의 달성 여부와 워밍업 B의 달성 여부를 분리한다. 1,000명 조건(콜드 + AOT 캐시 기동, [측정](../../performance/m5/04-1000-user-steps-a-c.md#step-c-aot-캐시-기동-콜드-3회))의 예매 생성 p95 기준은 **1,500ms**로 완화한다(2026-11-14 합의). 근거는 콜드 AOT 3회 861~1,167ms와 Step B 3회 1,158~1,415ms이며, 변경 전 기준 1,575~1,766ms는 넘는다. 300ms는 후속 튜닝 목표로 남기고 15회 예열 상태 274ms(1회)를 상한 참고값으로 둔다. 오류율·SSE 성공률·정합성 기준은 그대로다.
+   - **기준 분리(2026-11-14 합의).** 진단 결과 B의 1,000명 동시 도착 p95는 앱 CPU 포화로 정해지며(코어 12개에서도 약 1.5~1.8초, [진단](../../performance/m5-improvements.md)) 요청당 CPU를 한두 곳 줄여서는 움직이지 않았다. 대기열은 입장 배치로 동시 예매 인원을 제한하는 것이 설계다. 그래서 300ms 기준은 **입장 배치 규모의 동시 예매(B `--vus 50`, 콜드·워밍업 각 3회)**로 판정하고, 1,000명 동시 도착은 **스트레스 진단**으로 남긴다. 1,000명 조건에는 절대 기준(중복 판매 0건, 정합성, 오류율 < 1%)과 위의 완화된 p95 1,500ms를 적용한다. 두 조건의 p95를 서로 비교하거나 한 표에 섞지 않는다. 중복 판매 0건과 DB·Redis 정합성은 매 실행의 절대 기준이다. 잠정 성능 기준 달성과 로드맵의 M5 완료 기준 충족은 구분하고, 미달 수치와 한계도 보고한다.
 7. k6 이름별 지연은 실행 전체의 Trend 분포로 저장한다. 1초 p95의 중앙값을 실행 전체 p95와 비교하지 않는다. SSE 스트림 유지 시간을 API 지연으로 해석하지 않는다. RPS는 HTTP 요청 기준이며 입장 처리량·예매 처리량과 분리한다.
 8. 환경·커밋과 작업 트리 상태·실제 설정·측정 구간·종료 코드·정합성 결과를 실행 디렉터리에 남긴다. 지표 누락은 0으로 채우지 않는다. 현재 runner는 threshold 미달(99)을 기록하고 성공 종료할 수 있으므로 셸 종료 코드 외에 k6 threshold 결과를 반드시 확인한다.
 
@@ -71,8 +71,8 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [기준 측정](../performance/m5-baseline.md)의 「분석」, 「병목·결함 후보와 M5-2 제안」, 「한계」
-- [ADR 0024](../adr/0024-observability-and-load-test.md), [Gateway 설정](../../gateway/src/main/resources/application.yml), [core 설정](../../core/src/main/resources/application.yml)
+- [기준 측정](../../performance/m5-baseline.md)의 「분석」, 「병목·결함 후보와 M5-2 제안」, 「한계」
+- [ADR 0024](../../adr/0024-observability-and-load-test.md), [Gateway 설정](../../../gateway/src/main/resources/application.yml), [core 설정](../../../core/src/main/resources/application.yml)
 - `realtime/src/main/kotlin/io/github/ticketing/realtime/queue/`의 `QueueService`, `AdmissionService`, `QueuePositionStreamController`
 - `scripts/loadtest/run.sh`, `scripts/loadtest/prom-snapshot.sh`, `observability/grafana/dashboards/ticketing-overview.json`, `loadtest/lib/metrics.ts`
 
@@ -110,7 +110,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [ADR 0021](../adr/0021-realtime-queue-and-sse-contracts.md), [대기열 계약](../architecture/flows.md#61-대기열과-입장), [Redis 키](../architecture/redis.md#대기열-키-형식-realtime)
+- [ADR 0021](../../adr/0021-realtime-queue-and-sse-contracts.md), [대기열 계약](../../architecture/flows.md#61-대기열과-입장), [Redis 키](../../architecture/redis.md#대기열-키-형식-realtime)
 - `realtime/src/main/kotlin/io/github/ticketing/realtime/queue/`와 `realtime/src/main/resources/redis/queue/admit.lua`
 - `realtime/src/test/kotlin/io/github/ticketing/realtime/queue/`의 `QueueApiTests`, `AdmissionServiceTests`, `QueuePositionStreamTests` 및 기존 다중 인스턴스 테스트
 
@@ -150,7 +150,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [기준 측정](../performance/m5-baseline.md)의 「Virtual Thread 점검」, 「시나리오 B의 예매 생성 지연과 Hikari 풀 대기」
+- [기준 측정](../../performance/m5-baseline.md)의 「Virtual Thread 점검」, 「시나리오 B의 예매 생성 지연과 Hikari 풀 대기」
 - `scripts/loadtest/run.sh`, `scripts/loadtest/seed.sh`, `scripts/loadtest/prom-snapshot.sh`
 - `loadtest/scenarios/hot-seats.ts`, `loadtest/lib/flow.ts`, `loadtest/lib/options.ts`, `loadtest/lib/summary.ts`
 
@@ -186,7 +186,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [기준 측정](../performance/m5-baseline.md)의 후보 1·4, [대기열 계약](../architecture/flows.md#61-대기열과-입장)
+- [기준 측정](../../performance/m5-baseline.md)의 후보 1·4, [대기열 계약](../../architecture/flows.md#61-대기열과-입장)
 - `QueueService`, `AdmissionService`, `QueuePositionStreamController`, `QueueProperties`와 `admit.lua`
 - `realtime/src/main/resources/application.yml`, `scripts/loadtest/run.sh`, Step 1의 결과 문서·관측값
 
@@ -220,7 +220,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [기준 측정](../performance/m5-baseline.md)의 후보 2와 Hikari 표
+- [기준 측정](../../performance/m5-baseline.md)의 후보 2와 Hikari 표
 - `core/src/main/kotlin/io/github/ticketing/booking/application/service/CreateBookingService.kt`, `PaymentResultService.kt`, `RequestPaymentService.kt`
 - `core/src/main/kotlin/io/github/ticketing/booking/adapter/required/jpa/`의 `BookingPersistenceAdapter`, `ScheduleSeatPersistenceAdapter`
 - `core/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentTransactionService.kt`, `PaymentRequestService.kt`
@@ -256,7 +256,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [기준 측정](../performance/m5-baseline.md)의 후보 5, [ADR 0020](../adr/0020-gateway-verification-contracts.md)
+- [기준 측정](../../performance/m5-baseline.md)의 후보 5, [ADR 0020](../../adr/0020-gateway-verification-contracts.md)
 - `gateway/src/main/resources/application.yml`, `gateway/src/main/kotlin/io/github/ticketing/gateway/`, `scripts/loadtest/run.sh`
 - Step 1의 route·클라이언트 풀·k6 CPU·RSS 지표와 실행별 Gateway 로그·샘플 trace
 
@@ -289,7 +289,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [기준 측정](../performance/m5-baseline.md)의 「정합성」, [예매 시퀀스](../architecture/flows.md#621-예매-흐름-시퀀스-대기열-제외), [fake-pg 계약](../architecture/integrations.md)
+- [기준 측정](../../performance/m5-baseline.md)의 「정합성」, [예매 시퀀스](../../architecture/flows.md#621-예매-흐름-시퀀스-대기열-제외), [fake-pg 계약](../../architecture/integrations.md)
 - `BookingPaymentFlowTests`의 「다른 예매가 이미 sold_seat를 가진 좌석이면…」 테스트
 - `PaymentResultService`, `core/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentRefundService.kt`
 - `scripts/loadtest/verify-integrity.sh`, `scripts/loadtest/run.sh`, `loadtest/scenarios/`, `loadtest/lib/`
@@ -326,7 +326,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 ## 참고
 
-- [로드맵 M5](../backup/roadmap-completed-M2-M5.5.md#m5-부하-테스트와-관측), [기준 측정](../performance/m5-baseline.md), [ADR 0024](../adr/0024-observability-and-load-test.md)
+- [로드맵 M5](../../backup/roadmap-completed-M2-M5.5.md#m5-부하-테스트와-관측), [기준 측정](../../performance/m5-baseline.md), [ADR 0024](../../adr/0024-observability-and-load-test.md)
 - 앞 step에서 누적한 docs/performance/m5-improvements.md와 실행 디렉터리의 k6 summary·Prometheus·정합성·자원·로그·JFR 산출물
 - `docs/architecture.md`의 「개발 환경과 테스트」, `docs/runbook.md`, 저장소 명령 안내
 

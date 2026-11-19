@@ -86,7 +86,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 
 ## 5. 지시서 템플릿
 
-경로는 `build/orchestration/<task-id>/brief.md`(`build/`는 git 제외).
+경로는 `build/orchestration/<task-id>/brief.md`(`build/`는 git 제외). 지시서 작성 원칙(자기완결성, 최소 참조, 실행 가능한 AC, 구체적인 금지 사항, 보고 분량)은 [서브에이전트 위임 지침](subagent-delegation.md)을 따른다.
 
 ```markdown
 # <task-id> <제목>

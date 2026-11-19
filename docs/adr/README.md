@@ -5,8 +5,9 @@
 ## 작성 규칙
 
 - 파일명: `NNNN-요약.md` (번호는 순서대로 증가)
-- 구성: 상태 / 맥락 / 검토한 대안 / 결정 / 결과
-- 이미 수락된 ADR의 결정은 고치지 않는다. 결정이 바뀌면 새 ADR을 쓰고 기존 ADR의 상태를 `대체됨 (NNNN)`으로 바꾼다.
+- 새 ADR은 [ADR 템플릿](../templates/adr.md)으로 쓴다. 0001~0032는 `## 상태` 절 형식, 0033부터는 머리말(`- 상태:`) 형식이다.
+- 상태: 제안, 합의, 대체됨, 폐기. 0001~0032의 "수락"은 합의와 같은 뜻이다.
+- 합의된 ADR의 결정은 고치지 않는다. 결정이 바뀌면 새 ADR을 쓰고 기존 ADR의 상태를 `대체됨 (NNNN)`으로 바꾼다.
 - 새 ADR을 추가하면 아래 목록과 `architecture.md`를 함께 갱신한다.
 
 ## 목록
@@ -50,7 +51,7 @@
 | [0035](0035-coupon-module-reservation-saga.md) | coupon 모듈과 예약 Saga | 합의 |
 | [0036](0036-settlement-list-price-platform-discount.md) | 정산 정가 기준과 플랫폼 할인 부담 | 합의 |
 | [0037](0037-limited-coupon-claim-redis-lua.md) | 선착순 쿠폰 발급 방식(Redis Lua + 동기 DB INSERT) | 합의 |
-| [0038](0038-queue-stays-on-redis-not-kafka.md) | 대기열 저장소는 Redis를 유지하고 Kafka로 옮기지 않는다 | 제안 |
+| [0038](0038-queue-stays-on-redis-not-kafka.md) | 대기열 저장소는 Redis를 유지하고 Kafka로 옮기지 않는다 | 합의 |
 | [0039](0039-kafka-externalizes-modulith-events-only.md) | Kafka는 Modulith 이벤트 외부화에만 쓰고 좌석 스트림은 Redis Streams 유지 | 합의 |
 | [0040](0040-payment-separate-database-same-instance.md) | payment는 같은 PostgreSQL 인스턴스의 별도 DB로 분리 | 합의 |
 | [0041](0041-auth-stays-in-core-sas-deferred.md) | M6에서는 인증 구조를 유지하고 Spring Authorization Server는 후속으로 미룸 | 합의 |

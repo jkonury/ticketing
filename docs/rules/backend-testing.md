@@ -1,6 +1,6 @@
 # 백엔드 테스트 지침
 
-테스트·검사·E2E·부하 테스트 실행 조건과 명령은 [AGENTS.md](../../AGENTS.md#6-테스트-실행)를 따른다.
+기본 테스트·검사 명령은 [AGENTS.md 6절](../../AGENTS.md#6-테스트와-검사), E2E·부하 테스트·CI 실행 조건은 이 문서의 [E2E·부하·CI 실행](#e2e부하ci-실행)을 따른다.
 
 ## 테스트 종류
 
@@ -54,3 +54,16 @@
 ## 이벤트 계약
 
 - `contract`의 `ContractEventSerializationTests`와 `core`의 `ContractEventPublicationSerializationTests`에서 JSON 골든 파일을 공유한다. 계약 이벤트 변경 시 기본 직렬화와 실제 Modulith `EventSerializer`의 호환성을 모두 검증한다. [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)
+
+## E2E·부하·CI 실행
+
+E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
+
+- 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)가 필요하다.
+- E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`. core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
+  - 사전 조건: `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18090 포트. `--web`은 Playwright web 앱을 13000 포트에 추가하므로 그 포트도 비어 있어야 한다.
+  - `core-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)는 별도 프로세스로 실행한다.
+  - 스크립트가 실행마다 관리자(ADMIN) 계정을 가입시킨 뒤 DB에서 승격하고, `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다. 앱 코드에는 E2E 전용 경로가 없다.
+  - 로그는 `build/e2e/logs/`에 저장한다.
+- 부하 테스트: `scripts/loadtest/run.sh`(k6)와 Gatling(`loadtest/gatling/README.md`). 결과는 `build/loadtest/runs/`에 저장한다. 절차는 [부하 테스트 런북](../performance/loadtest-runbook.md)을 따른다.
+- CI: `.github/workflows/ci.yml`이 push(main)·pull_request마다 `backend`(`./gradlew build`, ktlint·detekt 포함), `web`(lint·typecheck·test·format:check·build), `docs`(lychee·`check-doc-refs.sh`)를 병렬로 실행한다. E2E·부하 테스트는 포함하지 않는다.

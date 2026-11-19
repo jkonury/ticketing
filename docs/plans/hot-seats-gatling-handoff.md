@@ -1,7 +1,7 @@
 # Gatling hot-seats 실행 인계
 
 - 작성일: 2026-11-15
-- 상태: 사용자 요청으로 측정을 중단하고 다음 세션으로 인계한다. **300ms 달성·독립 실행 5회·Scouter ON/OFF 비교는 미완료**다.
+- 상태: 장기 과제로 보류(로드맵 후속 항목). 사용자 요청으로 측정을 중단하고 다음 세션으로 인계한다. **300ms 달성·독립 실행 5회·Scouter ON/OFF 비교는 미완료**다.
 - 원래 범위와 판정 계약: [실행 계획](./hot-seats-gatling-p95-300ms.md)
 - 전용 대시보드와 지표: [대시보드 안내](../performance/gatling-hot-seats-dashboard.md)
 

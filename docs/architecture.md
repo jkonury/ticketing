@@ -151,7 +151,7 @@ io.github.ticketing.booking
 
 ### 모듈 의존 다이어그램
 
-Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulith/`). 모듈 의존을 바꾸면 테스트를 다시 실행해 바뀐 `.puml`을 함께 커밋한다.
+Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulith/`). 기본 `test`에서는 생성하지 않는다. 모듈 의존을 바꾸면 `./gradlew :core:modulithDocs`로 다시 생성해 바뀐 `.puml`을 함께 커밋한다.
 
 - [전체 모듈 의존](./modulith/components.puml)
 - 모듈별: [audit](./modulith/module-audit.puml), [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [coupon](./modulith/module-coupon.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
@@ -185,7 +185,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `CouponRevoked` | coupon | audit | `eventId`, `actorId`, `issuedCouponId`, `definitionId`, `memberId`, `occurredAt` |
 | `BookingExpired` | booking | 없음(notification) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
-- 쿠폰 관리자 행위 이벤트 5종(정의 생성·수정·중지, 직접 지급, 회수)과 `MemberRoleChanged`는 audit가 구독해 `audit.admin_action`에 `eventId`(`source_event_id` 유니크)로 멱등하게 기록한다. 설계 근거는 [계획서](./plans/m5-5-coupon.md)와 ADR 0034·0035를 본다.
+- 쿠폰 관리자 행위 이벤트 5종(정의 생성·수정·중지, 직접 지급, 회수)과 `MemberRoleChanged`는 audit가 구독해 `audit.admin_action`에 `eventId`(`source_event_id` 유니크)로 멱등하게 기록한다. 설계 근거는 [계획서](./backup/plans/m5-5-coupon.md)와 ADR 0034·0035를 본다.
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 모듈이 소유한다. 발행자는 위 표와 같지만 클래스는 `payment` 루트 패키지에 있다.
 - 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.
 

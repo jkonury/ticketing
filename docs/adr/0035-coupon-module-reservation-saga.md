@@ -6,7 +6,7 @@
 - 결정 주체: 2026-11-17 M5.5 설계 인터뷰(Q5, Q8, Q9, Q10, Q11, Q15)
 - 대체: 없음
 - 대체됨·일부 변경: 없음
-- 관련: [계획](../plans/m5-5-coupon.md), [ADR 0017](0017-payment-owns-payment-events.md), [ADR 0034](0034-platform-admin-role-and-audit.md), [ADR 0036](0036-settlement-list-price-platform-discount.md)
+- 관련: [계획](../backup/plans/m5-5-coupon.md), [ADR 0017](0017-payment-owns-payment-events.md), [ADR 0034](0034-platform-admin-role-and-audit.md), [ADR 0036](0036-settlement-list-price-platform-discount.md)
 
 ## 배경
 
@@ -57,3 +57,4 @@
 ## 변경 이력
 
 - 2026-11-17: 작성, 합의
+- 2026-11-19: M5.5 계획 문서를 `docs/backup/plans/`로 옮겨 관련 링크 정정

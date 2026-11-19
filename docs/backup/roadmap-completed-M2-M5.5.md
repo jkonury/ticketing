@@ -75,7 +75,7 @@
   - 콜드 재정의: readiness 전 내부 예열 허용([ADR 0028](../adr/0028-cold-definition-internal-warmup.md)). 외부 15회 예열도 350~386ms로 300ms 미달인 조건부 목표다([외부 예열 최종 보고](../performance/m5/12-gatling-hot-seats-p95-300ms-report.md)). 이후 사용자 승인으로 내부 예열을 구현했다([ADR 0029](../adr/0029-layered-startup-warmup.md))
   - [ ] [콜드 p95 900ms(잠정, 장기 목표 300ms): 기동 시 내부 예열 계획](../plans/hot-seats-internal-warmup-cold-900ms.md): 3.2 기능 구현 후 [HTTP 경유 15회 × 1,000건으로 확대](../performance/m5/16-startup-warmup-burst-volume.md), [실제 핸들러 경유](../performance/m5/17-warmup-through-real-handler.md)·[트래픽 혼합](../performance/m5/18-warmup-traffic-mix.md)으로 이어졌다. 전체 테스트·예열 활성 E2E·품질 검사 통과. JFR core Interpreted 23.1%로 외부 예열 수준 미달이라 3.2 완료 기준은 미충족이며 체크하지 않는다. JFR OFF 독립 3회 전체·성공 p95는 16 시점 741·843·853ms / 710·784·777ms, 현재 코드(18) 760·772·750ms / 677·707·707ms로 900ms 기준을 모두 충족하고 300ms는 모두 미달(17의 709·1,458·816ms는 2회차 900ms 미달). 최신 코드의 JFR Interpreted 비율은 재집계하지 않았다. [TCP 진단(19)](../performance/m5/19-warmup-tcp-diagnosis.md)은 중단·미완료. 정합성·오류·SSE 통과, 순수 콜드 회귀는 사용자 요청으로 생략
   - [x] booking 불변 좌석 사본 캐시 구현·회귀 검증 ([ADR 0025](../adr/0025-booking-seat-copy-cache.md))
-  - M5-2 계획: [병목 개선과 전후 비교](../plans/m5-2-improvements.md)
+  - M5-2 계획: [병목 개선과 전후 비교](plans/m5-2-improvements.md)
 - [x] Virtual Thread 관련 점검 (pinning, 커넥션 풀 크기)
   - 기준 측정 완료: [m5-baseline.md](../performance/m5-baseline.md)
   - 최종 JFR·풀 결론: 정상 상태 pinning 0건(첫 폭주 구간의 클래스 로딩만), 풀 크기 10 유지(풀 20 기각)
@@ -88,7 +88,7 @@
 
 ## M5.5. 쿠폰
 
-계획서: [m5-5-coupon.md](../plans/m5-5-coupon.md). 결정 근거는 ADR 0034~0037이다.
+계획서: [m5-5-coupon.md](plans/m5-5-coupon.md). 결정 근거는 ADR 0034~0037이다.
 
 ### M5.5-1. 관리자·감사
 

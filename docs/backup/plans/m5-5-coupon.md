@@ -1,9 +1,9 @@
 # M5.5 쿠폰 도입 계획
 
 - 작성일: 2026-11-17
-- 상태: 계획 합의 완료, 구현 0단계(문서 선행) 진행 중
+- 상태: 완료 (보관). M5.5 전 단계를 완료했다. 결과는 [coupon-drop 측정](../../performance/m5.5/coupon-drop.md)에 있다
 - 결정 근거: 2026-11-17 설계 인터뷰(Q1~Q18). 구현 0단계에서 ADR 0034~0037로 남긴다.
-- 관련: [로드맵](../roadmap.md), [아키텍처](../architecture.md), [ADR 0017](../adr/0017-payment-owns-payment-events.md)
+- 관련: [로드맵](../../roadmap.md), [아키텍처](../../architecture.md), [ADR 0017](../../adr/0017-payment-owns-payment-events.md)
 
 ## 합의한 결정
 
@@ -202,7 +202,7 @@
   - 실제 측정은 Gatling `CouponDropSimulation`으로 했다(`run.sh --scenario coupon-drop --tool gatling`). 1만 명이 100장을 노리며, 새 연결 1만 개가 동시에 몰려 listen 큐가 넘치는 문제를 피하려고 20초 ramp 동안 `GET /api/v1/coupons`로 연결을 사전 수립하고 40초 뒤 같은 시각에 받는다. k6 `loadtest/scenarios/coupon-drop.ts`는 남아 있으나 측정에는 쓰지 않았다.
   - `scripts/loadtest/run.sh:90`의 case와 `seed.sh coupon`을 추가한다.
   - verify-coupon-integrity.sh (신규, scripts/loadtest): 발급 수 ≤ total, `(def, member)` 중복 0, Redis 재고 + 발급 수 = total, Set = DB 회원 집합을 확인한다.
-- 비교 실험: 같은 시나리오를 DB 조건부 UPDATE(`remaining > 0`) 방식으로 측정한다(프로퍼티로 전환). 결과는 [docs/performance/m5.5/coupon-drop.md](../performance/m5.5/coupon-drop.md)에 기록했다.
+- 비교 실험: 같은 시나리오를 DB 조건부 UPDATE(`remaining > 0`) 방식으로 측정한다(프로퍼티로 전환). 결과는 [docs/performance/m5.5/coupon-drop.md](../../performance/m5.5/coupon-drop.md)에 기록했다.
 - 회귀: hot-seats 중복 판매 0건 유지(`verify-integrity.sh`)
 
 ## 검증 (하위 단계마다)
