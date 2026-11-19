@@ -22,10 +22,11 @@ import org.awaitility.Awaitility.await
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.time.Instant
@@ -34,6 +35,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 @RecordApplicationEvents
+// 서비스 상태를 검증하는 동안 커밋 후 실행되는 예매 보상 리스너가 가짜 주문의 쿠폰을 해제하지 않게 한다.
+@Transactional
 class CouponReservationIntegrationTests(
     private val reserveUseCase: ReserveCouponUseCase,
     private val releaseUseCase: ReleaseCouponUseCase,
@@ -45,9 +48,6 @@ class CouponReservationIntegrationTests(
     private val tx: TransactionTemplate,
     private val publisher: ApplicationEventPublisher,
 ) : IntegrationTestSupport() {
-
-    @Autowired
-    private lateinit var events: ApplicationEvents
 
     private val now = Instant.parse("2026-11-11T00:00:00Z")
     private val memberId = 7001L
@@ -88,10 +88,10 @@ class CouponReservationIntegrationTests(
 
     private fun coupon(id: Long) = requireNotNull(issuedCoupons.findById(IssuedCouponId(id)))
 
-    private fun rejectedReasons() = events.stream(CouponRejected::class.java).map { it.reason }.toList()
+    private fun rejectedReasons(events: ApplicationEvents) = events.stream(CouponRejected::class.java).map { it.reason }.toList()
 
     @Test
-    fun `예약에 성공하면 RESERVED가 되고 할인액과 만료 시각이 기록되며 Reserved를 발행한다`() {
+    fun `예약에 성공하면 RESERVED가 되고 할인액과 만료 시각이 기록되며 Reserved를 발행한다`(events: ApplicationEvents) {
         val couponId = issueCoupon()
         val orderId = nextOrder()
 
@@ -108,7 +108,7 @@ class CouponReservationIntegrationTests(
     }
 
     @Test
-    fun `같은 요청이 재전달되면 같은 할인액으로 Reserved를 다시 발행한다`() {
+    fun `같은 요청이 재전달되면 같은 할인액으로 Reserved를 다시 발행한다`(events: ApplicationEvents) {
         val couponId = issueCoupon()
         val orderId = nextOrder()
 
@@ -122,30 +122,30 @@ class CouponReservationIntegrationTests(
     }
 
     @Test
-    fun `없는 쿠폰과 남의 쿠폰은 NOT_FOUND와 NOT_OWNER로 거부한다`() {
+    fun `없는 쿠폰과 남의 쿠폰은 NOT_FOUND와 NOT_OWNER로 거부한다`(events: ApplicationEvents) {
         val couponId = issueCoupon()
 
         reserveUseCase.reserve(request(nextOrder(), Long.MAX_VALUE))
         reserveUseCase.reserve(request(nextOrder(), couponId, owner = memberId + 1))
 
-        assertThat(rejectedReasons()).containsExactly("NOT_FOUND", "NOT_OWNER")
+        assertThat(rejectedReasons(events)).containsExactly("NOT_FOUND", "NOT_OWNER")
         assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.ISSUED)
     }
 
     @Test
-    fun `이미 다른 주문이 예약한 쿠폰은 NOT_AVAILABLE로 거부하고 선점은 유지된다`() {
+    fun `이미 다른 주문이 예약한 쿠폰은 NOT_AVAILABLE로 거부하고 선점은 유지된다`(events: ApplicationEvents) {
         val couponId = issueCoupon()
         val firstOrder = nextOrder()
         reserveUseCase.reserve(request(firstOrder, couponId))
 
         reserveUseCase.reserve(request(nextOrder(), couponId))
 
-        assertThat(rejectedReasons()).containsExactly("NOT_AVAILABLE")
+        assertThat(rejectedReasons(events)).containsExactly("NOT_AVAILABLE")
         assertThat(coupon(couponId).orderId).isEqualTo(OrderId(firstOrder))
     }
 
     @Test
-    fun `할인 조건에 맞지 않으면 사유별로 거부하고 쿠폰은 ISSUED로 남는다`() {
+    fun `할인 조건에 맞지 않으면 사유별로 거부하고 쿠폰은 ISSUED로 남는다`(events: ApplicationEvents) {
         val expired = issueCoupon(validFrom = now.minus(10, ChronoUnit.DAYS), validUntil = now.minus(1, ChronoUnit.DAYS))
         val otherPerformance = issueCoupon(performance = performanceId + 1)
         val belowMin = issueCoupon(minOrderAmount = 100000)
@@ -156,7 +156,7 @@ class CouponReservationIntegrationTests(
         reserveUseCase.reserve(request(nextOrder(), belowMin))
         reserveUseCase.reserve(request(nextOrder(), belowOne))
 
-        assertThat(rejectedReasons())
+        assertThat(rejectedReasons(events))
             .containsExactly("OUT_OF_VALID_PERIOD", "PERFORMANCE_MISMATCH", "BELOW_MIN_ORDER_AMOUNT", "AMOUNT_BELOW_MINIMUM")
         assertThat(listOf(expired, otherPerformance, belowMin, belowOne).map { coupon(it).status }).containsOnly(IssuedCouponStatus.ISSUED)
     }
@@ -214,18 +214,17 @@ class CouponReservationIntegrationTests(
     }
 
     @Test
-    fun `리스너는 요청 이벤트를 커밋 후 비동기로 처리해 쿠폰을 예약하고 해제한다`() {
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    fun `리스너는 커밋 후 쿠폰을 예약하고 예매가 없으면 보상으로 해제한다`(events: ApplicationEvents) {
         val couponId = issueCoupon()
         val orderId = nextOrder()
 
         tx.executeWithoutResult { publisher.publishEvent(request(orderId, couponId)) }
-        // 존재하지 않는 예매라 booking 리스너가 곧바로 해제를 요청하므로 RESERVED 상태가 아니라 Reserved 발행으로 예약을 확인한다
+
         await().atMost(10, TimeUnit.SECONDS).untilAsserted {
             assertThat(events.stream(CouponReserved::class.java).filter { it.orderId == orderId }.count()).isPositive()
-        }
-
-        tx.executeWithoutResult { publisher.publishEvent(CouponReleaseRequested(orderId, couponId, "TEST")) }
-        await().atMost(10, TimeUnit.SECONDS).untilAsserted {
+            assertThat(events.stream(CouponReleaseRequested::class.java).filter { it.orderId == orderId }.toList())
+                .containsExactly(CouponReleaseRequested(orderId, couponId, "STALE_RESERVATION"))
             assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.ISSUED)
         }
     }

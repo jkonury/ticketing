@@ -12,7 +12,9 @@ cd "$ROOT" || exit 2
 # 생성물이나 설명용으로만 쓰는 경로(정규식, 전체 일치)
 SKIP_PATHS=(
   'build/.*'
+  'core/build/.*'              # Gradle이 생성하는 테스트 결과 등
   '.*node_modules/.*'          # 설치해야 생기는 경로
+  'web/\.env\.local'          # 로컬 개발 환경 설정
 )
 
 fail=0
