@@ -93,7 +93,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 
 ## 목표
 ## 읽을 문서
-- `docs/rules/…`, `docs/architecture.md` 해당 절
+- `docs/rules/<해당 지침>`, `docs/architecture.md` 해당 절
 ## 변경 허용 범위
 - 파일·모듈
 ## 금지

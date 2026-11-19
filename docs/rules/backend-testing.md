@@ -51,6 +51,15 @@
 - 재사용 범위는 같은 테스트 JVM이다. Gradle 실행 간 재사용을 위한 `withReuse(true)`나 개인 환경 설정을 기본 전제로 추가하지 않는다.
 - 재사용 구성을 바꾸면 테스트 필터 없이 관련 테스트를 실행하고, 컨텍스트·컨테이너 기동 수와 스위트 시간을 비교한다. 측정 방법과 기존 결과는 [통합 테스트 재사용 개선](../test-performance.md)을 참고한다.
 
+## 테스트 시간 관리
+
+- 층위: 규칙·계산은 Spring 없는 단위 테스트로 검증한다. `@SpringBootTest`는 모듈 간 흐름·트랜잭션·DB 제약처럼 통합해야만 확인되는 것에만 쓴다. 웹이나 JPA 계층만 필요하면 슬라이스 테스트(`@WebMvcTest`, `@DataJpaTest`)를 먼저 고려한다.
+- 컨텍스트 예산: 새 통합 테스트를 추가할 때 기존 컨텍스트를 재사용하는지 확인한다. 컨텍스트를 새로 만들어야 하면 이유를 PR·커밋에 남긴다. 컨텍스트 기동 수는 테스트 로그의 `Started ... in N seconds` 개수로 센다.
+- 비동기 대기: Awaitility로 조건을 기다리고 `pollDelay`는 0, `pollInterval`은 짧게 둔다. 테스트 프로필에서는 재시도 backoff·폴링 주기·재발행 주기·Kafka 초기 리밸런스 지연을 짧게 둔다(값은 공식 문서로 확인). 재시도 시나리오는 실제 시간 경과 대신 짧은 설정값이나 직접 트리거로 검증한다.
+- 병렬 실행: 위 격리 규칙(고유 식별자, 컨텍스트별 DB·Redis DB·토픽 접두사, `Clock` 주입)을 지키면 Gradle `maxParallelForks`로 테스트 클래스를 여러 JVM에 나눌 수 있다. 포크마다 컨테이너를 따로 띄우므로 도입 전에 기동 비용·메모리와 스위트 시간을 비교하고, 새 테스트는 전역 truncate·고정 ID·정적 가변 상태에 기대지 않는다. 신규 모듈은 처음부터 병렬 실행 가능한 격리로 작성한다.
+- 테스트용 PostgreSQL은 내구성이 필요 없으므로 `fsync=off`, `synchronous_commit=off`, tmpfs 데이터 디렉터리 적용을 검토한다.
+- 측정: 느린 테스트는 `build/test-results/**/TEST-*.xml`의 `time`으로 상위 클래스를 뽑아 확인한다. 통합 테스트 클래스가 몇 초를 넘거나 스위트가 눈에 띄게 늘면 `--profile`로 다시 측정한다. 측정 방법과 기존 결과는 [통합 테스트 재사용 개선](../test-performance.md)에 기록한다.
+
 ## 이벤트 계약
 
 - `contract`의 `ContractEventSerializationTests`와 `core`의 `ContractEventPublicationSerializationTests`에서 JSON 골든 파일을 공유한다. 계약 이벤트 변경 시 기본 직렬화와 실제 Modulith `EventSerializer`의 호환성을 모두 검증한다. [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)
