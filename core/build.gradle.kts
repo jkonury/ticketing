@@ -96,6 +96,9 @@ tasks.matching { it.name.startsWith("runKtlint") || it.name.startsWith("ktlint")
 
 // 문서 생성 테스트는 docs/를 덮어쓰므로 기본 test에서 빼고, 모듈 의존을 바꿨을 때만 modulithDocs로 실행한다.
 tasks.test {
+    val coreTestForks = providers.gradleProperty("coreTestForks").orElse("1").get()
+    maxParallelForks = coreTestForks.toIntOrNull()?.takeIf { it >= 1 }
+        ?: throw GradleException("coreTestForks는 1 이상의 정수여야 합니다: '$coreTestForks'")
     useJUnitPlatform {
         excludeTags("docs")
     }
