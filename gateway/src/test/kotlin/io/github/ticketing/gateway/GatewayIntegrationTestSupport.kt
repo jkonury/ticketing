@@ -4,6 +4,9 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient
+import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter
+import org.springframework.core.io.ClassPathResource
+import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.http.HttpHeaders
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwsHeader
@@ -12,6 +15,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.context.bean.override.convention.TestBean
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.testcontainers.containers.GenericContainer
 import reactor.netty.DisposableServer
@@ -28,6 +32,9 @@ private const val TEST_SECRET = "test-secret-test-secret-test-secret-0123"
 @AutoConfigureWebTestClient
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClient) {
+    @TestBean(name = RedisRateLimiter.REDIS_SCRIPT_NAME, methodName = "fixedTimeRateLimitScript", enforceOverride = true)
+    protected lateinit var rateLimitScript: RedisScript<*>
+
     protected lateinit var client: WebTestClient
     protected val core = TestInfrastructure.core
     protected val realtime = TestInfrastructure.realtime
@@ -52,6 +59,13 @@ abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClie
     }
 
     companion object {
+        @JvmStatic
+        fun fixedTimeRateLimitScript(): RedisScript<List<*>> {
+            val script = ClassPathResource("META-INF/scripts/request_rate_limiter.lua").getContentAsString(Charsets.UTF_8)
+            // Redis 서버의 초 경계와 관계없이 버킷 소진을 검증할 수 있도록 Lua의 시각 인자를 고정한다.
+            return RedisScript.of("ARGV[3] = '1'\n$script", List::class.java)
+        }
+
         @JvmStatic
         @DynamicPropertySource
         fun properties(registry: DynamicPropertyRegistry) {
