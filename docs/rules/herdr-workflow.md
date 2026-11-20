@@ -37,7 +37,27 @@
 
 - 시작할 때 main이 해석한 범위(단일/다중, 커밋 여부)를 사용자에게 한 줄로 알린다.
 - `multi-task`와 `auto-commit`은 지시에 범위가 명시된 경우만 켠다. 그 범위를 넘는 task는 시작하지 않는다.
+- 공유 작업 트리에서 task별 커밋 권한이 없으면 단일 task의 구현·리뷰·최종 검증까지 마친다. 독립적으로 검증하고 커밋할 수 있는 수정은 권한이 있을 때 각각 별도 task로 실행한다.
 - 커밋 규칙은 `AGENTS.md` 7절(커밋은 사용자가 요청할 때만)을 따른다.
+
+### 공용 실행 프롬프트
+
+Claude Code 또는 Codex 메인에 아래 입력을 채워 전달한다.
+
+```text
+docs/rules/herdr-workflow.md에 따라 아래 범위를 herdr로 위임해 완료해 줘.
+
+- 리뷰 파일 경로: <저장소 기준 경로>
+- 작업 항목과 실행 순서: <task별 항목을 순서대로, 각 task의 완료 기준 포함>
+- 설계 합의가 필요한 항목: <항목과 합의 필요 사항 또는 없음>
+- task별 로컬 커밋 권한: <허용하는 task 목록 또는 없음>
+
+설계 합의가 필요한 항목은 합의한 뒤 시작해. 구현자와 리뷰어는 서로 다른 종류로 실행해.
+각 task의 리뷰와 최종 검증을 마치고, 권한이 있는 task는 로컬 커밋 후 다음 작업으로 넘어가.
+검사 결과와 해당 로그 경로를 남기고, 리뷰 차단이나 필수 검사·커밋 훅 실패는 해당 task에서 해결해.
+```
+
+코어 리뷰 사례에서는 `#2 → #4 → #5 → #7 → #6`을 각각 검증·커밋하고, `#1·#3`은 예약 회차와 진행 중 제거 설계에 합의한 뒤 하나의 쿠폰 Saga task로 진행한다.
 
 ## 3. 준비
 
@@ -51,64 +71,84 @@ herdr agent list                           # impl·review가 idle인지 확인
 - 현재 탭·현재 디렉터리의 형제 pane만 만든다. workspace·tab·worktree는 만들지 않는다.
 - 이미 살아 있는 `impl`·`review`가 있으면 재사용한다. 종류가 규칙과 어긋나면 오류로 멈추며 임의로 닫지 않는다.
 - 만든 pane은 `build/orchestration/panes.json`에 기록되고 `herdr-down.sh`는 그 pane만 닫는다.
-- **작업 트리가 깨끗하지 않으면 자동 진행을 멈추고 사용자에게 묻는다.** 같은 트리를 공유하므로 사용자 변경과 impl 변경을 구분할 수 없기 때문이다. `build/` 같은 git 제외 생성물은 무관하다. 사용자가 기존 변경을 둔 채 진행하라고 하면 그 목록을 기준선으로 기록하고, 해당 경로는 task 범위에서 제외한다.
+- 가드를 쓰는 실행은 깨끗한 작업 트리에서 시작한다. `build/`처럼 Git에서 제외한 생성물은 상태 검사에 포함되지 않는다. 사용자가 기존 변경을 둔 채 독립 위임을 진행하라고 하면 위치 인자 호출을 사용하고, 시작 변경 목록을 기록해 해당 경로를 위임 범위에서 제외한다.
+- 실행마다 `build/orchestration/<run-id>`를 만들고 그 바로 아래에 task 디렉터리를 둔다. 한 실행은 한 메인이 순차로 진행한다. 모든 구현·리뷰·수정 위임에 같은 실행 디렉터리의 `--task`를 사용한다.
 - 리뷰 기준 문서([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md))가 있고 읽히는지 확인한다.
 
 | 스크립트 | 용도 |
 |---|---|
 | `herdr-up.sh [--impl-kind K] [--review-kind K] [--impl-name N] [--review-name N] [--impl-args "…"] [--review-args "…"]` | pane 생성과 에이전트 시작 |
-| `herdr-delegate.sh <agent> <brief.md> [<report.md>]` | 지시서 경로만 담은 짧은 프롬프트 전송. 이전 보고 파일은 먼저 지운다 |
+| `herdr-delegate.sh [--task <task-dir>] <agent> <brief.md> [<report.md>]` | 경로를 담은 짧은 프롬프트 전송. `--task`는 실행의 Git 상태를 확인한다. 위치 인자만 주면 독립 위임으로 동작한다 |
 | `herdr-wait.sh <agent> [--timeout ms]` | 실행 종료 대기 (백그라운드 실행) |
 | `herdr-down.sh` | 내가 만든 pane 정리 |
 
 ## 4. task 루프
 
-1. 다음 task를 정하고(로드맵 항목이면 다음 미완료 항목) 지시서를 쓴다(5절). `build/orchestration/<task-id>/base.txt`에 기준 `HEAD`, 시작 시 `git status --porcelain=v1 -uall` 출력, 허용 경로 목록을 기록한다.
-2. `herdr-delegate.sh impl build/orchestration/<task-id>/brief.md`
-3. **Bash `run_in_background`로** `herdr-wait.sh impl`을 건다. 끝나면 알림이 오므로 사용자 명령 없이 이어간다. 완료 판정은 6절을 따른다.
+1. 다음 task를 정하고(로드맵 항목이면 다음 미완료 항목) 지시서를 쓴다(5절). `task_dir=build/orchestration/<run-id>/<task-id>`로 두고, 그 안의 `base.txt`에 기준 `HEAD`, 시작 시 `git status --porcelain=v1 -uall` 출력, 허용 경로 목록을 기록한다.
+2. `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다.
+3. `herdr-wait.sh impl`을 메인 클라이언트의 백그라운드 명령으로 실행하고, 결과가 도착하면 이어간다. 완료 판정은 6절을 따른다. 구현이 끝나면 컨텍스트를 점검한다(4절 하단).
 4. 변경 범위가 지시서 안인지 확인한다. `git diff`는 신규 파일과 staged 변경을 놓치므로 다음을 함께 본다. 범위 밖이면 impl에 되돌리도록 지시한다.
    ```bash
    git status --porcelain=v1 -uall
    git diff HEAD --stat
    git ls-files --others --exclude-standard
    ```
-5. 리뷰 지시서를 쓰고 `herdr-delegate.sh review …`, 이어서 `herdr-wait.sh review`를 백그라운드로 건다.
-6. `review.md`의 차단 항목을 확인한다. 있으면 수정 지시서(`<task-id>/fix-N/brief.md`)를 만들어 2번으로 돌아가고, 수정 뒤에는 다시 리뷰한다.
+5. 리뷰 지시서를 쓰고 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" review "$task_dir/review-brief.md"`로 맡긴다. `herdr-wait.sh review`를 백그라운드로 실행하고, 리뷰가 끝나면 컨텍스트를 점검한다.
+6. `review.md`에 차단 항목이 있으면 수정 지시서(`fix-N/brief.md`)를 만들어 2번으로 돌아간다. `--task`에는 계속 원래 `task_dir`를 전달한다. 수정이 끝나면 컨텍스트를 점검하고 다시 리뷰한다.
    - **초기 구현 1회 + 후속 수정 최대 2회**다. 후속 수정에는 리뷰 차단 사항과 main 재검증 실패가 모두 포함된다.
    - 2회를 넘으면 자동으로 더 시도하지 않고 남은 문제를 사용자에게 보고한다.
-7. main이 AC를 직접 재검증한다(7절 범위, 같은 트리에서 impl·review가 Gradle을 돌리지 않을 때). impl의 필터 테스트 통과는 최종 AC가 아니다. Docker 미기동·포트 충돌·Testcontainers 실패 같은 **환경 문제는 impl 결함과 구분**해 보고하며 수정 횟수에 세지 않는다.
-8. 최종 AC가 통과하면 다음 순서로 마무리한다.
-   1. 로드맵 항목에 대응하는 task면 해당 체크박스만 갱신한다(대응 항목이 없으면 생략).
-   2. 그 task의 파일과 로드맵만 스테이징하고(`git add -A` 금지) `git diff --cached --stat`으로 허용한 변경만 담겼는지 확인한다.
-   3. 커밋이 허용된 경우에만 커밋한다. 허용되지 않았다면 로드맵 변경도 미커밋으로 두고 그 사실을 보고한다.
-   4. `git status`로 남은 변경을 확인하고 보고한다.
-9. 실행 범위(2절)가 다중 task일 때만 다음 task로 간다. 단계의 완료 기준을 넘는 task는 시작하지 않는다.
+7. 리뷰 차단이 해소되면 main이 검증할 변경을 확정한다. 완료 기준을 충족한 로드맵 항목은 해당 체크박스를 갱신하고 그 변경도 검토한다. 커밋 권한이 있으면 리뷰를 마친 경로만 명시해 스테이징한다. `git diff --cached`로 기준 `HEAD` 대비 변경이 리뷰에서 확인한 내용과 일치하는지 확인하고 `git write-tree`로 인덱스 트리 ID를 기록한다. `git diff --quiet --ignore-submodules=none`이 통과하고 `git ls-files --others --exclude-standard` 출력이 비어 있어야 검증을 시작한다.
+8. main은 리뷰된 변경에서 7절의 최종 AC를 순차 실행한다. impl의 관련 회귀 검사 결과는 보고서에서 확인한다. Docker 미기동·포트 충돌·Testcontainers 실패 같은 환경 문제는 수정 횟수에 세지 않는다. 검사가 끝날 때마다 결과와 로그를 보관한다(7절). 필수 검사 실패나 리뷰 차단이 남아 있는 동안에는 해당 task에 머문다.
+9. 최종 AC 통과 후 커밋 권한이 있으면 `HEAD`가 시작값인지, `git write-tree` 값이 검증 전과 같은지, unstaged·untracked 변경이 없는지 다시 확인한다. 내용이 바뀌면 영향을 받는 리뷰와 검증을 다시 진행한다. 커밋 훅이 통과한 뒤 커밋의 트리(`git rev-parse 'HEAD^{tree}'`)가 검증한 트리와 같은지, 작업 트리가 깨끗한지 확인한다. 훅이 실패하거나 검증과 커밋 내용이 다르면 해당 task에서 멈춘다. 커밋 권한이 없으면 검증 결과와 미커밋 상태를 보고한다.
+10. 실행 범위가 다중 task이고 직전 task를 마무리했을 때만 다음 task로 간다. 단계의 완료 기준을 지킨다.
+
+### 위임 전 Git 검사
+
+`--task`는 `task_dir`의 부모에 있는 `active-task.json`에 현재 task 경로와 시작 `HEAD`를 기록한다. 첫 task는 staged·unstaged·untracked 변경이 모두 없을 때 시작한다. 같은 task의 구현·리뷰·수정은 작업 트리에 변경이 있어도 `HEAD`가 시작값과 같으면 허용한다. 다음 task는 현재 `HEAD`의 유일한 부모가 직전 task의 시작 `HEAD`이고 작업 트리가 깨끗할 때 허용한다. 차단되면 해당 사유를 출력하고 보고서를 지우거나 프롬프트를 보내기 전에 종료한다.
+
+### 컨텍스트와 토큰
+
+구현·리뷰·수정이 끝날 때마다 메인·구현·리뷰 세션의 컨텍스트 사용률을 확인한다. 남은 비율만 표시되면 `100% - 남은 비율`로 계산한다.
+
+| 도구 | 사용률 확인 | 같은 task 압축 | 새 대화 |
+|---|---|---|---|
+| Claude Code | `/context` | `/compact` | `/clear` |
+| Codex CLI | `/status` | `/compact` | `/new` |
+
+- 20%부터 해당 task의 `progress.md`에 현재 task, 결정, 검증 결과와 로그 경로, 다음 행동을 남긴다.
+- 25% 이상에 도달한 세션은 실행 중인 명령이 끝난 뒤 정리한다. 같은 task를 계속하면 압축하고, 다음 task는 새 대화에서 시작한다. 압축 후에도 25% 이상이면 `progress.md`를 바탕으로 같은 task를 새 대화에서 재개한다. 사용률을 확인할 수 없는 클라이언트는 task 경계마다 새 대화를 사용한다.
+- 25%는 체크포인트에서 정리를 시작하는 기준이다. 자동 압축 설정은 Claude Code 30%와 현재 Codex 설정을 유지한다.
+- 첫 적용에서는 클라이언트·모델별 최대 관측 사용률, 압축 횟수, 새 대화 횟수를 실행 디렉터리에 기록한다. 클라이언트가 제공하는 입력·캐시 입력·출력 토큰도 함께 기록한다.
+
+[Claude Code 명령](https://code.claude.com/docs/en/commands) · [Codex CLI 명령](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 
 ## 5. 지시서 템플릿
 
-경로는 `build/orchestration/<task-id>/brief.md`(`build/`는 git 제외). 지시서 작성 원칙(자기완결성, 최소 참조, 실행 가능한 AC, 구체적인 금지 사항, 보고 분량)은 [서브에이전트 위임 지침](subagent-delegation.md)을 따른다.
+경로는 `<task-dir>/brief.md`다. 본문은 파일에 두고 위임 메시지에는 지시서 경로를 전달한다. 지시서에 `herdr-delegate.sh`가 지울 보고서 경로를 적는다. 기본값은 지시서와 같은 디렉터리의 `report.md`이며, 에이전트 이름이 `review`이면 `review.md`다. 다른 경로를 쓰면 호출의 보고서 인자에도 같은 경로를 준다. 결과 채팅은 판정과 로그 경로만 전달한다. 지시서 작성 원칙은 [서브에이전트 위임 지침](subagent-delegation.md)을 따른다.
 
 ```markdown
 # <task-id> <제목>
 
 ## 목표
+## 기준 커밋
+- `<시작 HEAD>`
 ## 읽을 문서
-- `docs/rules/<해당 지침>`, `docs/architecture.md` 해당 절
+- `docs/rules/<해당 지침> § <관련 절>`, `docs/architecture.md § <관련 절>`
 ## 변경 허용 범위
 - 파일·모듈
 ## 금지
 - 커밋 금지, 범위 밖 수정 금지, `@Suppress`·baseline·테스트 삭제/비활성화 금지
 ## AC
-- 명령과 기대 결과 (`./scripts/agent/test/run-tests.sh --tests "패턴"` 필터 허용)
+- 관련 회귀 검사의 명령과 기대 결과 (저장소 테스트 규칙에 맞춰 실행)
 ## 보고
-- 보고 파일: `build/orchestration/<task-id>/report.md` (`herdr-delegate.sh`가 지정)
+- 보고 파일은 `<task-dir>/report.md`다.
 - 형식: 첫 줄 `# <task-id> 보고`, 마지막 줄 `결과: 완료` 또는 `결과: 실패`
 - 포함: 변경 요약, 실행한 검사와 결과(실패는 그대로), 미해결 사항
 ```
 
 ### 리뷰 지시서
 
-대상 diff 범위(`git diff HEAD -- 경로`와 신규 파일), 기준 문서([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md)), 출력 형식을 적고 **코드는 수정하지 말고 읽기만** 하도록 명시한다. diff만으로는 보이지 않는 문제(호출자와의 계약, 이벤트 소비자, 기존 테스트와의 충돌)를 위해 **인접 파일과 ADR을 읽는 것은 허용**한다. 결과는 `review.md`다.
+목표, 기준 커밋, 대상 diff 범위(기준 커밋 대비 변경과 신규 파일), 기준 문서의 관련 절([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md)), 확인할 검증 명령과 출력 형식을 적고 읽기 전용으로 지시한다. 호출자와의 계약, 이벤트 소비자, 기존 테스트와의 충돌을 확인할 때 인접 코드와 ADR을 참고한다. 결과는 `review.md`다.
 
 리뷰 기준:
 
@@ -183,6 +223,8 @@ main의 최종 검증은 변경 유형에 따라 다음을 모두 통과해야 �
 | 문서 변경 | `./scripts/agent/docs/check-docs.sh [경로...]` |
 
 실행하지 않은 검사는 최종 보고에 건너뛴 항목으로 적는다.
+
+검사가 끝날 때마다 명령, 종료 코드, 결과와 실패 테스트 이름을 task 디렉터리에 기록한다. 공용 파일은 다음 실행이 덮어쓰기 전에 그 task의 `logs/`에 복사한다. 재실행할 때는 시도별 이름을 붙인다. 보관 대상은 테스트 결과와 `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`, E2E의 `build/e2e/logs` 등 실제 사용한 로그다.
 
 ## 8. blocked 처리
 
