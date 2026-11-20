@@ -3,6 +3,10 @@ plugins {
     id("ticketing.no-database")
 }
 
+tasks.withType<Test> {
+    systemProperty("spring.reactor.netty.shutdown-quiet-period", "0ms")
+}
+
 // gateway는 PostgreSQL에 접근하지 않는다. JPA, JDBC, jOOQ 의존성을 추가하지 않는다.
 dependencies {
     implementation("org.springframework.cloud:spring-cloud-starter-gateway-server-webflux")

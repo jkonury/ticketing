@@ -2,6 +2,8 @@ package io.github.ticketing.booking.application.flow
 
 import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.KafkaTestSupport
+import io.github.ticketing.KafkaTopics
 import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
@@ -19,11 +21,14 @@ import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
 import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
 import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
+import io.github.ticketing.publicationCompleted
+import io.github.ticketing.publicationIds
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
@@ -58,6 +63,8 @@ class BookingPaymentFlowTests(
     private val clock: MutableClock,
     private val collector: EventCollector,
     private val meters: MeterRegistry,
+    private val topics: KafkaTopics,
+    private val kafkaProperties: KafkaProperties,
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
@@ -140,6 +147,16 @@ class BookingPaymentFlowTests(
     private fun soldSeatCount(bookingId: Long): Int =
         requireNotNull(jdbc.queryForObject("SELECT count(*) FROM booking.sold_seat WHERE booking_id = ?", Int::class.java, bookingId))
 
+    private fun awaitConfirmedListeners(bookingId: Long) {
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            listOf("BookingNotificationListener.on", "BookingEventListener.on").forEach { listener ->
+                val ids = publicationIds(jdbc, BookingConfirmed::class.java, "bookingId", bookingId, listener)
+                assertThat(ids).hasSize(1)
+                assertThat(publicationCompleted(jdbc, ids.single())).isTrue()
+            }
+        }
+    }
+
     @Test
     fun `결제를 요청하면 PaymentRequested가 한 번 발행되고 재요청해도 늘지 않는다`() {
         val schedule = newSchedule()
@@ -209,11 +226,13 @@ class BookingPaymentFlowTests(
         }
         assertThat(soldSeatCount(id)).isEqualTo(2)
 
-        // 중복 이벤트가 모두 처리될 시간을 준다
-        await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
-            assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).hasSize(1)
-            assertThat(statusOf(token, id)).isEqualTo("CONFIRMED")
-        }
+        KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.paymentSucceeded, id.toString(), "ticketing-booking", 3)
+        assertThat(
+            KafkaTestSupport.recordsOf(kafkaProperties.bootstrapServers, topics.deadLetterOf(topics.paymentSucceeded), id.toString()),
+        ).isEmpty()
+        awaitConfirmedListeners(id)
+        assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).hasSize(1)
+        assertThat(statusOf(token, id)).isEqualTo("CONFIRMED")
 
         assertThat(soldSeatCount(id)).isEqualTo(2)
         val confirmed = collector.of(BookingConfirmed::class.java) { it.bookingId == id }.single()
@@ -260,10 +279,13 @@ class BookingPaymentFlowTests(
         awaitStatus(token, id, "CONFIRMED")
         succeed(id, paymentId = 999)
 
-        await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
-            assertThat(lag.count() - countBefore).isEqualTo(1L)
-            assertThat(lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) - totalBefore).isEqualTo(1500.0)
-        }
+        KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.paymentSucceeded, id.toString(), "ticketing-booking", 2)
+        assertThat(
+            KafkaTestSupport.recordsOf(kafkaProperties.bootstrapServers, topics.deadLetterOf(topics.paymentSucceeded), id.toString()),
+        ).isEmpty()
+        awaitConfirmedListeners(id)
+        assertThat(lag.count() - countBefore).isEqualTo(1L)
+        assertThat(lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) - totalBefore).isEqualTo(1500.0)
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry
 import org.springframework.transaction.support.TransactionTemplate
 import org.testcontainers.DockerClientFactory
 import org.testcontainers.kafka.KafkaContainer
@@ -31,7 +32,8 @@ class KafkaRecoveryIntegrationTests {
         val event = PaymentRequested(order, 1, BigDecimal("100"), UUID.randomUUID().toString(), Instant.parse("2026-11-11T00:00:00Z"))
         val docker = DockerClientFactory.instance().client()
         lateinit var publicationId: UUID
-        start(args).use { context ->
+        start(args + "--spring.kafka.listener.auto-startup=false").use { context ->
+            assertThat(context.getBean(KafkaListenerEndpointRegistry::class.java).listenerContainers).allMatch { !it.isRunning }
             val jdbc = context.getBean(JdbcTemplate::class.java)
             docker.pauseContainerCmd(kafka.containerId).exec()
             try {
@@ -53,6 +55,7 @@ class KafkaRecoveryIntegrationTests {
             }
         }
         start(args).use { context ->
+            assertThat(context.getBean(KafkaListenerEndpointRegistry::class.java).listenerContainers).anyMatch { it.isRunning }
             val jdbc = context.getBean(JdbcTemplate::class.java)
             await().atMost(Duration.ofSeconds(60)).untilAsserted {
                 assertThat(

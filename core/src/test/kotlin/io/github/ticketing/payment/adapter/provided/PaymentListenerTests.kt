@@ -86,11 +86,10 @@ class PaymentListenerTests(
         repeat(3) { publish(event) }
 
         await().atMost(Duration.ofSeconds(15)).untilAsserted { assertThat(pgTransactionOf(order)).isNotNull() }
-        // 중복이 모두 소비될 시간을 주고도 늘지 않는지 확인한다
-        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted {
-            assertThat(pg.requests.count { it.orderId == order.toString() }).isEqualTo(1)
-            assertThat(jdbc.queryForObject("select count(*) from payment.payment where order_id = ?", Int::class.java, order)).isEqualTo(1)
-        }
+        KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.paymentRequested, order.toString(), "ticketing-payment", 3)
+        assertThat(deadLetters(topics.paymentRequested, order)).isEmpty()
+        assertThat(pg.requests.count { it.orderId == order.toString() }).isEqualTo(1)
+        assertThat(jdbc.queryForObject("select count(*) from payment.payment where order_id = ?", Int::class.java, order)).isEqualTo(1)
     }
 
     @Test
@@ -146,9 +145,8 @@ class PaymentListenerTests(
         await().atMost(Duration.ofSeconds(15)).untilAsserted {
             assertThat(pg.refunds.count { it.first == "ok-$order" }).isGreaterThanOrEqualTo(1)
         }
-        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted {
-            assertThat(pg.refunds.filter { it.first == "ok-$order" }.map { it.second }.toSet()).containsExactly("refund-$order")
-        }
+        KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.refundRequested, order.toString(), "ticketing-payment", 3)
+        assertThat(pg.refunds.filter { it.first == "ok-$order" }.map { it.second }.toSet()).containsExactly("refund-$order")
         assertThat(jdbc.queryForObject("select status from payment.payment where order_id = ?", String::class.java, order))
             .isEqualTo("REFUND_REQUESTED")
         assertThat(deadLetters(topics.refundRequested, order)).isEmpty()

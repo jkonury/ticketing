@@ -22,7 +22,13 @@ import org.springframework.web.method.HandlerMethod
 import ticketing.jooq.booking.tables.references.BOOKING_
 import java.time.Duration
 
-@TestPropertySource(properties = ["ticketing.startup-warmup.enabled=true", "ticketing.startup-warmup.local-iterations=0"])
+@TestPropertySource(
+    properties = [
+        "ticketing.startup-warmup.enabled=true",
+        "ticketing.startup-warmup.local-iterations=0",
+        "ticketing.startup-warmup.adapter-iterations=0",
+    ],
+)
 internal class StartupWarmupSecurityTests(
     private val mockMvcTester: MockMvcTester,
     private val dsl: DSLContext,

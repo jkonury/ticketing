@@ -9,7 +9,13 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestPropertySource
 
-@TestPropertySource(properties = ["ticketing.startup-warmup.enabled=true", "ticketing.startup-warmup.local-iterations=0"])
+@TestPropertySource(
+    properties = [
+        "ticketing.startup-warmup.enabled=true",
+        "ticketing.startup-warmup.local-iterations=0",
+        "ticketing.startup-warmup.adapter-iterations=0",
+    ],
+)
 internal class PaymentWarmupWorkTests(
     private val work: PaymentWarmupWork,
     private val jdbc: JdbcTemplate,

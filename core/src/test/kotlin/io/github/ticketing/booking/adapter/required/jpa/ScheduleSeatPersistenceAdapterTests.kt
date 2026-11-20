@@ -8,8 +8,11 @@ import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
-import org.hibernate.SessionFactory
+import org.hibernate.Session
+import org.hibernate.SessionEventListener
 import org.junit.jupiter.api.Test
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.orm.jpa.EntityManagerFactoryUtils
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.time.Instant
@@ -18,6 +21,7 @@ class ScheduleSeatPersistenceAdapterTests(
     private val port: ScheduleSeatCommandPort,
     private val tx: TransactionTemplate,
     private val emf: EntityManagerFactory,
+    private val jdbc: JdbcTemplate,
 ) : IntegrationTestSupport() {
 
     private val now = Instant.parse("2026-11-10T10:00:00Z")
@@ -45,16 +49,20 @@ class ScheduleSeatPersistenceAdapterTests(
         val id = ScheduleId(System.nanoTime())
         val schedule = ScheduleCopy(id, 1, "공연", 2, now, now)
         val seats = (1L..3L).map { ScheduleSeatCopy(id, SeatId(it), "VIP", "A구역 $it", BigDecimal(150000)) }
-        val statistics = emf.unwrap(SessionFactory::class.java).statistics
-        statistics.isStatisticsEnabled = true
-        statistics.clear()
+        var preparedStatements = 0
 
-        tx.execute { port.saveIfAbsent(schedule, seats) }
+        tx.executeWithoutResult {
+            val entityManager = requireNotNull(EntityManagerFactoryUtils.getTransactionalEntityManager(emf))
+            entityManager.unwrap(Session::class.java).addEventListeners(object : SessionEventListener {
+                override fun jdbcPrepareStatementStart() {
+                    preparedStatements++
+                }
+            })
+            port.saveIfAbsent(schedule, seats)
+        }
 
-        // 회차는 jOOQ(통계 제외), 좌석 INSERT 3건만 JPA가 실행한다. merge였다면 SELECT 3건이 더해진다
-        assertThat(statistics.prepareStatementCount).isEqualTo(3)
-        assertThat(statistics.entityInsertCount).isEqualTo(3)
-
-        statistics.isStatisticsEnabled = false
+        assertThat(preparedStatements).isEqualTo(3)
+        val saved = jdbc.queryForList("select seat_id from booking.schedule_seat where schedule_id = ?", Long::class.java, id.value)
+        assertThat(saved).containsExactlyInAnyOrderElementsOf(seats.map { it.seatId.value })
     }
 }

@@ -3,6 +3,8 @@ package io.github.ticketing.booking.adapter.provided.event
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.catalog.ScheduleRegistered
 import io.github.ticketing.catalog.ScheduleSeat
+import io.github.ticketing.publicationCompleted
+import io.github.ticketing.publicationIds
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
@@ -44,11 +46,17 @@ class ScheduleRegisteredListenerTests(
             assertThat(seatCount(scheduleId)).isEqualTo(2)
         }
 
-        // 두 번째 이벤트가 처리될 시간을 준 뒤에도 행 수가 변하지 않는지 확인한다
+        val before = publicationIds(jdbc, ScheduleRegistered::class.java, "scheduleId", scheduleId, "ScheduleRegisteredListener.on")
+        assertThat(before).hasSize(1)
         tx.executeWithoutResult { publisher.publishEvent(event) }
-        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(10)).untilAsserted {
-            assertThat(scheduleCount(scheduleId)).isEqualTo(1)
-            assertThat(seatCount(scheduleId)).isEqualTo(2)
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            val newIds =
+                publicationIds(jdbc, ScheduleRegistered::class.java, "scheduleId", scheduleId, "ScheduleRegisteredListener.on") -
+                    before.toSet()
+            assertThat(newIds).hasSize(1)
+            assertThat(publicationCompleted(jdbc, newIds.single())).isTrue()
         }
+        assertThat(scheduleCount(scheduleId)).isEqualTo(1)
+        assertThat(seatCount(scheduleId)).isEqualTo(2)
     }
 }

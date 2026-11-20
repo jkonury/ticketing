@@ -2,6 +2,8 @@ package io.github.ticketing.payment.flow
 
 import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.KafkaTestSupport
+import io.github.ticketing.KafkaTopics
 import io.github.ticketing.MutableClock
 import io.github.ticketing.TestPg
 import io.github.ticketing.booking.BookingCancelled
@@ -27,6 +29,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
@@ -65,6 +68,8 @@ class PaymentFlowTests(
     private val jdbc: JdbcTemplate,
     private val clock: MutableClock,
     private val collector: EventCollector,
+    private val topics: KafkaTopics,
+    private val kafkaProperties: KafkaProperties,
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
@@ -284,11 +289,10 @@ class PaymentFlowTests(
 
             pg.refundResult = "accepted"
             await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(refundsOf(id)).hasSizeGreaterThanOrEqualTo(2) }
-            // 접수되면 재시도가 멈춘다
-            val attempts = refundsOf(id).size
-            await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted {
-                assertThat(refundsOf(id)).hasSize(attempts)
-            }
+            KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.refundRequested, id.toString(), "ticketing-payment", 1)
+            assertThat(
+                KafkaTestSupport.recordsOf(kafkaProperties.bootstrapServers, topics.deadLetterOf(topics.refundRequested), id.toString()),
+            ).isEmpty()
 
             assertThat(refundsOf(id).map { it.second }).containsOnly("refund-$id")
 

@@ -5,7 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.ActiveProfiles
+import java.util.UUID
 
 /**
  * Testcontainers(PostgreSQL, Redis) 위에서 전체 컨텍스트를 띄우는 통합 테스트 베이스.
@@ -33,3 +35,18 @@ abstract class IntegrationTestSupport {
         resetter.reset()
     }
 }
+
+fun publicationIds(jdbc: JdbcTemplate, eventType: Class<*>, field: String, value: Long, listener: String): List<UUID> = jdbc.queryForList(
+    "select id from public.event_publication where event_type = ? and serialized_event::jsonb ->> ? = ? and listener_id like ?",
+    UUID::class.java,
+    eventType.name,
+    field,
+    value.toString(),
+    "%$listener%",
+).map { requireNotNull(it) }
+
+fun publicationCompleted(jdbc: JdbcTemplate, id: UUID): Boolean = jdbc.queryForObject(
+    "select count(*) from public.event_publication where id = ? and status = 'COMPLETED' and completion_date is not null",
+    Int::class.java,
+    id,
+) == 1

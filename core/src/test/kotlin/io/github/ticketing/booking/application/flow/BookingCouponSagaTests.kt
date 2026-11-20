@@ -30,6 +30,8 @@ import io.github.ticketing.expectStatus
 import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.PaymentSucceeded
+import io.github.ticketing.publicationCompleted
+import io.github.ticketing.publicationIds
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
@@ -269,10 +271,8 @@ class BookingCouponSagaTests(
 
         cancel(m, id).expectStatus(HttpStatus.OK)
 
-        await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
-            assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.USED)
-            assertThat(releases(id)).isEmpty()
-        }
+        assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.USED)
+        assertThat(releases(id)).isEmpty()
     }
 
     @Test
@@ -312,12 +312,16 @@ class BookingCouponSagaTests(
         val m = member()
         val (id, couponId) = reservedBooking(m, newSchedule())
 
+        val before = publicationIds(jdbc, CouponReserved::class.java, "orderId", id, "CouponResultListener.on")
         tx.executeWithoutResult { publisher.publishEvent(CouponReserved(id, couponId, BigDecimal(30000))) }
 
-        await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted {
-            assertThat(couponState(m, id)).isEqualTo("RESERVED")
-            assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.RESERVED)
-            assertThat(releases(id)).isEmpty()
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            val newIds = publicationIds(jdbc, CouponReserved::class.java, "orderId", id, "CouponResultListener.on") - before.toSet()
+            assertThat(newIds).hasSize(1)
+            assertThat(publicationCompleted(jdbc, newIds.single())).isTrue()
         }
+        assertThat(couponState(m, id)).isEqualTo("RESERVED")
+        assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.RESERVED)
+        assertThat(releases(id)).isEmpty()
     }
 }
