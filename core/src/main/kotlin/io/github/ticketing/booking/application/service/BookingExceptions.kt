@@ -23,6 +23,8 @@ class SeatAlreadyHeldException(private val seatIds: List<Long>) :
     override val properties: Map<String, Any> get() = mapOf("seatIds" to seatIds)
 }
 
+class BookingInProgressException : DomainException("BOOKING_IN_PROGRESS", HttpStatus.CONFLICT, "예매 요청이 처리 중입니다. 같은 키로 다시 시도해 주세요.")
+
 /** 도메인 규칙 예외를 HTTP 상태가 있는 예외로 바꾸는 유일한 지점이다. */
 internal class BookingRuleViolation(code: String, status: HttpStatus, message: String) : DomainException(code, status, message)
 

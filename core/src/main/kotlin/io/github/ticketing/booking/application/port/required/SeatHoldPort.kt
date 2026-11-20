@@ -8,7 +8,14 @@ import java.time.Instant
 
 interface SeatHoldPort {
     /** 전부 선점하거나 전부 실패한다. */
-    fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult
+    fun hold(
+        scheduleId: ScheduleId,
+        seatIds: List<SeatId>,
+        owner: HoldToken,
+        ttl: Duration,
+        now: Instant,
+        fingerprint: String? = null,
+    ): HoldResult
 
     /** 소유자일 때만 해제한다. */
     fun release(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, now: Instant)
@@ -30,5 +37,5 @@ class SeatSnapshotReconcileException(cause: RuntimeException) : RuntimeException
 sealed interface HoldResult {
     data object Held : HoldResult
 
-    data class Unavailable(val seatIds: List<SeatId>) : HoldResult
+    data class Unavailable(val seatIds: List<SeatId>, val sameRequest: Boolean = false) : HoldResult
 }

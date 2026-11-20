@@ -70,9 +70,17 @@ internal class BookingWarmupTests(
             )
         try {
             cache.putForWarmup(schedule, listOf(ScheduleSeatCopy(schedule, seat, "VIP", "W", BigDecimal.TEN)))
-            holds.hold(schedule, listOf(seat), HoldToken("warmup"), Duration.ofMinutes(5), Instant.parse("2026-11-16T00:00:00Z"))
+            holds.hold(
+                schedule,
+                listOf(seat),
+                HoldToken("warmup"),
+                Duration.ofMinutes(5),
+                Instant.parse("2026-11-16T00:00:00Z"),
+                "a".repeat(64),
+            )
 
             keys.forEach { assertThat(redis.getExpire(it)).isBetween(1L, 30L) }
+            assertThat(redis.keys("booking:warmup:hold-request:{${schedule.value}}:*")).isEmpty()
             assertThat(redis.hasKey("booking:seat-events:{${schedule.value}}")).isFalse()
             assertThat(redis.hasKey("booking:seats:{${schedule.value}}")).isFalse()
         } finally {

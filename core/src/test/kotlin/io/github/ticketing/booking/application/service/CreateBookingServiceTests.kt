@@ -1,6 +1,7 @@
 package io.github.ticketing.booking.application.service
 
 import io.github.ticketing.booking.application.port.provided.CreateBookingCommand
+import io.github.ticketing.booking.application.port.provided.CreateBookingResult
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
 import io.github.ticketing.booking.application.port.required.HoldResult
 import io.github.ticketing.booking.application.port.required.ScheduleSeatCommandPort
@@ -27,6 +28,10 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class CreateBookingServiceTests {
     private val now = Instant.parse("2026-11-10T10:00:00Z")
@@ -75,7 +80,14 @@ class CreateBookingServiceTests {
 
         val held = mutableListOf<HoldToken>()
         val released = mutableListOf<HoldToken>()
-        override fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult {
+        override fun hold(
+            scheduleId: ScheduleId,
+            seatIds: List<SeatId>,
+            owner: HoldToken,
+            ttl: Duration,
+            now: Instant,
+            fingerprint: String?,
+        ): HoldResult {
             if (result == HoldResult.Held) held += owner
             return result
         }
@@ -85,6 +97,57 @@ class CreateBookingServiceTests {
         override fun markSold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, now: Instant) = Unit
         override fun markAvailable(scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant) = Unit
         override fun initSnapshot(scheduleId: ScheduleId, seatIds: List<SeatId>) = Unit
+    }
+
+    private class ConcurrentHold : SeatHoldPort by FakeSeatHold() {
+        private var owner: HoldToken? = null
+        private var fingerprint: String? = null
+        val busy = CountDownLatch(1)
+
+        @Synchronized
+        override fun hold(
+            scheduleId: ScheduleId,
+            seatIds: List<SeatId>,
+            owner: HoldToken,
+            ttl: Duration,
+            now: Instant,
+            fingerprint: String?,
+        ): HoldResult {
+            if (this.owner == null) {
+                this.owner = owner
+                this.fingerprint = fingerprint
+                return HoldResult.Held
+            }
+            busy.countDown()
+            return HoldResult.Unavailable(seatIds, fingerprint != null && fingerprint == this.fingerprint)
+        }
+
+        @Synchronized
+        override fun release(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, now: Instant) {
+            if (this.owner == owner) this.owner = null
+        }
+    }
+
+    private class BlockingBookings(private val failFirst: Boolean) : BookingCommandPort by FakeBookings() {
+        private val delegate = FakeBookings()
+        private val saves = AtomicInteger()
+        val entered = CountDownLatch(1)
+        val proceed = CountDownLatch(1)
+        val emptyRead = CountDownLatch(1)
+
+        override fun save(booking: Booking): Booking {
+            if (saves.getAndIncrement() == 0) {
+                entered.countDown()
+                check(proceed.await(5, TimeUnit.SECONDS))
+                if (failFirst) throw IllegalStateException("저장 실패")
+            }
+            return synchronized(delegate) { delegate.save(booking) }
+        }
+
+        override fun findByMemberAndIdempotencyKey(memberId: MemberId, key: String): Booking? =
+            synchronized(delegate) { delegate.findByMemberAndIdempotencyKey(memberId, key) }.also {
+                if (it == null) emptyRead.countDown()
+            }
     }
 
     private val seatCopies = (1L..5L).map { ScheduleSeatCopy(scheduleId, SeatId(it), "R", "A$it", BigDecimal(100000)) }
@@ -141,6 +204,45 @@ class CreateBookingServiceTests {
         assertThat(second.booking.bookingId).isEqualTo(first.booking.bookingId)
         assertThat(hold.held).hasSize(1)
         assertThat(bookings.stored).hasSize(1)
+    }
+
+    @Test
+    fun `첫 저장이 끝나기 전 동일 요청은 커밋된 예매를 돌려준다`() {
+        val bookings = BlockingBookings(failFirst = false)
+        val hold = ConcurrentHold()
+        val service = service(bookings, hold)
+        Executors.newVirtualThreadPerTaskExecutor().use { executor ->
+            val first = executor.submit<CreateBookingResult> { service.create(command(1)) }
+            assertThat(bookings.entered.await(5, TimeUnit.SECONDS)).isTrue()
+            val second = executor.submit<CreateBookingResult> { service.create(command(1)) }
+            assertThat(hold.busy.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThat(bookings.emptyRead.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThatThrownBy { service.create(command(1, key = "other")) }.isInstanceOf(SeatAlreadyHeldException::class.java)
+            assertThatThrownBy { service.create(CreateBookingCommand(8, "key-1", 1, listOf(1))) }
+                .isInstanceOf(SeatAlreadyHeldException::class.java)
+            bookings.proceed.countDown()
+            val original = first.get(5, TimeUnit.SECONDS)
+            val replay = second.get(5, TimeUnit.SECONDS)
+            assertThat(replay.created).isFalse()
+            assertThat(replay.booking.bookingId).isEqualTo(original.booking.bookingId)
+        }
+    }
+
+    @Test
+    fun `첫 저장이 실패해 선점을 풀면 동일 요청이 다시 선점해 생성한다`() {
+        val bookings = BlockingBookings(failFirst = true)
+        val hold = ConcurrentHold()
+        val service = service(bookings, hold)
+        Executors.newVirtualThreadPerTaskExecutor().use { executor ->
+            val first = executor.submit<CreateBookingResult> { service.create(command(1)) }
+            assertThat(bookings.entered.await(5, TimeUnit.SECONDS)).isTrue()
+            val second = executor.submit<CreateBookingResult> { service.create(command(1)) }
+            assertThat(hold.busy.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThat(bookings.emptyRead.await(5, TimeUnit.SECONDS)).isTrue()
+            bookings.proceed.countDown()
+            assertThatThrownBy { first.get(5, TimeUnit.SECONDS) }.hasCauseInstanceOf(IllegalStateException::class.java)
+            assertThat(second.get(5, TimeUnit.SECONDS).created).isTrue()
+        }
     }
 
     @Test

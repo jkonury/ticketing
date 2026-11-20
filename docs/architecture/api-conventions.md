@@ -58,6 +58,7 @@
 ### 멱등성
 
 - 예매 생성은 `(회원, Idempotency-Key)`가 같으면 같은 예매를 돌려준다. 새로 만들면 **201**, 이미 있으면 **200**이다.
+- 같은 회원·키의 요청이 아직 저장 중이면 결과를 잠시 기다린다. 기다린 뒤에도 진행 중이면 409 `BOOKING_IN_PROGRESS`를 반환하며 같은 키로 재시도할 수 있다.
 - 결제 요청은 예매 하나에 결제 하나가 되도록 서버가 PG 멱등 키를 정한다. 헤더는 재시도 식별용으로 받는다. 접수되면 **202**와 `{bookingId, status}`를 반환한다.
 - 결제 웹훅은 `eventId`로 중복을 제거한다.
 - 클라이언트는 네트워크 오류 뒤 **같은 키로 재시도**한다. 새 키를 만들면 중복 예매가 생길 수 있다.
@@ -101,6 +102,7 @@
 | 403 | `NOT_BOOKING_OWNER`, `NOT_PERFORMANCE_OWNER` | 소유자가 아님 |
 | 404 | `BOOKING_NOT_FOUND`, `SCHEDULE_NOT_FOUND`, `SEAT_NOT_FOUND`, `PERFORMANCE_NOT_FOUND`, `VENUE_NOT_FOUND`, `MEMBER_NOT_FOUND` | 대상 없음 |
 | 409 | `SEAT_ALREADY_HELD` | 좌석이 이미 선점·판매됨 |
+| 409 | `BOOKING_IN_PROGRESS` | 동일 예매 요청 처리 중. 같은 멱등 키로 재시도 |
 | 409 | `INVALID_BOOKING_STATE`, `BOOKING_EXPIRED` | 현재 예매 상태에서 불가능한 동작 |
 | 409 | `EMAIL_ALREADY_EXISTS`, `DUPLICATE_SCHEDULE` | 중복 |
 | 409 | `COUPON_PENDING` | 쿠폰 예약 응답을 기다리는 중이라 결제 요청 불가 |

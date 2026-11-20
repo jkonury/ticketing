@@ -79,6 +79,43 @@ class RedisSeatHoldAdapterTests(private val port: SeatHoldPort, private val redi
     }
 
     @Test
+    fun `지문은 동일 요청을 식별하고 이전 소유자의 늦은 해제는 새 선점을 지우지 않는다`() {
+        val fingerprint = "a".repeat(64)
+        assertThat(port.hold(schedule, seats(1, 2), alice, ttl, now, fingerprint)).isEqualTo(HoldResult.Held)
+        assertThat(port.hold(schedule, seats(1, 2), bob, ttl, now, fingerprint))
+            .isEqualTo(HoldResult.Unavailable(seats(1, 2), sameRequest = true))
+        assertThat(port.hold(schedule, seats(1, 2), bob, ttl, now, "b".repeat(64)))
+            .isEqualTo(HoldResult.Unavailable(seats(1, 2)))
+        port.release(schedule, seats(1, 2), alice, now)
+        assertThat(port.hold(schedule, seats(1, 2), bob, ttl, now, fingerprint)).isEqualTo(HoldResult.Held)
+
+        port.release(schedule, seats(1, 2), alice, now)
+        assertThat(redis.opsForValue().get(holdKey(schedule, SeatId(1)))).isEqualTo("bob")
+        port.markSold(schedule, seats(1, 2), bob, now)
+        assertThat(redis.hasKey(holdKey(schedule, SeatId(1)))).isFalse()
+    }
+
+    @Test
+    fun `과거 형식의 선점도 소유자만 확정할 수 있다`() {
+        redis.opsForValue().set(holdKey(schedule, SeatId(1)), alice.value, ttl)
+        port.markSold(schedule, seats(1), bob, now)
+        assertThat(redis.opsForValue().get(holdKey(schedule, SeatId(1)))).isEqualTo(alice.value)
+        port.markSold(schedule, seats(1), alice, now)
+        assertThat(redis.hasKey(holdKey(schedule, SeatId(1)))).isFalse()
+    }
+
+    @Test
+    fun `이전 요청 표식이 남아도 다른 소유자의 선점은 같은 요청이 아니다`() {
+        val fingerprint = "a".repeat(64)
+        port.hold(schedule, seats(1), alice, ttl, now, fingerprint)
+        port.release(schedule, seats(1), alice, now)
+        port.hold(schedule, seats(1), bob, ttl, now)
+
+        assertThat(port.hold(schedule, seats(1), HoldToken("third"), ttl, now, fingerprint))
+            .isEqualTo(HoldResult.Unavailable(seats(1)))
+    }
+
+    @Test
     fun `선점 키가 유실돼 두 예매가 같은 좌석을 선점했을 때 진 쪽의 해제는 이긴 쪽의 SOLD를 AVAILABLE로 덮어쓰지 않는다`() {
         port.hold(schedule, seats(1, 2), alice, ttl, now)
         redis.delete(holdKey(schedule, SeatId(2)))

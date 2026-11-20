@@ -52,16 +52,27 @@ class RedisSeatHoldAdapter(
     @Qualifier("seatMarkAvailableScript") private val markAvailableScript: RedisScript<Long>,
     @Qualifier("seatReconcileScript") private val reconcileScript: RedisScript<Long>,
 ) : SeatHoldPort {
-    override fun hold(scheduleId: ScheduleId, seatIds: List<SeatId>, owner: HoldToken, ttl: Duration, now: Instant): HoldResult {
+    override fun hold(
+        scheduleId: ScheduleId,
+        seatIds: List<SeatId>,
+        owner: HoldToken,
+        ttl: Duration,
+        now: Instant,
+        fingerprint: String?,
+    ): HoldResult {
         require(seatIds.isNotEmpty()) { "seatIds must not be empty" }
+        require(fingerprint == null || fingerprint.matches(FINGERPRINT_PATTERN)) { "invalid request fingerprint" }
         val effectiveTtl = if (scheduleId.value < 0) minOf(ttl.toMillis(), 30000L) else ttl.toMillis()
-        val args = listOf(owner.value, effectiveTtl.toString(), now.toEpochMilli().toString()) + ids(seatIds)
+        val effectiveFingerprint = if (scheduleId.value < 0) null else fingerprint
+        val args =
+            listOf(owner.value, effectiveTtl.toString(), now.toEpochMilli().toString(), effectiveFingerprint.orEmpty()) + ids(seatIds)
         WarmupIo.redisCommand()
-        val result = redis.execute(holdScript, keys(scheduleId, seatIds), *args.toTypedArray())
+        val requestKey = "${prefix(scheduleId)}:hold-request:{${scheduleId.value}}:${effectiveFingerprint.orEmpty()}"
+        val result = redis.execute(holdScript, keys(scheduleId, seatIds) + requestKey, *args.toTypedArray())
         return if (result.isNullOrEmpty()) {
             HoldResult.Held
         } else {
-            HoldResult.Unavailable(result.map { SeatId(it.toString().toLong()) })
+            HoldResult.Unavailable(result.drop(1).map { SeatId(it.toString().toLong()) }, result.first().toString() == "same")
         }
     }
 
@@ -111,6 +122,7 @@ class RedisSeatHoldAdapter(
         listOf(snapshotKey(scheduleId), streamKey(scheduleId)) + seatIds.map { holdKey(scheduleId, it) }
 
     companion object {
+        private val FINGERPRINT_PATTERN = Regex("[0-9a-f]{64}")
         private fun prefix(scheduleId: ScheduleId) = if (scheduleId.value < 0) "booking:warmup" else "booking"
 
         fun holdKey(scheduleId: ScheduleId, seatId: SeatId) = "${prefix(scheduleId)}:hold:{${scheduleId.value}}:${seatId.value}"

@@ -20,8 +20,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
+import java.security.MessageDigest
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.util.HexFormat
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -69,8 +72,10 @@ class CreateBookingService(
             Booking.create(memberId, scheduleId, seats, holdToken, now, command.idempotencyKey)
         }
 
-        stage("hold") { holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now) }?.let { return it }
-        return stage("persist") { persist(booking, copies.mapValues { it.value.label }, requested) }
+        return stage("hold") {
+            holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now, fingerprint(command))
+        }
+            ?: stage("persist") { persist(booking, copies.mapValues { it.value.label }, requested) }
     }
 
     private fun findCopies(scheduleId: ScheduleId, requested: List<SeatId>): Map<SeatId, ScheduleSeatCopy> {
@@ -89,12 +94,35 @@ class CreateBookingService(
         requested: List<SeatId>,
         holdToken: HoldToken,
         now: Instant,
-    ): CreateBookingResult? = when (val held = seatHold.hold(scheduleId, requested, holdToken, Booking.HOLD_DURATION, now)) {
-        is HoldResult.Unavailable -> {
-            stage("existing") { existing(memberId, key) } ?: throw SeatAlreadyHeldException(held.seatIds.map { it.value })
-        }
+        fingerprint: String,
+    ): CreateBookingResult? {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(WAIT_MILLIS)
+        var held = seatHold.hold(scheduleId, requested, holdToken, Booking.HOLD_DURATION, now, fingerprint)
+        for (attempt in 0 until MAX_HOLD_ATTEMPTS) {
+            when (val result = held) {
+                HoldResult.Held -> return null
 
-        HoldResult.Held -> null
+                is HoldResult.Unavailable -> {
+                    stage("existing") { existing(memberId, key) }?.let { return it }
+                    if (!result.sameRequest) throw SeatAlreadyHeldException(result.seatIds.map { it.value })
+                }
+            }
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0 || attempt == MAX_HOLD_ATTEMPTS - 1) break
+            TimeUnit.NANOSECONDS.sleep(minOf(remaining, TimeUnit.MILLISECONDS.toNanos(POLL_MILLIS)))
+            val retryNow = clock.instant()
+            val remainingHold = Duration.between(retryNow, now.plus(Booking.HOLD_DURATION))
+            if (remainingHold.isNegative || remainingHold.isZero) bookingInProgress()
+            held = seatHold.hold(scheduleId, requested, holdToken, remainingHold, retryNow, fingerprint)
+        }
+        throw BookingInProgressException()
+    }
+
+    private fun bookingInProgress(): Nothing = throw BookingInProgressException()
+
+    private fun fingerprint(command: CreateBookingCommand): String {
+        val canonical = "${command.memberId}:${command.idempotencyKey}"
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8)))
     }
 
     private fun persist(booking: Booking, labels: Map<SeatId, String>, requested: List<SeatId>): CreateBookingResult {
@@ -124,6 +152,9 @@ class CreateBookingService(
     }
 
     private companion object {
+        const val WAIT_MILLIS = 2000L
+        const val POLL_MILLIS = 20L
+        const val MAX_HOLD_ATTEMPTS = 101
         val STAGES = listOf("find-copies", "hold", "existing", "persist")
     }
 }

@@ -44,12 +44,14 @@ realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`
 
 | 키 | 자료구조 | 내용 |
 |---|---|---|
-| `booking:hold:{<scheduleId>}:<seatId>` | String, PX TTL | 값은 선점 소유자(`HoldToken`) |
+| `booking:hold:{<scheduleId>}:<seatId>` | String, PX TTL | 선점 소유자(`HoldToken`) |
+| `booking:hold-request:{<scheduleId>}:<지문>` | String, PX TTL | 해당 요청을 선점한 시도의 `HoldToken` |
 | `booking:seats:{<scheduleId>}` | Hash | field `seatId` → `AVAILABLE` / `HELD:<만료 epoch ms>` / `SOLD` |
 | `booking:seat-events:{<scheduleId>}` | Stream, `MAXLEN ~ 10000` | `seatIds`(쉼표 구분), `status`, `holdExpiresAt`(HELD일 때), `at`(epoch ms) |
 
 - 스냅샷의 `HELD:<만료 시각>`: 선점 키 TTL이 끝나도 Redis는 알려 주지 않으므로 읽는 쪽이 만료를 직접 판정한다.
 - 선점 가능 여부의 판단 기준은 스냅샷이 아니라 선점 키와 `SOLD`다.
+- 요청 지문은 회원·멱등 키의 SHA-256 해시이며 원래 멱등 키를 저장하지 않는다. 같은 Lua에서 요청 표식과 좌석 소유자가 같을 때만 진행 중인 동일 요청으로 식별한다. 표식은 TTL로 만료되며 남아 있더라도 다른 소유자의 좌석에는 적용되지 않는다.
 - 선점·해제·판매·판매 해제는 각각 Lua 스크립트 한 번으로 처리하며, 같은 스크립트에서 스냅샷과 Stream을 갱신한다.
 - DB 커밋 뒤 Redis 반영이 실패하면 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다([6.4절](./flows.md#64-결제-이벤트-기반)).
 
