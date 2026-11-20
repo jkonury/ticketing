@@ -33,7 +33,8 @@ class ReconcileSeatSnapshotService(private val queries: SeatSnapshotQueries, pri
         val sold = queries.sold(scheduleId).map(::SeatId).toSet()
         val id = ScheduleId(scheduleId)
         val changed = holds.reconcileSnapshot(id, seats, sold, clock.instant())
-        val newlySold = queries.sold(scheduleId).map(::SeatId).toSet() - sold
-        return changed + holds.reconcileSnapshot(id, newlySold.toList(), newlySold, clock.instant())
+        val latestSold = queries.sold(scheduleId).map(::SeatId).toSet()
+        val changedSeats = (latestSold - sold) + (sold - latestSold)
+        return changed + holds.reconcileSnapshot(id, changedSeats.toList(), latestSold intersect changedSeats, clock.instant())
     }
 }
