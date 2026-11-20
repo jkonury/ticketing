@@ -372,7 +372,7 @@ class BookingPaymentFlowTests(
     }
 
     @Test
-    fun `확정된 예매에 결제를 다시 요청하면 409 INVALID_BOOKING_STATE이다`() {
+    fun `결제를 요청한 확정 예매에 다시 요청하면 재발행 없이 202를 돌려준다`() {
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
@@ -381,8 +381,8 @@ class BookingPaymentFlowTests(
         awaitStatus(token, id, "CONFIRMED")
 
         assertThat(pay(token, id))
-            .hasStatus(HttpStatus.CONFLICT)
-            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_BOOKING_STATE")
+            .hasStatus(HttpStatus.ACCEPTED)
+            .bodyJson().extractingPath("$.status").isEqualTo("CONFIRMED")
 
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
     }

@@ -60,6 +60,7 @@ class Booking private constructor(
     }
 
     fun requestPayment(now: Instant) {
+        if (status == BookingStatus.CONFIRMED && paymentRequestedAt != null) return
         if (status != BookingStatus.PENDING) throw InvalidBookingStateException(status)
         if (paymentRequestedAt != null) return
         if (isExpired(now)) throw BookingExpiredException()
