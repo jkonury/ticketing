@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Payment } from './payment';
 
@@ -87,6 +94,54 @@ describe('결제 화면 쿠폰', () => {
         { timeout: 4000 },
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText('결제 금액: 10,000원')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
+  });
+
+  it('결과 조회 중 쿠폰을 해제하면 늦은 조회 응답이 와도 정가로 결제할 수 있다', async () => {
+    const poll = Promise.withResolvers<ReturnType<typeof response>>();
+    const fetch = vi.fn((path: string, init?: { method?: string }) => {
+      if (path === '/api/me/coupons') return Promise.resolve(response(coupons));
+      if (init?.method === 'PUT') return Promise.resolve(response(reserving));
+      if (init?.method === 'DELETE') {
+        return Promise.resolve(
+          response({ payableAmount: 10000, coupon: null }),
+        );
+      }
+      return poll.promise;
+    });
+    vi.stubGlobal('fetch', fetch);
+    render(<Payment booking={booking} onDone={vi.fn()} onReset={vi.fn()} />);
+
+    await apply();
+    await waitFor(
+      () =>
+        expect(fetch).toHaveBeenCalledWith('/api/bookings/1', {
+          method: 'GET',
+        }),
+      { timeout: 3000 },
+    );
+    const remove = screen.getByRole('button', { name: '쿠폰 해제' });
+    expect(remove).toBeEnabled();
+    expect(screen.getByRole('button', { name: '쿠폰 적용' })).toBeDisabled();
+    fireEvent.click(remove);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled(),
+    );
+
+    await act(async () => {
+      poll.resolve(
+        response({
+          payableAmount: 9000,
+          coupon: {
+            issuedCouponId: 7,
+            state: 'RESERVED',
+            discountAmount: 1000,
+          },
+        }),
+      );
+    });
+    expect(screen.queryByRole('button', { name: '쿠폰 해제' })).toBeNull();
     expect(screen.getByText('결제 금액: 10,000원')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
   });

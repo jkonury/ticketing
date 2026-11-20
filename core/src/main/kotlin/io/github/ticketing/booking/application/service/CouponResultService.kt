@@ -17,7 +17,7 @@ import java.math.BigDecimal
 
 /**
  * 반영하지 못한 Reserved(교체·해제·종료 뒤 늦은 응답, 무효 할인)는 쿠폰 선점이 남지 않도록 즉시 해제를 요청한다.
- * 낙관적 락 충돌은 삼키지 않고 던져 이벤트 발행 레지스트리가 다시 시도하게 한다.
+ * 낙관적 락 충돌로 처리가 실패하면 발행이 미완료로 남아 core 재시작 시 재발행 대상이 된다.
  */
 @Service
 class CouponResultService(

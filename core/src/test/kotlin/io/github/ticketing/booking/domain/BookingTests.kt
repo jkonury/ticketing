@@ -359,13 +359,18 @@ class BookingTests {
     }
 
     @Test
-    fun `RESERVING 중에는 재적용·해제·결제 요청이 COUPON_PENDING이다`() {
+    fun `RESERVING 중에는 재적용과 결제 요청만 COUPON_PENDING이다`() {
         val b = booking().also { it.applyCoupon(7, t0) }
 
         assertEquals(COUPON_PENDING, codeOf { b.applyCoupon(8, t0) })
         assertEquals(COUPON_PENDING, codeOf { b.applyCoupon(7, t0) })
-        assertEquals(COUPON_PENDING, codeOf { b.removeCoupon(t0) })
         assertEquals(COUPON_PENDING, codeOf { b.requestPayment(t0) })
+
+        assertEquals(CouponChange(b.appliedCoupon, false), b.removeCoupon(t0))
+        assertNull(b.appliedCoupon)
+        assertEquals(CouponChange.NONE, b.removeCoupon(t0))
+        b.requestPayment(t0)
+        assertEquals(0, listAmount.compareTo(b.payableAmount))
     }
 
     @Test
@@ -428,6 +433,10 @@ class BookingTests {
         assertEquals(COUPON_CHANGE_NOT_ALLOWED, codeOf { confirmed().applyCoupon(7, beforeExpiry) })
         assertEquals(COUPON_CHANGE_NOT_ALLOWED, codeOf { booking().also { it.cancelByUser(owner, t0) }.applyCoupon(7, t0) })
         assertEquals(BOOKING_EXPIRED, codeOf { booking().applyCoupon(7, atExpiry) })
+        val pendingCoupon = booking().also { it.applyCoupon(7, t0) }
+        assertEquals(BOOKING_EXPIRED, codeOf { pendingCoupon.removeCoupon(atExpiry) })
+        pendingCoupon.cancelByUser(owner, t0)
+        assertEquals(COUPON_CHANGE_NOT_ALLOWED, codeOf { pendingCoupon.removeCoupon(t0) })
     }
 
     @Test

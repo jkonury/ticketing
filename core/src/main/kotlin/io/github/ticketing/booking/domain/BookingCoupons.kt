@@ -6,20 +6,22 @@ import java.time.Instant
 /** 쿠폰을 적용(교체 포함)한다. 결과는 coupon 모듈의 응답으로 [onCouponReserved]·[onCouponRejected]가 확정한다. */
 fun Booking.applyCoupon(issuedCouponId: Long, now: Instant): CouponChange {
     requireCouponChangeable(now)
+    requireNoPendingCoupon()
     val current = appliedCoupon
     if (current != null && current.issuedCouponId == issuedCouponId && current.state == CouponState.RESERVED) {
         return CouponChange.NONE
     }
     couponAttemptId += 1
     appliedCoupon = AppliedCoupon(issuedCouponId, CouponState.RESERVING, null, null, couponAttemptId)
-    return CouponChange(releasedCoupon = current?.reservedCoupon(), reservationRequested = true)
+    return CouponChange(releasedCoupon = current?.takeIf { it.state == CouponState.RESERVED }, reservationRequested = true)
 }
 
 fun Booking.removeCoupon(now: Instant): CouponChange {
     requireCouponChangeable(now)
-    val current = appliedCoupon ?: return CouponChange.NONE
+    if (appliedCoupon == null) return CouponChange.NONE
+    val released = couponToRelease()
     appliedCoupon = null
-    return CouponChange(releasedCoupon = current.reservedCoupon(), reservationRequested = false)
+    return CouponChange(releasedCoupon = released, reservationRequested = false)
 }
 
 /**
@@ -48,10 +50,7 @@ private fun Booking.requireCouponChangeable(now: Instant) {
     val unchangeable = status != BookingStatus.PENDING || paymentRequestedAt != null
     if (unchangeable) throw CouponChangeNotAllowedException()
     if (isExpired(now)) throw BookingExpiredException()
-    requireNoPendingCoupon()
 }
-
-private fun AppliedCoupon.reservedCoupon(): AppliedCoupon? = takeIf { state == CouponState.RESERVED }
 
 fun AppliedCoupon.matches(issuedCouponId: Long, reservationAttemptId: Long): Boolean =
     this.issuedCouponId == issuedCouponId && this.reservationAttemptId == reservationAttemptId
@@ -60,6 +59,6 @@ private fun Booking.awaitingCoupon(issuedCouponId: Long, reservationAttemptId: L
     status == BookingStatus.PENDING && it.state == CouponState.RESERVING && it.matches(issuedCouponId, reservationAttemptId)
 }
 
-/** 예매가 PENDING에서 끝날 때 coupon에 해제를 요청해야 하는 쿠폰이다. RESERVING도 포함한다(늦게 온 Reserved는 결과 리스너가 해제한다). */
+/** 해제 요청이 필요한 쿠폰이다. RESERVING이면 해제가 예약 요청보다 먼저 도착해도 해당 시도를 종료한다. */
 fun Booking.couponToRelease(): AppliedCoupon? =
     appliedCoupon?.takeIf { it.state == CouponState.RESERVED || it.state == CouponState.RESERVING }

@@ -124,7 +124,7 @@ class BookingCouponApiTests(
     }
 
     @Test
-    fun `RESERVING 중 재적용과 해제와 결제 요청은 409 COUPON_PENDING이다`() {
+    fun `RESERVING 중 재적용과 결제 요청은 409이고 해제하면 정가 결제가 가능하다`() {
         val token = token()
         val id = book(token, newSchedule())
         applyCoupon(token, id, 11).expectStatus(HttpStatus.OK)
@@ -132,10 +132,19 @@ class BookingCouponApiTests(
         assertThat(
             applyCoupon(token, id, 12),
         ).hasStatus(HttpStatus.CONFLICT).bodyJson().extractingPath("$.code").isEqualTo("COUPON_PENDING")
-        assertThat(removeCoupon(token, id)).hasStatus(HttpStatus.CONFLICT).bodyJson().extractingPath("$.code").isEqualTo("COUPON_PENDING")
         assertThat(pay(token, id)).hasStatus(HttpStatus.CONFLICT).bodyJson().extractingPath("$.code").isEqualTo("COUPON_PENDING")
-
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).isEmpty()
+
+        assertThat(removeCoupon(token, id)).hasStatus(HttpStatus.OK).bodyJson().apply {
+            extractingPath("$.coupon").isNull()
+            extractingPath("$.discountAmount").isEqualTo(0)
+            extractingPath("$.payableAmount").isEqualTo(200000)
+        }
+        removeCoupon(token, id).expectStatus(HttpStatus.OK)
+        assertThat(releases(id)).containsExactly(CouponReleaseRequested(id, 11, "REMOVED", requests(id).single().reservationAttemptId))
+
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
+        assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }.single().amount).isEqualByComparingTo("200000")
     }
 
     @Test

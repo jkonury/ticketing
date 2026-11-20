@@ -42,7 +42,7 @@
 | `CouponReservationRequested` | `coupon` | booking | coupon | 쿠폰 적용 시 예약 요청 |
 | `CouponReserved` | `coupon` | coupon | booking | 쿠폰 예약 성공 |
 | `CouponRejected` | `coupon` | coupon | booking | 쿠폰 예약 거부. 사유 `NOT_FOUND`, `NOT_OWNER`, `NOT_AVAILABLE`와 할인 정책 위반(`OUT_OF_VALID_PERIOD`, `PERFORMANCE_MISMATCH`, `BELOW_MIN_ORDER_AMOUNT`, `AMOUNT_BELOW_MINIMUM`) |
-| `CouponReleaseRequested` | `coupon` | booking | coupon | 예매 복원 지점에서 쿠폰 예약 해제 |
+| `CouponReleaseRequested` | `coupon` | booking | coupon | 쿠폰 제거·교체 또는 예매 보상 시 해당 예약 시도 해제 |
 | `CouponUseConfirmed` | `coupon` | booking | coupon | 예매 확정 시 쿠폰 사용 확정 |
 | `MemberRoleChanged` | `member` | member | audit | 관리자 역할 변경 |
 | `CouponDefinitionCreated`, `CouponDefinitionUpdated`, `CouponDefinitionStopped`, `CouponsGranted`, `CouponRevoked` | `coupon` | coupon | audit | 쿠폰 관리자 행위 |
@@ -59,7 +59,7 @@
 | booking `PaymentResultListener` | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` | 예매 확정·실패 처리. `PaymentRefunded`는 로그만 | 예매 상태 전이 검사. 이미 `CONFIRMED`면 `AlreadyConfirmed`로 무시하고, `EXPIRED`·`CANCELLED`면 환불 경로로 보낸다 |
 | settlement `BookingEventListener` | `BookingConfirmed`, `BookingCancelled` | `BookingConfirmed`는 `booking_sale`에 적재. `BookingCancelled`는 `refundRequired=true`일 때만 `booking_refund`에 적재 | `ON CONFLICT (booking_id) DO NOTHING` |
 | coupon `CouponReservationListener` | `CouponReservationRequested`, `CouponReleaseRequested`, `CouponUseConfirmed` | 발급 쿠폰 상태를 조건부 UPDATE로 전이(예약·해제·사용 확정). 예약 결과는 `CouponReserved`·`CouponRejected`로 응답 | 발급 행 잠금과 주문별 최신 시도 기록을 사용한다. 해제·사용 확정은 주문과 시도가 일치해야 하며, 정리 후 복구 가능한 사용 확정은 `coupon.use_mismatch`에 기록한다 |
-| booking `CouponResultListener` | `CouponReserved`, `CouponRejected` | `CouponReserved`는 예매의 `coupon_state`·할인액에 반영한다. 예매가 없거나 교체·해제·종료 뒤 늦게 온 응답, 무효 할인액이면 `CouponReleaseRequested`로 즉시 해제를 요청한다. `CouponRejected`는 쿠폰 없이 진행하고 사유를 저장한다 | 시도가 다른 거절은 무시하고, 시도가 다른 성공은 해당 시도로 해제를 요청한다. 이미 반영한 같은 시도의 성공은 무시한다. 낙관적 락 충돌은 던져 이벤트 발행 레지스트리가 재시도 |
+| booking `CouponResultListener` | `CouponReserved`, `CouponRejected` | `CouponReserved`는 예매의 `coupon_state`·할인액에 반영한다. 예매가 없거나 교체·해제·종료 뒤 늦게 온 응답, 무효 할인액이면 해당 시도의 해제를 요청한다. `CouponRejected`는 쿠폰 없이 진행하고 사유를 저장한다 | 제거된 시도의 거절은 무시하고 성공은 해당 시도로 해제를 요청한다. 이미 반영한 같은 시도의 성공은 무시한다. 낙관적 락 충돌로 실패한 발행은 미완료로 남아 core 재시작 시 재발행 대상이 된다 |
 | audit `MemberAuditListener`, `CouponAuditListener` | `MemberRoleChanged`, 쿠폰 관리자 행위 5종 | `audit.admin_action`에 기록 | `source_event_id` 유니크 |
 | notification `BookingNotificationListener` | `BookingConfirmed`, `BookingCancelled` (`BookingExpired`) | 로그 출력 | 없음. 재전달 시 로그가 중복될 수 있음 |
 

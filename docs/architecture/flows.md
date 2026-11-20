@@ -166,7 +166,7 @@ sequenceDiagram
         C->>C: ISSUED -> RESERVED (조건부 UPDATE, 할인액 계산)
         C-)B: CouponReserved
         B->>B: RESERVED, payable = list - discount
-        Note over B,C: 예매가 이미 PENDING이 아니면 B가 즉시 CouponReleaseRequested
+        Note over B,C: 제거·종료 뒤에 도착한 성공은 해당 시도로 해제 요청
     else 거부
         C-)B: CouponRejected
         B->>B: 쿠폰 없이 PENDING 유지, 사유 저장
@@ -189,6 +189,7 @@ sequenceDiagram
 ```
 
 - 확정 후 환불은 쿠폰이 소멸하므로 해제를 보내지 않는다.
+- 결제 요청 전이고 만료되지 않은 `PENDING` 예매에서는 `RESERVING` 쿠폰도 `DELETE /api/v1/bookings/{id}/coupon`으로 제거할 수 있다. 예매의 쿠폰 제거와 해당 시도의 해제 발행 기록은 함께 커밋된다. 사용자는 DELETE 성공 직후 정가로 결제를 요청할 수 있다.
 - 예매가 쿠폰을 새로 적용할 때마다 시도 ID를 증가시킨다. 같은 쿠폰의 높은 시도는 같은 주문의 이전 예약을 승계할 수 있다. 해제·보상은 주문, 쿠폰, 시도가 일치하는 예약에 적용한다.
 - 정리 Job(`releaseStaleCouponReservationsJob`)은 고아 예약의 시도를 기록하고 해제한다. 늦은 사용 확정은 같은 시도가 정리된 뒤 발급 행이 그대로일 때 복구하고 불일치를 기록한다. [ADR 0045](../adr/0045-coupon-reservation-attempts.md)
 - 예약은 `ticketing.coupon.reservation-ttl`(기본 1h, 예매 hold 5분 + 결제 유예 30분보다 길게) 동안 유지하고, 정리 Job은 `reserved_until + ticketing.coupon.reservation-release-grace`(기본 10m)가 지난 RESERVED만 조건부 UPDATE로 복원한다.

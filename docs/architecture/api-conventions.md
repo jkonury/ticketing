@@ -107,7 +107,7 @@
 | 409 | `SALES_CLOSED` | 회차가 시작되어 신규 예매 또는 첫 결제 요청 불가 |
 | 409 | `INVALID_BOOKING_STATE`, `BOOKING_EXPIRED` | 현재 예매 상태에서 불가능한 동작 |
 | 409 | `EMAIL_ALREADY_EXISTS`, `DUPLICATE_SCHEDULE` | 중복 |
-| 409 | `COUPON_PENDING` | 쿠폰 예약 응답을 기다리는 중이라 결제 요청 불가 |
+| 409 | `COUPON_PENDING` | 쿠폰 예약 응답을 기다리는 중이라 적용·교체·결제 요청 불가. 쿠폰 해제 가능 |
 | 404 | `COUPON_NOT_FOUND` | 쿠폰 없음 |
 | 409 | `COUPON_NOT_ISSUABLE`, `COUPON_ALREADY_CLAIMED`, `COUPON_SOLD_OUT` | 쿠폰 받기 실패(발급 불가·중복·품절) |
 | 409 | `COUPON_NOT_REVOCABLE`, `COUPON_DEFINITION_LOCKED`, `COUPON_VALID_UNTIL_SHORTENED`, `INVALID_COUPON_STATE`, `COUPON_ORDER_MISMATCH` | 쿠폰 회수·수정·상태 전이 규칙 위반 |
@@ -150,7 +150,7 @@
 | `GET /api/v1/bookings/me` | USER | 내 예매 목록(커서, `performanceId` 필터) |
 | `GET /api/v1/bookings/{id}` | USER | 예매 상세 |
 | `PUT /api/v1/bookings/{id}/coupon` | USER | 쿠폰 적용·교체 |
-| `DELETE /api/v1/bookings/{id}/coupon` | USER | 쿠폰 해제 |
+| `DELETE /api/v1/bookings/{id}/coupon` | USER | 쿠폰 해제. 만료되지 않은 결제 전 `PENDING` 예매는 예약 대기 중에도 해제 가능 |
 | `POST /api/v1/bookings/{id}/cancel` | USER | 예매 취소 |
 | `POST /api/v1/bookings/{id}/payments` | USER | 결제 요청(202) |
 | `GET /api/v1/payments/me?bookingIds=` | USER | 내 결제 상태 |

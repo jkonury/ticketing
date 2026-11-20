@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { call, codeOf } from './booking-shared';
 import { couponError, couponRejectReason } from './error-messages';
 import {
@@ -29,6 +29,7 @@ export function CouponPanel({
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const pollGeneration = useRef(0);
   useEffect(() => {
     let alive = true;
     call('/api/me/coupons', 'GET')
@@ -56,29 +57,39 @@ export function CouponPanel({
     if (code === 'SESSION_EXPIRED') onSessionExpired();
     setMessage(couponError(code));
   };
+  async function pollResult(generation: number) {
+    try {
+      for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        if (pollGeneration.current !== generation) return;
+        const next = amountSchema.parse(
+          await call(`/api/bookings/${bookingId}`, 'GET'),
+        );
+        if (pollGeneration.current !== generation) return;
+        onAmount(next);
+        if (next.coupon?.state !== 'RESERVING') return;
+      }
+      setMessage(
+        '쿠폰 적용 결과를 기다리는 중입니다. 쿠폰을 해제하고 정가로 결제할 수 있습니다.',
+      );
+    } catch (error) {
+      if (pollGeneration.current === generation) fail(error);
+    }
+  }
   async function apply() {
     if (!selected) return;
     setBusy(true);
     setMessage('');
     try {
-      onAmount(
-        amountSchema.parse(
-          await call(`/api/bookings/${bookingId}/coupon`, 'PUT', {
-            issuedCouponId: Number(selected),
-          }),
-        ),
+      const next = amountSchema.parse(
+        await call(`/api/bookings/${bookingId}/coupon`, 'PUT', {
+          issuedCouponId: Number(selected),
+        }),
       );
-      for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-        const next = amountSchema.parse(
-          await call(`/api/bookings/${bookingId}`, 'GET'),
-        );
-        onAmount(next);
-        if (next.coupon?.state !== 'RESERVING') return;
+      onAmount(next);
+      if (next.coupon?.state === 'RESERVING') {
+        void pollResult(++pollGeneration.current);
       }
-      setMessage(
-        '쿠폰 적용 결과를 아직 받지 못했습니다. 잠시 후 다시 확인해 주세요.',
-      );
     } catch (error) {
       fail(error);
     } finally {
@@ -89,11 +100,12 @@ export function CouponPanel({
     setBusy(true);
     setMessage('');
     try {
-      onAmount(
-        amountSchema.parse(
-          await call(`/api/bookings/${bookingId}/coupon`, 'DELETE'),
-        ),
+      const next = amountSchema.parse(
+        await call(`/api/bookings/${bookingId}/coupon`, 'DELETE'),
       );
+      pollGeneration.current++;
+      onAmount(next);
+      setMessage('');
     } catch (error) {
       fail(error);
     } finally {
@@ -102,6 +114,7 @@ export function CouponPanel({
   }
   const coupon = amount.coupon;
   const locked = disabled || busy;
+  const applyLocked = locked || coupon?.state === 'RESERVING';
   return (
     <fieldset>
       <legend>쿠폰</legend>
@@ -122,7 +135,7 @@ export function CouponPanel({
           <select
             aria-label="쿠폰 선택"
             value={selected}
-            disabled={locked}
+            disabled={applyLocked}
             onChange={(event) => setSelected(event.target.value)}
           >
             <option value="">쿠폰 선택</option>
@@ -134,7 +147,7 @@ export function CouponPanel({
           </select>
           <button
             type="button"
-            disabled={locked || !selected}
+            disabled={applyLocked || !selected}
             onClick={() => void apply()}
           >
             쿠폰 적용

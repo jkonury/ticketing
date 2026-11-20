@@ -5,12 +5,16 @@ import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.holdKey
+import io.github.ticketing.booking.application.port.provided.BookingCouponUseCase
 import io.github.ticketing.booking.application.port.provided.ExpireBookingUseCase
 import io.github.ticketing.booking.application.port.provided.HandleCouponResultUseCase
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
+import io.github.ticketing.booking.application.port.required.BookingCommandPort
+import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
+import io.github.ticketing.booking.domain.applyCoupon
 import io.github.ticketing.coupon.CouponRejected
 import io.github.ticketing.coupon.CouponReleaseRequested
 import io.github.ticketing.coupon.CouponReservationRequested
@@ -36,9 +40,13 @@ import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.publicationCompleted
 import io.github.ticketing.publicationIds
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -74,6 +82,8 @@ class BookingCouponSagaTests(
     private val collector: EventCollector,
     private val results: HandleCouponResultUseCase,
     private val serializer: EventSerializer,
+    private val bookings: BookingCommandPort,
+    private val bookingCoupons: BookingCouponUseCase,
 ) : IntegrationTestSupport() {
     private val json = JsonMapper.builder().build()
 
@@ -320,6 +330,110 @@ class BookingCouponSagaTests(
         pay(m, id).expectStatus(HttpStatus.ACCEPTED)
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }.single().amount).isEqualByComparingTo(BigDecimal(200000))
         assertThat(releases(id)).isEmpty()
+    }
+
+    @ParameterizedTest(name = "예약 요청 선도착 = {0}")
+    @ValueSource(booleans = [true, false])
+    fun `대기 중 쿠폰 제거 후 요청과 결과가 재전달되어도 정가로 결제한다`(reservationFirst: Boolean) {
+        val member = member()
+        val couponId = issueCoupon(member.id)
+        val bookingId = book(member, newSchedule())
+
+        val (request, release) = checkNotNull(
+            tx.execute {
+                applyCoupon(member, bookingId, couponId).expectStatus(HttpStatus.OK)
+                val request = collector.of(CouponReservationRequested::class.java) { it.orderId == bookingId }.single()
+                if (reservationFirst) {
+                    reserveUseCase.reserve(request)
+                    assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.RESERVED)
+                }
+                assertThat(couponState(member, bookingId)).isEqualTo("RESERVING")
+
+                removeCoupon(member, bookingId).expectStatus(HttpStatus.OK)
+                val release = releases(bookingId).single()
+                assertThat(release).isEqualTo(CouponReleaseRequested(bookingId, couponId, "REMOVED", request.reservationAttemptId))
+                releaseUseCase.release(release)
+                reserveUseCase.reserve(request)
+                assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.ISSUED)
+                request to release
+            },
+        )
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            val requests = publicationIds(
+                jdbc,
+                CouponReservationRequested::class.java,
+                "orderId",
+                bookingId,
+                "CouponReservationListener.on",
+            )
+            assertThat(requests).hasSize(1).allMatch { publicationCompleted(jdbc, it) }
+        }
+        repeat(2) {
+            reserveUseCase.reserve(request)
+            assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.ISSUED)
+            results.onReserved(bookingId, couponId, BigDecimal(30000), request.reservationAttemptId)
+            results.onRejected(bookingId, couponId, "NOT_AVAILABLE", request.reservationAttemptId)
+            releaseUseCase.release(release)
+        }
+
+        assertThat(releases(bookingId).map { it.reservationAttemptId }).containsOnly(request.reservationAttemptId)
+        assertThat(releases(bookingId).map { it.reason }).contains("REMOVED", "STALE_RESERVATION")
+        val detail = detail(member, bookingId)
+        assertThat(detail["coupon"]).isNull()
+        assertThat(detail["discountAmount"]).isEqualTo(0)
+        pay(member, bookingId).expectStatus(HttpStatus.ACCEPTED)
+        assertThat(collector.of(PaymentRequested::class.java) { it.orderId == bookingId }.single().amount).isEqualByComparingTo("200000")
+        succeed(bookingId, BigDecimal(200000))
+        awaitStatus(member, bookingId, "CONFIRMED")
+        assertThat(couponStatus(couponId)).isEqualTo(IssuedCouponStatus.ISSUED)
+    }
+
+    @Test
+    fun `예약 결과와 충돌한 제거는 예매와 발행을 보존하고 다시 제거하면 함께 커밋된다`() {
+        val member = member()
+        val couponId = issueCoupon(member.id)
+        val bookingId = book(member, newSchedule())
+        val id = BookingId(bookingId)
+        val attempt = checkNotNull(
+            tx.execute {
+                val booking = checkNotNull(bookings.findById(id))
+                booking.applyCoupon(couponId, clock.instant())
+                checkNotNull(bookings.save(booking).appliedCoupon).reservationAttemptId
+            },
+        )
+
+        assertThatThrownBy {
+            tx.executeWithoutResult {
+                checkNotNull(bookings.findById(id))
+                Executors.newVirtualThreadPerTaskExecutor().use { executor ->
+                    executor.submit {
+                        results.onReserved(bookingId, couponId, BigDecimal(30000), attempt)
+                    }.get(10, TimeUnit.SECONDS)
+                }
+                bookingCoupons.remove(member.id, bookingId)
+            }
+        }.isInstanceOf(OptimisticLockingFailureException::class.java)
+
+        val releasePublications = {
+            publicationIds(jdbc, CouponReleaseRequested::class.java, "orderId", bookingId, "CouponReservationListener.on")
+        }
+        assertThat(couponState(member, bookingId)).isEqualTo("RESERVED")
+        assertThat(releasePublications()).isEmpty()
+
+        tx.executeWithoutResult { status ->
+            bookingCoupons.remove(member.id, bookingId)
+            assertThat(releases(bookingId)).containsExactly(CouponReleaseRequested(bookingId, couponId, "REMOVED", attempt))
+            status.setRollbackOnly()
+        }
+        assertThat(couponState(member, bookingId)).isEqualTo("RESERVED")
+        assertThat(releasePublications()).isEmpty()
+
+        removeCoupon(member, bookingId).expectStatus(HttpStatus.OK)
+        assertThat(couponState(member, bookingId)).isNull()
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            assertThat(releasePublications()).hasSize(1).allMatch { publicationCompleted(jdbc, it) }
+        }
     }
 
     @Test

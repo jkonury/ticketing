@@ -118,6 +118,10 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 2. core를 재시작한다. core는 `republish-outstanding-events-on-restart: true`라서 기동 시 미완료 발행을 다시 처리한다.
 3. 건수가 줄고 최고령이 0으로 돌아오는지 지표로 확인한다. 줄지 않으면 같은 SQL로 `completion_attempts`와 로그를 다시 본다.
 
+**쿠폰 예약 응답 지연**
+
+결제 요청 전이고 만료되지 않은 예매는 결제 화면에서 `쿠폰 해제`를 누른 뒤 정가로 결제할 수 있다. 해제가 성공하면 예매 상세에서 쿠폰이 비고 결제 예정 금액이 정가로 돌아온다. 운영자는 미완료 발행과 core 로그에서 `CouponReservationRequested`, `CouponReserved`, `CouponRejected`, `CouponReleaseRequested`를 확인한다. 같은 주문과 쿠폰의 `reservationAttemptId`로 관련 발행을 대조한다. 제거 직후 결과 리스너가 예매의 낙관적 락 충돌로 실패했다면 미완료로 남고 위 재처리 절차가 적용된다. 제거한 시도의 늦은 성공은 같은 시도의 해제를 요청하고, 늦은 거절은 예매를 바꾸지 않는다.
+
 **Kafka 장애와 복구**
 
 Kafka가 내려간 상태에서도 core는 기동할 수 있다. 토픽 생성 실패 경고와 연결 오류를 로그에서 확인한다. 이때 결제 이벤트는 전달되지 않으며 외부화 실패 행이 위 레지스트리에 남는다. Kafka와 PostgreSQL을 기존 데이터 및 주소로 복구하고 브로커가 정상인지 확인한 다음 core를 재시작한다. 재기동 자동 재발행은 브로커 복구 자체만으로 실행되지 않는다. 위 SQL에서 해당 행의 완료 여부를 확인하고 결제·예매의 실제 상태도 확인한다. 다중 인스턴스에서는 다른 인스턴스가 처리 중인 발행과 겹칠 수 있으므로 재기동 전에 처리 상황을 확인한다.
