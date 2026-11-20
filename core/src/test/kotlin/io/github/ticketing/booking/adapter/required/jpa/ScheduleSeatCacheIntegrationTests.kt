@@ -72,6 +72,21 @@ internal class ScheduleSeatCacheIntegrationTests(
     }
 
     @Test
+    fun `시작 시각이 없는 이전 캐시는 DB에서 보완한다`() {
+        val seats = seats()
+        tx.execute { save(seats) }
+        val scheduleId = seats.first().scheduleId
+        redis.opsForHash<String, String>().put(
+            ScheduleSeatCache.key(scheduleId),
+            "1",
+            """{"grade":"VIP","label":"A구역 1","price":150000}""",
+        )
+
+        assertThat(port.findSeats(scheduleId, listOf(SeatId(1)))).containsExactly(seats.first())
+        assertThat(cache.find(scheduleId, listOf(SeatId(1)))).containsExactly(seats.first())
+    }
+
+    @Test
     fun `만료된 캐시는 DB에서 복원한다`() {
         val seats = seats()
         tx.execute { save(seats) }
@@ -136,7 +151,9 @@ internal class ScheduleSeatCacheIntegrationTests(
 
     private fun seats(): List<ScheduleSeatCopy> {
         val scheduleId = ScheduleId(System.nanoTime())
-        return (1L..3L).map { ScheduleSeatCopy(scheduleId, SeatId(it), "VIP", "A구역 $it", BigDecimal(150000)) }
+        return (1L..3L).map {
+            ScheduleSeatCopy(scheduleId, SeatId(it), "VIP", "A구역 $it", BigDecimal(150000), Instant.parse("2026-11-10T10:00:00Z"))
+        }
     }
 
     private fun save(seats: List<ScheduleSeatCopy>) {

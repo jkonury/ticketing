@@ -57,7 +57,7 @@ realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`
 
 ### 불변 좌석 사본 캐시 (코어 `booking`)
 
-`booking:seat-copies:v1:{<scheduleId>}` Hash의 field는 좌석 ID, value는 `grade`, `label`, `price` JSON이다.
+`booking:seat-copies:v1:{<scheduleId>}` Hash의 field는 좌석 ID, value는 `grade`, `label`, `price`, `startsAt` JSON이다. 이전 형식처럼 시작 시각이 빠진 값은 DB에서 보완한다.
 판매 상태 스냅샷과 별개다. 요청 좌석만 HMGET하고 누락·손상은 DB 조회로 보완한다.
 등록·조회 결과는 커밋 후 Lua로 HSET과 EXPIRE(6시간)를 함께 적용한다. 채울 때 TTL을 갱신하며
 hit은 TTL을 연장하지 않는다. 빈 결과는 저장하지 않고 Redis 오류는 DB로 fallback한다.

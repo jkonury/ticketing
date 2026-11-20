@@ -4,6 +4,7 @@ import io.github.ticketing.booking.BookingExpired
 import io.github.ticketing.booking.application.port.provided.PaymentRequestResult
 import io.github.ticketing.booking.application.port.provided.RequestPaymentUseCase
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
+import io.github.ticketing.booking.application.port.required.ScheduleSeatCommandPort
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingExpiredException
@@ -11,6 +12,7 @@ import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.BookingStatus
 import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.NotBookingOwnerException
+import io.github.ticketing.booking.domain.requireSalesOpen
 import io.github.ticketing.payment.PaymentRequested
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -22,6 +24,7 @@ import java.time.Instant
 @Service
 class RequestPaymentService(
     private val bookings: BookingCommandPort,
+    private val scheduleSeats: ScheduleSeatCommandPort,
     private val seatHold: SeatHoldPort,
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
@@ -56,6 +59,10 @@ class RequestPaymentService(
         if (booking.status == BookingStatus.EXPIRED) throw BookingExpiredException()
         val alreadyRequested = booking.paymentRequestedAt != null
         val expirable = booking.status == BookingStatus.PENDING && !alreadyRequested && booking.isExpired(now)
+        if (booking.status == BookingStatus.PENDING && !alreadyRequested && !expirable) {
+            val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
+            requireSalesOpen(schedule.startsAt, now)
+        }
         return if (expirable) expire(booking, now) else requestPayment(booking, alreadyRequested, now)
     }
 

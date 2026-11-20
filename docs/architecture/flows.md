@@ -38,6 +38,7 @@ realtime 규칙 ([ADR 0021](../adr/0021-realtime-queue-and-sse-contracts.md)):
 
 - 1회 예매 최대 **4매**
 - 선점 유지 시간(TTL) **5분**
+- 회차 시작 시각부터 신규 예매와 최초 결제 요청을 거절한다. 기존 멱등 재호출은 시작 이후에도 기존 결과를 돌려준다.
 - 여러 좌석은 Lua 스크립트로 **전부 성공하거나 전부 실패**
 - 최종 확정은 결제 성공 시 DB 기록. `booking.sold_seat`의 `(회차, 좌석)` **유니크 제약**이 마지막 방어선
 - API 흐름: `POST /api/v1/bookings`가 Redis 선점과 `PENDING` 생성을 하고, `POST /api/v1/bookings/{id}/payments`가 결제 요청 이벤트를 발행한다.

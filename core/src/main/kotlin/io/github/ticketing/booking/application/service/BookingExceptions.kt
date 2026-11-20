@@ -9,6 +9,7 @@ import io.github.ticketing.booking.domain.DUPLICATE_SEAT
 import io.github.ticketing.booking.domain.INVALID_BOOKING_STATE
 import io.github.ticketing.booking.domain.NOT_BOOKING_OWNER
 import io.github.ticketing.booking.domain.NO_SEATS
+import io.github.ticketing.booking.domain.SALES_CLOSED
 import io.github.ticketing.booking.domain.TOO_MANY_SEATS
 import org.springframework.http.HttpStatus
 
@@ -32,7 +33,7 @@ internal fun BookingRuleException.toApplicationException(): DomainException {
     val status = when (code) {
         TOO_MANY_SEATS, NO_SEATS, DUPLICATE_SEAT -> HttpStatus.BAD_REQUEST
         NOT_BOOKING_OWNER -> HttpStatus.FORBIDDEN
-        INVALID_BOOKING_STATE, BOOKING_EXPIRED, COUPON_PENDING, COUPON_CHANGE_NOT_ALLOWED -> HttpStatus.CONFLICT
+        INVALID_BOOKING_STATE, BOOKING_EXPIRED, SALES_CLOSED, COUPON_PENDING, COUPON_CHANGE_NOT_ALLOWED -> HttpStatus.CONFLICT
         else -> HttpStatus.BAD_REQUEST
     }
     return BookingRuleViolation(code, status, message ?: code)

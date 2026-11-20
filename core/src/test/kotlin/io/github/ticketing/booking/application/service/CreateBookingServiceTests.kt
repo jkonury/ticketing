@@ -150,17 +150,20 @@ class CreateBookingServiceTests {
             }
     }
 
-    private val seatCopies = (1L..5L).map { ScheduleSeatCopy(scheduleId, SeatId(it), "R", "A$it", BigDecimal(100000)) }
+    private val seatCopies = (1L..5L).map {
+        ScheduleSeatCopy(scheduleId, SeatId(it), "R", "A$it", BigDecimal(100000), now.plusSeconds(3600))
+    }
     private val scheduleSeats = FakeScheduleSeats(setOf(scheduleId), seatCopies)
 
-    private fun service(bookings: BookingCommandPort, hold: SeatHoldPort) = CreateBookingService(
-        bookings,
-        scheduleSeats,
-        hold,
-        TransactionTemplate(FakeTransactionManager()),
-        clock,
-        io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
-    )
+    private fun service(bookings: BookingCommandPort, hold: SeatHoldPort, seats: ScheduleSeatCommandPort = scheduleSeats) =
+        CreateBookingService(
+            bookings,
+            seats,
+            hold,
+            TransactionTemplate(FakeTransactionManager()),
+            clock,
+            io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+        )
 
     private fun command(vararg seatIds: Long, key: String = "key-1", schedule: Long = 1) =
         CreateBookingCommand(7, key, schedule, seatIds.toList())
@@ -188,6 +191,20 @@ class CreateBookingServiceTests {
         assertThat(result.booking.totalAmount).isEqualByComparingTo(BigDecimal(200000))
         assertThat(result.booking.seats.map { it.label }).containsExactly("A1", "A2")
         assertThat(result.booking.expiresAt).isEqualTo(now + Booking.HOLD_DURATION)
+    }
+
+    @Test
+    fun `회차 시작부터 새 예매는 거절하고 기존 멱등 요청은 반환한다`() {
+        val bookings = FakeBookings()
+        val hold = FakeSeatHold()
+        val original = service(bookings, hold).create(command(1))
+        val closed = FakeScheduleSeats(setOf(scheduleId), seatCopies.map { it.copy(startsAt = now) })
+        val service = service(bookings, hold, closed)
+
+        assertThat(service.create(command(1)).booking.bookingId).isEqualTo(original.booking.bookingId)
+        assertThatThrownBy { service.create(command(2, key = "new")) }
+            .isInstanceOfSatisfying(BookingRuleViolation::class.java) { assertThat(it.code).isEqualTo("SALES_CLOSED") }
+        assertThat(hold.held).hasSize(1)
     }
 
     @Test

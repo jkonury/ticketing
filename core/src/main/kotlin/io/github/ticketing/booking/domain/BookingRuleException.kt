@@ -11,6 +11,8 @@ class DuplicateSeatException : BookingRuleException(DUPLICATE_SEAT)
 
 class BookingExpiredException : BookingRuleException(BOOKING_EXPIRED)
 
+class SalesClosedException : BookingRuleException(SALES_CLOSED)
+
 class InvalidBookingStateException(status: BookingStatus) :
     BookingRuleException(INVALID_BOOKING_STATE, "$INVALID_BOOKING_STATE: $status")
 
@@ -20,6 +22,7 @@ const val TOO_MANY_SEATS = "TOO_MANY_SEATS"
 const val NO_SEATS = "NO_SEATS"
 const val DUPLICATE_SEAT = "DUPLICATE_SEAT"
 const val BOOKING_EXPIRED = "BOOKING_EXPIRED"
+const val SALES_CLOSED = "SALES_CLOSED"
 const val INVALID_BOOKING_STATE = "INVALID_BOOKING_STATE"
 const val NOT_BOOKING_OWNER = "NOT_BOOKING_OWNER"
 

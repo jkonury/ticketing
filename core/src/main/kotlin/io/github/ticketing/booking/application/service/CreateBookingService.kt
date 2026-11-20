@@ -14,6 +14,7 @@ import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
+import io.github.ticketing.booking.domain.requireSalesOpen
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
@@ -72,10 +73,27 @@ class CreateBookingService(
             Booking.create(memberId, scheduleId, seats, holdToken, now, command.idempotencyKey)
         }
 
-        return stage("hold") {
-            holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now, fingerprint(command))
-        }
+        return closedBookingOrReject(memberId, command.idempotencyKey, scheduleId, copies, now)
+            ?: stage("hold") {
+                holdOrExisting(memberId, command.idempotencyKey, scheduleId, requested, holdToken, now, fingerprint(command))
+            }
             ?: stage("persist") { persist(booking, copies.mapValues { it.value.label }, requested) }
+    }
+
+    private fun closedBookingOrReject(
+        memberId: MemberId,
+        key: String,
+        scheduleId: ScheduleId,
+        copies: Map<SeatId, ScheduleSeatCopy>,
+        now: Instant,
+    ): CreateBookingResult? {
+        val startsAt = checkNotNull(copies.values.first().startsAt) { "회차 시작 시각이 없다: ${scheduleId.value}" }
+        if (now.isBefore(startsAt)) return null
+        return stage("existing") { existing(memberId, key) }
+            ?: translatingRuleViolations {
+                requireSalesOpen(startsAt, now)
+                null
+            }
     }
 
     private fun findCopies(scheduleId: ScheduleId, requested: List<SeatId>): Map<SeatId, ScheduleSeatCopy> {

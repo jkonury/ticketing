@@ -13,4 +13,15 @@ data class ScheduleCopy(
     val receivedAt: Instant,
 )
 
-data class ScheduleSeatCopy(val scheduleId: ScheduleId, val seatId: SeatId, val grade: String, val label: String, val price: BigDecimal)
+data class ScheduleSeatCopy(
+    val scheduleId: ScheduleId,
+    val seatId: SeatId,
+    val grade: String,
+    val label: String,
+    val price: BigDecimal,
+    val startsAt: Instant? = null,
+)
+
+fun requireSalesOpen(startsAt: Instant, now: Instant) {
+    if (!now.isBefore(startsAt)) throw SalesClosedException()
+}

@@ -17,6 +17,8 @@ import tools.jackson.core.JacksonException
 import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.KotlinModule
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.format.DateTimeParseException
 
 @Component
 internal class ScheduleSeatCache(private val redis: StringRedisTemplate, registry: MeterRegistry) {
@@ -65,7 +67,7 @@ internal class ScheduleSeatCache(private val redis: StringRedisTemplate, registr
 
     private fun put(scheduleId: ScheduleId, seats: List<ScheduleSeatCopy>) {
         val arguments = listOf((if (scheduleId.value < 0) 30L else TTL_SECONDS).toString()) + seats.flatMap {
-            listOf(it.seatId.value.toString(), mapper.writeValueAsString(SeatValue(it.grade, it.label, it.price)))
+            listOf(it.seatId.value.toString(), mapper.writeValueAsString(SeatValue(it.grade, it.label, it.price, it.startsAt?.toString())))
         }
         try {
             WarmupIo.redisCommand()
@@ -77,14 +79,17 @@ internal class ScheduleSeatCache(private val redis: StringRedisTemplate, registr
 
     private fun decode(scheduleId: ScheduleId, seatId: SeatId, value: String): ScheduleSeatCopy? = try {
         mapper.readValue(value, SeatValue::class.java)?.let { cached ->
-            ScheduleSeatCopy(scheduleId, seatId, cached.grade, cached.label, cached.price)
+            ScheduleSeatCopy(scheduleId, seatId, cached.grade, cached.label, cached.price, cached.startsAt?.let(Instant::parse))
         }
     } catch (exception: JacksonException) {
         logger.warn("좌석 사본 캐시 손상, DB 조회로 전환: scheduleId={}, seatId={}", scheduleId.value, seatId.value, exception)
         null
+    } catch (exception: DateTimeParseException) {
+        logger.warn("좌석 사본 캐시 시각 손상, DB 조회로 전환: scheduleId={}, seatId={}", scheduleId.value, seatId.value, exception)
+        null
     }
 
-    private data class SeatValue(val grade: String, val label: String, val price: BigDecimal)
+    private data class SeatValue(val grade: String, val label: String, val price: BigDecimal, val startsAt: String? = null)
 
     companion object {
         private const val TTL_SECONDS = 21600L

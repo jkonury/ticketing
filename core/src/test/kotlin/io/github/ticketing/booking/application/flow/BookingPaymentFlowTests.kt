@@ -72,7 +72,7 @@ class BookingPaymentFlowTests(
     private fun get(path: String) = mockMvcTester.get().uri(path)
     private fun post(path: String) = mockMvcTester.post().uri(path)
 
-    private fun newSchedule(seatCount: Int = 4): Long {
+    private fun newSchedule(seatCount: Int = 4, startsAt: Instant = Instant.parse("2027-01-01T10:00:00Z")): Long {
         val scheduleId = System.nanoTime()
         register.register(
             RegisterScheduleSeatsCommand(
@@ -80,7 +80,7 @@ class BookingPaymentFlowTests(
                 1,
                 "결제 흐름 공연",
                 2,
-                Instant.parse("2027-01-01T10:00:00Z"),
+                startsAt,
                 (1..seatCount).map { RegisterScheduleSeatsCommand.SeatInfo(it.toLong(), "R", "A구역 ${it}번", BigDecimal(100000)) },
             ),
         )
@@ -385,6 +385,22 @@ class BookingPaymentFlowTests(
             .bodyJson().extractingPath("$.status").isEqualTo("CONFIRMED")
 
         assertThat(collector.of(PaymentRequested::class.java) { it.orderId == id }).hasSize(1)
+    }
+
+    @Test
+    fun `회차 시작 이후 첫 결제는 거절하고 이미 접수한 결제는 재시도할 수 있다`() {
+        val startsAt = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).plusSeconds(60)
+        val schedule = newSchedule(startsAt = startsAt)
+        val token = token()
+        val requested = book(token, schedule, listOf(1))
+        val notRequested = book(token, schedule, listOf(2))
+        pay(token, requested).expectStatus(HttpStatus.ACCEPTED)
+
+        clock.now = startsAt
+        assertThat(pay(token, requested)).hasStatus(HttpStatus.ACCEPTED)
+        assertThat(pay(token, notRequested)).hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("SALES_CLOSED")
+        assertThat(collector.of(PaymentRequested::class.java) { it.orderId == requested }).hasSize(1)
     }
 
     @Test

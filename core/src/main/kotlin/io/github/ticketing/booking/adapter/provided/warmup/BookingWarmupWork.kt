@@ -42,6 +42,7 @@ import java.time.Duration
 import java.util.UUID
 
 private const val WARMUP_TTL_SECONDS = 30L
+private const val WARMUP_START_OFFSET_SECONDS = 86400L
 private const val MAX_SEATS = 4
 
 @Component
@@ -136,6 +137,7 @@ internal class BookingWarmupWork(
      */
     fun requestPayment(): PaymentRequestResult = isolated(1) { schedule, seats ->
         rolledBack {
+            insertSchedule(schedule, seats)
             val created = createBooking.create(command(schedule, seats)).also { check(it.created) }
             payments.request(schedule.value, created.booking.bookingId)
         }
@@ -185,7 +187,19 @@ internal class BookingWarmupWork(
                 seats.map { RedisSeatHoldAdapter.holdKey(schedule, it) }
         return try {
             ensureActive()
-            cache.putForWarmup(schedule, seats.map { ScheduleSeatCopy(schedule, it, "VIP", "W-${it.value}", BigDecimal.TEN) })
+            cache.putForWarmup(
+                schedule,
+                seats.map {
+                    ScheduleSeatCopy(
+                        schedule,
+                        it,
+                        "VIP",
+                        "W-${it.value}",
+                        BigDecimal.TEN,
+                        clock.instant().plusSeconds(WARMUP_START_OFFSET_SECONDS),
+                    )
+                },
+            )
             ensureActive()
             action(schedule, seats)
         } finally {

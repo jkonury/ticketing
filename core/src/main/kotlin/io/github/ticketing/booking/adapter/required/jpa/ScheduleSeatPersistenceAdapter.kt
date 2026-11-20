@@ -33,7 +33,7 @@ internal class ScheduleSeatPersistenceAdapter(
             .execute()
         if (inserted == 0) return false
         seatRepository.saveAll(seats.map { it.toEntity() })
-        cache.putAfterCommit(schedule.scheduleId, seats)
+        cache.putAfterCommit(schedule.scheduleId, seats.map { it.copy(startsAt = schedule.startsAt) })
         return true
     }
 
@@ -54,7 +54,7 @@ internal class ScheduleSeatPersistenceAdapter(
     override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> {
         if (seatIds.isEmpty()) return emptyList()
         val requested = seatIds.distinct()
-        val cached = cache.find(scheduleId, requested)
+        val cached = cache.find(scheduleId, requested).filter { it.startsAt != null }
         val cachedIds = cached.map { it.seatId }.toSet()
         val missing = requested.filterNot { it in cachedIds }
         val loaded = if (missing.isEmpty()) emptyList() else loadSeats(scheduleId, missing)
@@ -62,16 +62,19 @@ internal class ScheduleSeatPersistenceAdapter(
         return cached + loaded
     }
 
-    private fun loadSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> = dsl.selectFrom(SCHEDULE_SEAT)
+    private fun loadSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy> = dsl.select()
+        .from(SCHEDULE_SEAT)
+        .join(SCHEDULE).on(SCHEDULE.SCHEDULE_ID.eq(SCHEDULE_SEAT.SCHEDULE_ID))
         .where(SCHEDULE_SEAT.SCHEDULE_ID.eq(scheduleId.value))
         .and(SCHEDULE_SEAT.SEAT_ID.`in`(seatIds.map { it.value }))
         .fetch {
             ScheduleSeatCopy(
                 scheduleId,
-                SeatId(requireNotNull(it.seatId)),
-                requireNotNull(it.grade),
-                requireNotNull(it.label),
-                requireNotNull(it.price).toBigDecimal(),
+                SeatId(requireNotNull(it.get(SCHEDULE_SEAT.SEAT_ID))),
+                requireNotNull(it.get(SCHEDULE_SEAT.GRADE)),
+                requireNotNull(it.get(SCHEDULE_SEAT.LABEL)),
+                requireNotNull(it.get(SCHEDULE_SEAT.PRICE)).toBigDecimal(),
+                requireNotNull(it.get(SCHEDULE.STARTS_AT)).toInstant(),
             )
         }
 }
