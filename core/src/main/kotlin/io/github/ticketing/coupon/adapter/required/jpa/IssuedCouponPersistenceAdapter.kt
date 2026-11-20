@@ -5,7 +5,6 @@ import io.github.ticketing.coupon.application.port.required.IssuedCouponCommandP
 import io.github.ticketing.coupon.domain.CouponDefinitionId
 import io.github.ticketing.coupon.domain.IssuedCoupon
 import io.github.ticketing.coupon.domain.IssuedCouponId
-import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import io.github.ticketing.coupon.domain.MemberId
 import io.github.ticketing.coupon.domain.OrderId
 import org.jooq.DSLContext
@@ -47,22 +46,24 @@ internal class IssuedCouponPersistenceAdapter(private val issuedCoupons: IssuedC
     override fun findByDefinitionAndMember(definitionId: CouponDefinitionId, memberId: MemberId): IssuedCoupon? =
         issuedCoupons.findByDefinitionIdAndMemberId(definitionId.value, memberId.value)?.toDomain()
 
-    override fun reserveIfIssued(id: IssuedCouponId, orderId: OrderId, discountAmount: BigDecimal, reservedUntil: Instant): Boolean =
-        issuedCoupons.reserveIfIssued(id.value, orderId.value, discountAmount, reservedUntil) == 1
+    override fun findForUpdate(id: IssuedCouponId): IssuedCoupon? = issuedCoupons.findForUpdate(id.value)?.toDomain()
 
-    override fun releaseIfReservedBy(id: IssuedCouponId, orderId: OrderId): Boolean =
-        issuedCoupons.releaseIfReservedBy(id.value, orderId.value) == 1
+    override fun reserveIfAvailable(
+        id: IssuedCouponId,
+        orderId: OrderId,
+        discountAmount: BigDecimal,
+        reservedUntil: Instant,
+        attemptId: Long,
+    ): Boolean = issuedCoupons.reserveIfAvailable(id.value, orderId.value, discountAmount, reservedUntil, attemptId) == 1
 
-    override fun releaseIfStale(id: IssuedCouponId, cutoff: Instant): Boolean = issuedCoupons.releaseIfStale(id.value, cutoff) == 1
+    override fun releaseIfReservedBy(id: IssuedCouponId, orderId: OrderId, attemptId: Long): Boolean =
+        issuedCoupons.releaseIfReservedBy(id.value, orderId.value, attemptId) == 1
 
-    override fun confirmIfReservedBy(id: IssuedCouponId, orderId: OrderId, now: Instant): Boolean =
-        issuedCoupons.confirmIfReservedBy(id.value, orderId.value, now) == 1
+    override fun confirmIfReservedBy(id: IssuedCouponId, orderId: OrderId, now: Instant, attemptId: Long): Boolean =
+        issuedCoupons.confirmIfReservedBy(id.value, orderId.value, now, attemptId) == 1
 
-    override fun forceUse(id: IssuedCouponId, orderId: OrderId, now: Instant): IssuedCouponStatus? {
-        val previous = issuedCoupons.findById(id.value).map { IssuedCouponStatus.valueOf(it.status) }.orElse(null) ?: return null
-        issuedCoupons.forceUse(id.value, orderId.value, now)
-        return previous
-    }
+    override fun restoreReleasedUse(id: IssuedCouponId, orderId: OrderId, now: Instant, attemptId: Long, releasedVersion: Long): Boolean =
+        issuedCoupons.restoreReleasedUse(id.value, orderId.value, now, attemptId, releasedVersion) == 1
 
     override fun revokeIfIssued(id: IssuedCouponId): Boolean = issuedCoupons.revokeIfIssued(id.value) == 1
 }

@@ -22,6 +22,7 @@ class Booking private constructor(
     confirmedAt: Instant?,
     cancelledAt: Instant?,
     appliedCoupon: AppliedCoupon?,
+    couponAttemptId: Long,
 ) {
     var status: BookingStatus = status
         private set
@@ -36,6 +37,9 @@ class Booking private constructor(
 
     /** 쿠폰 전이 규칙은 `BookingCoupons.kt`가 맡는다. */
     var appliedCoupon: AppliedCoupon? = appliedCoupon
+        internal set
+
+    var couponAttemptId: Long = couponAttemptId
         internal set
 
     /** 좌석 정가의 합. */
@@ -172,6 +176,7 @@ class Booking private constructor(
                 confirmedAt = null,
                 cancelledAt = null,
                 appliedCoupon = null,
+                couponAttemptId = 0,
             )
         }
 
@@ -199,9 +204,10 @@ class Booking private constructor(
             confirmedAt: Instant?,
             cancelledAt: Instant?,
             appliedCoupon: AppliedCoupon? = null,
+            couponAttemptId: Long = 0,
         ): Booking = Booking(
             id, memberId, scheduleId, seats.toList(), holdToken, idempotencyKey, version, createdAt, expiresAt,
-            status, cancelReason, paymentRequestedAt, confirmedAt, cancelledAt, appliedCoupon,
+            status, cancelReason, paymentRequestedAt, confirmedAt, cancelledAt, appliedCoupon, couponAttemptId,
         )
     }
 }

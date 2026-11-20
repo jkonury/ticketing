@@ -189,8 +189,8 @@ sequenceDiagram
 ```
 
 - 확정 후 환불은 쿠폰이 소멸하므로 해제를 보내지 않는다.
-- 모든 상태 전이는 조건부 UPDATE이고 `(orderId, issuedCouponId)`가 같은 재전달은 무시한다.
-- 늦게 온 사용 확정은 강제로 `USED`로 바꾸고 불일치를 기록한다. 해제되지 않은 고아 예약은 정리 Job(`releaseStaleCouponReservationsJob`)이 해제한다.
+- 예매가 쿠폰을 새로 적용할 때마다 시도 ID를 증가시킨다. 같은 쿠폰의 높은 시도는 같은 주문의 이전 예약을 승계할 수 있다. 해제·보상은 주문, 쿠폰, 시도가 일치하는 예약에 적용한다.
+- 정리 Job(`releaseStaleCouponReservationsJob`)은 고아 예약의 시도를 기록하고 해제한다. 늦은 사용 확정은 같은 시도가 정리된 뒤 발급 행이 그대로일 때 복구하고 불일치를 기록한다. [ADR 0045](../adr/0045-coupon-reservation-attempts.md)
 - 예약은 `ticketing.coupon.reservation-ttl`(기본 1h, 예매 hold 5분 + 결제 유예 30분보다 길게) 동안 유지하고, 정리 Job은 `reserved_until + ticketing.coupon.reservation-release-grace`(기본 10m)가 지난 RESERVED만 조건부 UPDATE로 복원한다.
 
 ## 6.6 선착순 발급

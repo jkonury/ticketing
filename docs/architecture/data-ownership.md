@@ -20,7 +20,7 @@
 | `booking` | booking | `schedule`, `schedule_seat`, `booking`, `booking_seat`, `sold_seat` | `schedule`, `schedule_seat`는 catalog 사본. `sold_seat`가 좌석 확정의 유니크 제약 |
 | `payment` | payment | `payment`, `webhook_event`, `pg_transaction_snapshot`, `reconciliation_mismatch` | `payment`는 예매를 모르고 `orderId`만 가짐 |
 | `settlement` | settlement | `booking_sale`, `booking_refund`, `daily_settlement` | 앞의 둘은 booking 이벤트 사본 |
-| `coupon` | coupon | `coupon_definition`, `issued_coupon`, `use_mismatch` | `issued_coupon`의 `(definition_id, member_id)` 유니크가 중복 발급의 최종 방어선. `booking`은 발급 쿠폰 ID만 값으로 보관 |
+| `coupon` | coupon | `coupon_definition`, `issued_coupon`, `reservation_attempt`, `use_mismatch` | `issued_coupon`의 `(definition_id, member_id)` 유니크가 중복 발급의 최종 방어선. `booking`은 발급 쿠폰 ID와 예매별 시도 ID를 값으로 보관 |
 | `audit` | audit | `admin_action` | 관리자 행위 이벤트 사본. `source_event_id` 유니크로 멱등 |
 | `batch` | core-batch | Spring Batch 메타데이터 | 공식 DDL을 Flyway로 생성 |
 | `public` | Modulith | `event_publication` | 이벤트 발행 레지스트리 |

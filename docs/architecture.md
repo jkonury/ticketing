@@ -172,11 +172,11 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `PaymentRefunded` | payment | booking | `paymentId`, `orderId`, `refundedAt` |
 | `BookingConfirmed` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `seatIds`, `amount`(결제 금액 = `listAmount` − `discountAmount`), `listAmount`(정가), `discountAmount`(쿠폰 할인액), `confirmedAt` |
 | `BookingCancelled` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `reason`, `refundRequired`, `cancelledAt` |
-| `CouponReservationRequested` | booking | coupon | `orderId`, `memberId`, `issuedCouponId`, `performanceId`, `listAmount`, `requestedAt` |
-| `CouponReserved` | coupon | booking | `orderId`, `issuedCouponId`, `discountAmount` |
-| `CouponRejected` | coupon | booking | `orderId`, `issuedCouponId`, `reason` |
-| `CouponReleaseRequested` | booking | coupon | `orderId`, `issuedCouponId`, `reason` |
-| `CouponUseConfirmed` | booking | coupon | `orderId`, `issuedCouponId`, `confirmedAt` |
+| `CouponReservationRequested` | booking | coupon | `orderId`, `memberId`, `issuedCouponId`, `performanceId`, `listAmount`, `requestedAt`, `reservationAttemptId` |
+| `CouponReserved` | coupon | booking | `orderId`, `issuedCouponId`, `discountAmount`, `reservationAttemptId` |
+| `CouponRejected` | coupon | booking | `orderId`, `issuedCouponId`, `reason`, `reservationAttemptId` |
+| `CouponReleaseRequested` | booking | coupon | `orderId`, `issuedCouponId`, `reason`, `reservationAttemptId` |
+| `CouponUseConfirmed` | booking | coupon | `orderId`, `issuedCouponId`, `confirmedAt`, `reservationAttemptId` |
 | `MemberRoleChanged` | member | audit | `actorId`, `memberId`, `from`, `to`, `changedAt` |
 | `CouponDefinitionCreated` | coupon | audit | `eventId`, `actorId`, `definitionId`, `name`, `occurredAt` |
 | `CouponDefinitionUpdated` | coupon | audit | `eventId`, `actorId`, `definitionId`, `changedFields`, `occurredAt` |
@@ -185,6 +185,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `CouponRevoked` | coupon | audit | `eventId`, `actorId`, `issuedCouponId`, `definitionId`, `memberId`, `occurredAt` |
 | `BookingExpired` | booking | 없음(notification) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
+- 쿠폰 Saga의 시도 ID는 예매별로 증가한다. 쿠폰은 발급 쿠폰·주문별 마지막 시도를 보존한다. 기존 행과 ID가 없는 이벤트는 시도 `0`으로 처리한다. [ADR 0045](./adr/0045-coupon-reservation-attempts.md)
 - 쿠폰 관리자 행위 이벤트 5종(정의 생성·수정·중지, 직접 지급, 회수)과 `MemberRoleChanged`는 audit가 구독해 `audit.admin_action`에 `eventId`(`source_event_id` 유니크)로 멱등하게 기록한다. 설계 근거는 [계획서](./backup/plans/m5-5-coupon.md)와 ADR 0034·0035를 본다.
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 모듈이 소유한다. 발행자는 위 표와 같지만 클래스는 `payment` 루트 패키지에 있다.
 - 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking은 `ScheduleRegisteredListener`, `PaymentResultListener`, payment는 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.

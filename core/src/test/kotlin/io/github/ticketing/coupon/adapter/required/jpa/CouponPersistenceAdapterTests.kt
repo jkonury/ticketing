@@ -99,9 +99,9 @@ class CouponPersistenceAdapterTests(
         val coupon = issuedCoupon()
         val orderId = OrderId(ids.incrementAndGet())
 
-        val first = inTx { issuedCoupons.reserveIfIssued(coupon.couponId(), orderId, discount, now.plusSeconds(900)) }
+        val first = inTx { issuedCoupons.reserveIfAvailable(coupon.couponId(), orderId, discount, now.plusSeconds(900), 1) }
         val second =
-            inTx { issuedCoupons.reserveIfIssued(coupon.couponId(), OrderId(ids.incrementAndGet()), discount, now.plusSeconds(900)) }
+            inTx { issuedCoupons.reserveIfAvailable(coupon.couponId(), OrderId(ids.incrementAndGet()), discount, now.plusSeconds(900), 1) }
 
         val reloaded = coupon.reloaded()
         assertThat(first).isTrue()
@@ -116,11 +116,11 @@ class CouponPersistenceAdapterTests(
     fun `해제는 예약한 주문만 할 수 있고 재전달은 무시된다`() {
         val coupon = issuedCoupon()
         val orderId = OrderId(ids.incrementAndGet())
-        inTx { issuedCoupons.reserveIfIssued(coupon.couponId(), orderId, discount, now.plusSeconds(900)) }
+        inTx { issuedCoupons.reserveIfAvailable(coupon.couponId(), orderId, discount, now.plusSeconds(900), 1) }
 
-        val otherOrder = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), OrderId(ids.incrementAndGet())) }
-        val owner = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), orderId) }
-        val redelivered = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), orderId) }
+        val otherOrder = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), OrderId(ids.incrementAndGet()), 1) }
+        val owner = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), orderId, 1) }
+        val redelivered = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), orderId, 1) }
 
         val reloaded = coupon.reloaded()
         assertThat(otherOrder).isFalse()
@@ -136,11 +136,11 @@ class CouponPersistenceAdapterTests(
     fun `사용 확정은 예약한 주문만 할 수 있다`() {
         val coupon = issuedCoupon()
         val orderId = OrderId(ids.incrementAndGet())
-        inTx { issuedCoupons.reserveIfIssued(coupon.couponId(), orderId, discount, now.plusSeconds(900)) }
+        inTx { issuedCoupons.reserveIfAvailable(coupon.couponId(), orderId, discount, now.plusSeconds(900), 1) }
 
-        val otherOrder = inTx { issuedCoupons.confirmIfReservedBy(coupon.couponId(), OrderId(ids.incrementAndGet()), now) }
-        val owner = inTx { issuedCoupons.confirmIfReservedBy(coupon.couponId(), orderId, now) }
-        val afterUsed = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), orderId) }
+        val otherOrder = inTx { issuedCoupons.confirmIfReservedBy(coupon.couponId(), OrderId(ids.incrementAndGet()), now, 1) }
+        val owner = inTx { issuedCoupons.confirmIfReservedBy(coupon.couponId(), orderId, now, 1) }
+        val afterUsed = inTx { issuedCoupons.releaseIfReservedBy(coupon.couponId(), orderId, 1) }
 
         val reloaded = coupon.reloaded()
         assertThat(otherOrder).isFalse()
@@ -154,7 +154,7 @@ class CouponPersistenceAdapterTests(
     fun `회수는 ISSUED일 때만 성공한다`() {
         val revocable = issuedCoupon()
         val reserved = issuedCoupon()
-        inTx { issuedCoupons.reserveIfIssued(reserved.couponId(), OrderId(ids.incrementAndGet()), discount, now.plusSeconds(900)) }
+        inTx { issuedCoupons.reserveIfAvailable(reserved.couponId(), OrderId(ids.incrementAndGet()), discount, now.plusSeconds(900), 1) }
 
         assertThat(inTx { issuedCoupons.revokeIfIssued(revocable.couponId()) }).isTrue()
         assertThat(inTx { issuedCoupons.revokeIfIssued(revocable.couponId()) }).isFalse()

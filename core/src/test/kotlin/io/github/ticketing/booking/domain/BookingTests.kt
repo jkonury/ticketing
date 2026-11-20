@@ -327,7 +327,7 @@ class BookingTests {
 
     private fun reserved(discount: Long = 3_000, couponId: Long = 7) = booking().also {
         it.applyCoupon(couponId, t0)
-        it.onCouponReserved(couponId, BigDecimal(discount))
+        it.onCouponReserved(couponId, BigDecimal(discount), 1)
     }
 
     @Test
@@ -337,7 +337,7 @@ class BookingTests {
         val change = b.applyCoupon(7, t0)
 
         assertEquals(CouponChange(null, true), change)
-        assertEquals(AppliedCoupon(7, CouponState.RESERVING, null, null), b.appliedCoupon)
+        assertEquals(AppliedCoupon(7, CouponState.RESERVING, null, null, 1), b.appliedCoupon)
         assertEquals(0, listAmount.compareTo(b.payableAmount))
     }
 
@@ -380,10 +380,12 @@ class BookingTests {
     fun `다른 쿠폰으로 교체하면 기존 RESERVED 쿠폰을 해제 대상으로 돌려주고 RESERVING이 된다`() {
         val b = reserved(couponId = 7)
 
+        val prior = b.appliedCoupon
+
         val change = b.applyCoupon(8, t0)
 
-        assertEquals(CouponChange(7, true), change)
-        assertEquals(AppliedCoupon(8, CouponState.RESERVING, null, null), b.appliedCoupon)
+        assertEquals(CouponChange(prior, true), change)
+        assertEquals(AppliedCoupon(8, CouponState.RESERVING, null, null, 2), b.appliedCoupon)
         assertEquals(0, listAmount.compareTo(b.payableAmount))
     }
 
@@ -391,7 +393,7 @@ class BookingTests {
     fun `REJECTED 쿠폰을 교체하면 해제 대상이 없다`() {
         val b = booking().also {
             it.applyCoupon(7, t0)
-            it.onCouponRejected(7, "NOT_AVAILABLE")
+            it.onCouponRejected(7, "NOT_AVAILABLE", 1)
         }
 
         assertEquals(CouponChange(null, true), b.applyCoupon(8, t0))
@@ -400,12 +402,12 @@ class BookingTests {
     @Test
     fun `해제하면 RESERVED는 해제 대상을 돌려주고 REJECTED와 없음은 그냥 비운다`() {
         val withReserved = reserved(couponId = 7)
-        assertEquals(CouponChange(7, false), withReserved.removeCoupon(t0))
+        assertEquals(CouponChange(withReserved.appliedCoupon, false), withReserved.removeCoupon(t0))
         assertNull(withReserved.appliedCoupon)
 
         val rejected = booking().also {
             it.applyCoupon(7, t0)
-            it.onCouponRejected(7, "NOT_FOUND")
+            it.onCouponRejected(7, "NOT_FOUND", 1)
         }
         assertEquals(CouponChange(null, false), rejected.removeCoupon(t0))
         assertNull(rejected.appliedCoupon)
@@ -431,7 +433,7 @@ class BookingTests {
     @Test
     fun `예약 성공은 0 초과 정가 미만의 할인액만 받는다`() {
         fun attempt(discount: Long) = booking().also { it.applyCoupon(7, t0) }.let { b ->
-            runCatching { b.onCouponReserved(7, BigDecimal(discount)) }.exceptionOrNull()
+            runCatching { b.onCouponReserved(7, BigDecimal(discount), 1) }.exceptionOrNull()
         }
 
         assertNull(attempt(1))
@@ -445,17 +447,17 @@ class BookingTests {
     fun `현재 RESERVING 쿠폰이 아닌 늦은 응답은 무시하고 false다`() {
         val b = booking().also { it.applyCoupon(8, t0) }
 
-        assertFalse(b.onCouponReserved(7, BigDecimal(1_000)))
-        assertFalse(b.onCouponRejected(7, "NOT_FOUND"))
+        assertFalse(b.onCouponReserved(7, BigDecimal(1_000), 1))
+        assertFalse(b.onCouponRejected(7, "NOT_FOUND", 1))
         assertEquals(CouponState.RESERVING, b.appliedCoupon?.state)
-        assertFalse(booking().onCouponReserved(7, BigDecimal(1_000)))
+        assertFalse(booking().onCouponReserved(7, BigDecimal(1_000), 1))
     }
 
     @Test
     fun `거절되면 사유가 남고 정가로 결제 요청할 수 있다`() {
         val b = booking().also { it.applyCoupon(7, t0) }
 
-        assertTrue(b.onCouponRejected(7, "BELOW_MIN_ORDER_AMOUNT"))
+        assertTrue(b.onCouponRejected(7, "BELOW_MIN_ORDER_AMOUNT", 1))
         b.requestPayment(t0)
 
         assertEquals("BELOW_MIN_ORDER_AMOUNT", b.appliedCoupon?.rejectReason)

@@ -5,6 +5,7 @@ import io.github.ticketing.booking.application.port.required.BookingCommandPort
 import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.CouponState
 import io.github.ticketing.booking.domain.InvalidCouponDiscountException
+import io.github.ticketing.booking.domain.matches
 import io.github.ticketing.booking.domain.onCouponRejected
 import io.github.ticketing.booking.domain.onCouponReserved
 import io.github.ticketing.coupon.CouponReleaseRequested
@@ -26,50 +27,50 @@ class CouponResultService(
 ) : HandleCouponResultUseCase {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun onReserved(bookingId: Long, issuedCouponId: Long, discountAmount: BigDecimal) {
+    override fun onReserved(bookingId: Long, issuedCouponId: Long, discountAmount: BigDecimal, reservationAttemptId: Long) {
         tx.executeWithoutResult {
             val booking = bookings.findById(BookingId(bookingId))
             if (booking == null) {
                 log.warn("쿠폰 예약 결과의 예매를 찾을 수 없어 해제를 요청한다 bookingId={} issuedCouponId={}", bookingId, issuedCouponId)
-                release(bookingId, issuedCouponId, "STALE_RESERVATION")
+                release(bookingId, issuedCouponId, "STALE_RESERVATION", reservationAttemptId)
                 return@executeWithoutResult
             }
             val current = booking.appliedCoupon
-            if (current != null && current.issuedCouponId == issuedCouponId && current.state == CouponState.RESERVED) {
+            if (current != null && current.state == CouponState.RESERVED && current.matches(issuedCouponId, reservationAttemptId)) {
                 log.info("이미 반영한 쿠폰 예약 결과라 무시한다 bookingId={} issuedCouponId={}", bookingId, issuedCouponId)
                 return@executeWithoutResult
             }
             try {
-                if (booking.onCouponReserved(issuedCouponId, discountAmount)) {
+                if (booking.onCouponReserved(issuedCouponId, discountAmount, reservationAttemptId)) {
                     bookings.save(booking)
                 } else {
                     log.info("늦은 쿠폰 예약 결과라 해제를 요청한다 bookingId={} issuedCouponId={}", bookingId, issuedCouponId)
-                    release(bookingId, issuedCouponId, "STALE_RESERVATION")
+                    release(bookingId, issuedCouponId, "STALE_RESERVATION", reservationAttemptId)
                 }
             } catch (e: InvalidCouponDiscountException) {
                 log.warn("무효한 할인액이라 쿠폰을 거절 처리하고 해제를 요청한다 bookingId={} discount={}", bookingId, discountAmount, e)
-                booking.onCouponRejected(issuedCouponId, "INVALID_DISCOUNT")
+                booking.onCouponRejected(issuedCouponId, "INVALID_DISCOUNT", reservationAttemptId)
                 bookings.save(booking)
-                release(bookingId, issuedCouponId, "INVALID_DISCOUNT")
+                release(bookingId, issuedCouponId, "INVALID_DISCOUNT", reservationAttemptId)
             }
         }
     }
 
-    override fun onRejected(bookingId: Long, issuedCouponId: Long, reason: String) {
+    override fun onRejected(bookingId: Long, issuedCouponId: Long, reason: String, reservationAttemptId: Long) {
         tx.executeWithoutResult {
             val booking = bookings.findById(BookingId(bookingId))
             if (booking == null) {
                 log.warn("쿠폰 거절 결과의 예매를 찾을 수 없다 bookingId={} issuedCouponId={}", bookingId, issuedCouponId)
                 return@executeWithoutResult
             }
-            if (booking.onCouponRejected(issuedCouponId, reason)) {
+            if (booking.onCouponRejected(issuedCouponId, reason, reservationAttemptId)) {
                 bookings.save(booking)
                 log.info("쿠폰이 거절되어 쿠폰 없이 진행한다 bookingId={} issuedCouponId={} reason={}", bookingId, issuedCouponId, reason)
             }
         }
     }
 
-    private fun release(bookingId: Long, issuedCouponId: Long, reason: String) {
-        events.publishEvent(CouponReleaseRequested(bookingId, issuedCouponId, reason))
+    private fun release(bookingId: Long, issuedCouponId: Long, reason: String, reservationAttemptId: Long) {
+        events.publishEvent(CouponReleaseRequested(bookingId, issuedCouponId, reason, reservationAttemptId))
     }
 }

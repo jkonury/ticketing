@@ -51,13 +51,22 @@ class BookingCouponService(
             val change = mutate(booking, now)
             if (change == CouponChange.NONE) return@executeWithoutResult
             val saved = bookings.save(booking)
-            // 해제를 먼저 발행해 교체 시 이전 쿠폰이 새 예약보다 먼저 풀리게 한다
-            change.releasedIssuedCouponId?.let { events.publishEvent(CouponReleaseRequested(bookingId, it, releaseReason)) }
+            change.releasedCoupon?.let {
+                events.publishEvent(CouponReleaseRequested(bookingId, it.issuedCouponId, releaseReason, it.reservationAttemptId))
+            }
             val applied = saved.appliedCoupon
             if (change.reservationRequested && applied != null) {
                 val schedule = checkNotNull(scheduleSeats.findSchedule(saved.scheduleId)) { "회차 사본이 없다: ${saved.scheduleId.value}" }
                 events.publishEvent(
-                    CouponReservationRequested(bookingId, memberId, applied.issuedCouponId, schedule.performanceId, saved.listAmount, now),
+                    CouponReservationRequested(
+                        bookingId,
+                        memberId,
+                        applied.issuedCouponId,
+                        schedule.performanceId,
+                        saved.listAmount,
+                        now,
+                        applied.reservationAttemptId,
+                    ),
                 )
             }
             log.info("예매 쿠폰 변경 bookingId={} memberId={} change={}", bookingId, memberId, change)

@@ -56,7 +56,7 @@ class ReleaseStaleCouponReservationsJobTests(
         val future = reserved(NOW.plus(1, ChronoUnit.HOURS))
         val issued = issue()
         val used = reserved(NOW.minus(1, ChronoUnit.HOURS)).also { id ->
-            confirmUseCase.confirm(CouponUseConfirmed(requireNotNull(coupon(id).orderId).value, id, NOW))
+            confirmUseCase.confirm(CouponUseConfirmed(requireNotNull(coupon(id).orderId).value, id, NOW, ATTEMPT_ID))
         }
 
         assertThat(operator.start(releaseStaleCouponReservationsJob, parameters(1)).status).isEqualTo(BatchStatus.COMPLETED)
@@ -91,7 +91,7 @@ class ReleaseStaleCouponReservationsJobTests(
         val cutoff = NOW.minusSeconds(600)
         assertThat(queryPort.findStaleReservationIds(cutoff, null, 1000)).contains(id)
 
-        confirmUseCase.confirm(CouponUseConfirmed(orderId, id, NOW))
+        confirmUseCase.confirm(CouponUseConfirmed(orderId, id, NOW, ATTEMPT_ID))
 
         assertThat(releaseUseCase.releaseIfStale(id, cutoff)).isFalse()
         assertThat(coupon(id).status).isEqualTo(IssuedCouponStatus.USED)
@@ -105,7 +105,7 @@ class ReleaseStaleCouponReservationsJobTests(
         assertThat(operator.start(releaseStaleCouponReservationsJob, parameters(2)).status).isEqualTo(BatchStatus.COMPLETED)
         assertThat(coupon(id).status).isEqualTo(IssuedCouponStatus.ISSUED)
 
-        confirmUseCase.confirm(CouponUseConfirmed(orderId, id, NOW))
+        confirmUseCase.confirm(CouponUseConfirmed(orderId, id, NOW, ATTEMPT_ID))
 
         val forced = coupon(id)
         assertThat(forced.status).isEqualTo(IssuedCouponStatus.USED)
@@ -136,13 +136,21 @@ class ReleaseStaleCouponReservationsJobTests(
     private fun reserved(reservedUntil: Instant): Long {
         val id = issue()
         val ok = transaction.execute {
-            issuedCoupons.reserveIfIssued(IssuedCouponId(id), OrderId(orderSeq.incrementAndGet()), BigDecimal(1000), reservedUntil)
+            issuedCoupons.reserveIfAvailable(
+                IssuedCouponId(id),
+                OrderId(orderSeq.incrementAndGet()),
+                BigDecimal(1000),
+                reservedUntil,
+                ATTEMPT_ID,
+            )
         }
         assertThat(ok).isTrue()
         return id
     }
 
     private companion object {
+        const val ATTEMPT_ID = 1L
+
         val NOW: Instant = Instant.parse("2026-11-11T12:00:00Z")
         val orderSeq = AtomicLong(System.nanoTime())
         val memberSeq = AtomicLong(System.nanoTime() % 1_000_000_000L)

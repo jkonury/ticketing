@@ -54,6 +54,8 @@ class BookingJpaEntity(
     var discountAmount: BigDecimal = BigDecimal.ZERO,
     @Column(name = "coupon_reject_reason")
     var couponRejectReason: String? = null,
+    @Column(name = "coupon_attempt_id", nullable = false)
+    var couponAttemptId: Long = 0,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

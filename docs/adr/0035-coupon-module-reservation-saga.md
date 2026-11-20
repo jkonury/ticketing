@@ -5,7 +5,7 @@
 - 합의일: 2026-11-17
 - 결정 주체: 2026-11-17 M5.5 설계 인터뷰(Q5, Q8, Q9, Q10, Q11, Q15)
 - 대체: 없음
-- 대체됨·일부 변경: 없음
+- 대체됨·일부 변경: [ADR 0045](0045-coupon-reservation-attempts.md)가 경합과 멱등 규칙을 갱신
 - 관련: [계획](../backup/plans/m5-5-coupon.md), [ADR 0017](0017-payment-owns-payment-events.md), [ADR 0034](0034-platform-admin-role-and-audit.md), [ADR 0036](0036-settlement-list-price-platform-discount.md)
 
 ## 배경

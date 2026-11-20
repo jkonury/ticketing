@@ -121,6 +121,7 @@ erDiagram
         timestamptz cancelled_at
         varchar cancel_reason
         bigint coupon_issued_id "coupon 값 참조, FK 없음"
+        bigint coupon_attempt_id "예매별 마지막 시도, 기존 0"
         varchar coupon_state "RESERVING, RESERVED, REJECTED"
         numeric discount_amount "기본 0"
         varchar coupon_reject_reason
@@ -233,11 +234,12 @@ erDiagram
 
 ### coupon
 
-`issued_coupon`의 `(definition_id, member_id)` 유니크 제약이 중복 발급의 최종 방어선이다(ADR 0037). `booking`은 발급 쿠폰 ID만 값으로 보관하고 이 스키마를 참조하지 않는다.
+`issued_coupon`의 `(definition_id, member_id)` 유니크 제약이 중복 발급의 최종 방어선이다(ADR 0037). `booking`은 발급 쿠폰 ID와 시도 ID를 값으로 보관한다.
 
 ```mermaid
 erDiagram
     coupon_definition ||--o{ issued_coupon : "definition_id"
+    issued_coupon ||--o{ reservation_attempt : "issued_coupon_id"
     coupon_definition {
         bigint id PK
         varchar name
@@ -263,11 +265,19 @@ erDiagram
         bigint member_id "member 값 참조 UK(definition_id, member_id)"
         varchar status "ISSUED, RESERVED, USED, REVOKED, EXPIRED"
         bigint order_id "booking 값 참조"
+        bigint reservation_attempt_id "현재 예약 또는 사용 시도"
         numeric discount_amount
         timestamptz reserved_until
         timestamptz issued_at
         timestamptz used_at
         bigint version "낙관적 락"
+    }
+    reservation_attempt {
+        bigint issued_coupon_id PK, FK
+        bigint order_id PK
+        bigint attempt_id "해당 주문의 마지막 시도"
+        varchar reject_reason
+        bigint released_version "해제 후 사용 확정을 복구할 수 있는 발급 행 버전"
     }
     use_mismatch {
         bigint id PK
@@ -279,7 +289,7 @@ erDiagram
     }
 ```
 
-`use_mismatch`는 늦은 사용 확정을 강제 반영할 때 이전 상태를 남기는 기록이다.
+`reservation_attempt`는 마지막 시도를 기억해 과거 요청의 재예약을 방지한다. `use_mismatch`는 해제 후 사용 확정을 복구할 때 이전 상태를 남긴다. [ADR 0045](../adr/0045-coupon-reservation-attempts.md)
 
 ### audit
 

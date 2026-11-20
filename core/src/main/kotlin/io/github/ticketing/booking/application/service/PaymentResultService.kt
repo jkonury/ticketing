@@ -97,7 +97,7 @@ class PaymentResultService(
                         ),
                     )
                     booking.appliedCoupon?.takeIf { it.state == CouponState.RESERVED }?.let {
-                        events.publishEvent(CouponUseConfirmed(bookingId.value, it.issuedCouponId, now))
+                        events.publishEvent(CouponUseConfirmed(bookingId.value, it.issuedCouponId, now, it.reservationAttemptId))
                     }
                     confirmationLag.record(Duration.between(paidAt, now).coerceAtLeast(Duration.ZERO))
                     log.info("예매 확정 bookingId={} paymentId={}", bookingId.value, paymentId)

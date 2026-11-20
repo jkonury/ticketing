@@ -46,6 +46,7 @@ internal fun BookingJpaEntity.applyChanges(booking: Booking) {
     couponState = coupon?.state?.name
     discountAmount = coupon?.discountAmount ?: BigDecimal.ZERO
     couponRejectReason = coupon?.rejectReason
+    couponAttemptId = booking.couponAttemptId
 }
 
 internal fun BookingJpaEntity.toDomain(): Booking = Booking.restore(
@@ -63,6 +64,7 @@ internal fun BookingJpaEntity.toDomain(): Booking = Booking.restore(
     paymentRequestedAt = paymentRequestedAt,
     confirmedAt = confirmedAt,
     cancelledAt = cancelledAt,
+    couponAttemptId = couponAttemptId,
     appliedCoupon = couponIssuedId?.let {
         AppliedCoupon(
             it,
@@ -71,6 +73,7 @@ internal fun BookingJpaEntity.toDomain(): Booking = Booking.restore(
                 couponState == "RESERVED"
             },
             couponRejectReason,
+            couponAttemptId,
         )
     },
 )

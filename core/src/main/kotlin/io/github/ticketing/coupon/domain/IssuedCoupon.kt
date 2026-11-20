@@ -17,6 +17,7 @@ class IssuedCoupon(
     val issuedAt: Instant,
     usedAt: Instant?,
     val version: Long,
+    val reservationAttemptId: Long = 0,
 ) {
     var status: IssuedCouponStatus = status
         private set

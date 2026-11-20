@@ -11,11 +11,11 @@ import org.springframework.stereotype.Component
 class CouponResultListener(private val handleCouponResult: HandleCouponResultUseCase) {
     @ApplicationModuleListener
     fun on(event: CouponReserved) {
-        handleCouponResult.onReserved(event.orderId, event.issuedCouponId, event.discountAmount)
+        handleCouponResult.onReserved(event.orderId, event.issuedCouponId, event.discountAmount, event.reservationAttemptId)
     }
 
     @ApplicationModuleListener
     fun on(event: CouponRejected) {
-        handleCouponResult.onRejected(event.orderId, event.issuedCouponId, event.reason)
+        handleCouponResult.onRejected(event.orderId, event.issuedCouponId, event.reason, event.reservationAttemptId)
     }
 }

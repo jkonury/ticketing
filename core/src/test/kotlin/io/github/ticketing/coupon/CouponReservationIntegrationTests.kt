@@ -22,6 +22,8 @@ import org.awaitility.Awaitility.await
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
@@ -119,6 +121,62 @@ class CouponReservationIntegrationTests(
         assertThat(reserved).hasSize(2)
         assertThat(reserved).allSatisfy { assertThat(it.discountAmount).isEqualByComparingTo("1000") }
         assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.RESERVED)
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = [true, false])
+    fun `같은 주문의 재적용은 이전 해제 처리 순서와 관계없이 새 시도를 예약한다`(releaseFirst: Boolean, events: ApplicationEvents) {
+        val couponId = issueCoupon()
+        val orderId = nextOrder()
+        val first = request(orderId, couponId).copy(reservationAttemptId = 1)
+        val second = first.copy(reservationAttemptId = 2)
+        val release = CouponReleaseRequested(orderId, couponId, "REMOVED", first.reservationAttemptId)
+        reserveUseCase.reserve(first)
+
+        if (releaseFirst) releaseUseCase.release(release)
+        reserveUseCase.reserve(second)
+        releaseUseCase.release(release)
+        confirmUseCase.confirm(CouponUseConfirmed(orderId, couponId, now, first.reservationAttemptId))
+        reserveUseCase.reserve(first)
+        reserveUseCase.reserve(second)
+
+        assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.RESERVED)
+        assertThat(coupon(couponId).reservationAttemptId).isEqualTo(second.reservationAttemptId)
+        assertThat(coupon(couponId).discountAmount).isEqualByComparingTo("1000")
+        assertThat(events.stream(CouponReserved::class.java).map { it.reservationAttemptId }.toList()).containsExactly(1L, 2L, 2L)
+        assertThat(rejectedReasons(events)).containsExactly("NOT_AVAILABLE")
+    }
+
+    @Test
+    fun `해제가 요청보다 먼저 오면 해당 시도는 재전달되어도 예약되지 않는다`(events: ApplicationEvents) {
+        val couponId = issueCoupon()
+        val orderId = nextOrder()
+        val request = request(orderId, couponId).copy(reservationAttemptId = 1)
+        val release = CouponReleaseRequested(orderId, couponId, "EXPIRED", request.reservationAttemptId)
+
+        releaseUseCase.release(release)
+        reserveUseCase.reserve(request)
+        reserveUseCase.reserve(request)
+        confirmUseCase.confirm(CouponUseConfirmed(orderId, couponId, now, request.reservationAttemptId))
+
+        assertThat(rejectedReasons(events)).containsExactly("NOT_AVAILABLE", "NOT_AVAILABLE")
+        assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.ISSUED)
+    }
+
+    @Test
+    fun `선점이 풀린 뒤에도 앞서 해제 또는 거절된 주문의 시도는 다시 예약하지 못한다`(events: ApplicationEvents) {
+        val couponId = issueCoupon()
+        val first = request(nextOrder(), couponId).copy(reservationAttemptId = 1)
+        val second = request(nextOrder(), couponId).copy(reservationAttemptId = 1)
+        reserveUseCase.reserve(first)
+        reserveUseCase.reserve(second)
+
+        releaseUseCase.release(CouponReleaseRequested(first.orderId, couponId, "REMOVED", first.reservationAttemptId))
+        reserveUseCase.reserve(second)
+        reserveUseCase.reserve(first)
+
+        assertThat(rejectedReasons(events)).containsExactly("NOT_AVAILABLE", "NOT_AVAILABLE", "NOT_AVAILABLE")
+        assertThat(coupon(couponId).status).isEqualTo(IssuedCouponStatus.ISSUED)
     }
 
     @Test

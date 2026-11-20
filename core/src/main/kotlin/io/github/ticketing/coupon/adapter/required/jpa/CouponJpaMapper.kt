@@ -77,5 +77,6 @@ internal fun IssuedCouponJpaEntity.toDomain() = IssuedCoupon(
     reservedUntil = reservedUntil,
     issuedAt = issuedAt,
     usedAt = usedAt,
+    reservationAttemptId = reservationAttemptId,
     version = version,
 )

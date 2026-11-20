@@ -11,6 +11,8 @@ import io.github.ticketing.coupon.application.port.provided.ReleaseStaleCouponRe
 import io.github.ticketing.coupon.application.port.provided.ReserveCouponUseCase
 import io.github.ticketing.coupon.application.port.required.CouponDefinitionCommandPort
 import io.github.ticketing.coupon.application.port.required.IssuedCouponCommandPort
+import io.github.ticketing.coupon.application.port.required.ReservationAttempt
+import io.github.ticketing.coupon.application.port.required.ReservationAttemptPort
 import io.github.ticketing.coupon.application.port.required.UseMismatchPort
 import io.github.ticketing.coupon.domain.DiscountResult
 import io.github.ticketing.coupon.domain.IssuedCoupon
@@ -29,11 +31,11 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-/** 예매–쿠폰 예약 Saga의 coupon 측. 모든 처리는 (orderId, issuedCouponId) 기준으로 멱등하다. */
 @Service
 class CouponReservationService(
     private val issuedCoupons: IssuedCouponCommandPort,
     private val definitions: CouponDefinitionCommandPort,
+    private val attempts: ReservationAttemptPort,
     private val mismatches: UseMismatchPort,
     private val events: ApplicationEventPublisher,
     private val clock: Clock,
@@ -52,104 +54,156 @@ class CouponReservationService(
 
     @Transactional
     override fun reserve(request: CouponReservationRequested) {
-        val outcome = decide(request, retry = false)
+        val couponId = IssuedCouponId(request.issuedCouponId)
+        val orderId = OrderId(request.orderId)
+        val attemptId = request.reservationAttemptId
+        val coupon = issuedCoupons.findForUpdate(couponId)
+        val outcome = when {
+            coupon == null -> Outcome.Rejected(NOT_FOUND)
+            coupon.memberId != MemberId(request.memberId) -> Outcome.Rejected(NOT_OWNER)
+            else -> reserveForOwner(coupon, couponId, orderId, request)
+        }
         events.publishEvent(
             when (outcome) {
-                is Outcome.Reserved -> CouponReserved(request.orderId, request.issuedCouponId, outcome.discount)
-                is Outcome.Rejected -> CouponRejected(request.orderId, request.issuedCouponId, outcome.reason)
+                is Outcome.Reserved -> CouponReserved(request.orderId, request.issuedCouponId, outcome.discount, attemptId)
+                is Outcome.Rejected -> CouponRejected(request.orderId, request.issuedCouponId, outcome.reason, attemptId)
             },
         )
     }
 
-    private fun decide(request: CouponReservationRequested, retry: Boolean): Outcome {
-        val coupon = issuedCoupons.findById(IssuedCouponId(request.issuedCouponId))
-        return earlyOutcome(coupon, request) ?: reserveNew(requireNotNull(coupon), request, retry)
-    }
-
-    /** 조건부 UPDATE까지 가지 않고 끝나는 경우(없음·남의 쿠폰·멱등 재전달·사용 불가)의 결과. 예약을 시도해야 하면 null. */
-    private fun earlyOutcome(coupon: IssuedCoupon?, request: CouponReservationRequested): Outcome? {
-        val reservedDiscount = coupon?.discountAmount
+    private fun reserveForOwner(
+        coupon: IssuedCoupon,
+        couponId: IssuedCouponId,
+        orderId: OrderId,
+        request: CouponReservationRequested,
+    ): Outcome {
+        val attemptId = request.reservationAttemptId
+        val latest = attempts.find(couponId, orderId)
+        val reservedDiscount = coupon.discountAmount
         return when {
-            coupon == null -> Outcome.Rejected(NOT_FOUND)
+            latest != null && latest.id > attemptId -> Outcome.Rejected(NOT_AVAILABLE)
 
-            coupon.memberId != MemberId(request.memberId) -> Outcome.Rejected(NOT_OWNER)
+            latest?.id == attemptId && latest.rejectReason != null -> Outcome.Rejected(latest.rejectReason)
 
-            coupon.status == IssuedCouponStatus.RESERVED && coupon.orderId == OrderId(request.orderId) && reservedDiscount != null ->
-                Outcome.Reserved(reservedDiscount)
+            coupon.isReservedBy(orderId, attemptId) && reservedDiscount != null -> Outcome.Reserved(reservedDiscount)
 
-            coupon.status != IssuedCouponStatus.ISSUED -> Outcome.Rejected(NOT_AVAILABLE)
+            latest?.id == attemptId -> Outcome.Rejected(NOT_AVAILABLE)
 
-            else -> null
+            else -> {
+                val outcome = reserveNew(coupon, couponId, orderId, request)
+                attempts.save(couponId, orderId, ReservationAttempt(attemptId, (outcome as? Outcome.Rejected)?.reason))
+                outcome
+            }
         }
     }
 
-    private fun reserveNew(coupon: IssuedCoupon, request: CouponReservationRequested, retry: Boolean): Outcome {
-        val definition = definitions.findById(coupon.definitionId)
+    private fun reserveNew(
+        coupon: IssuedCoupon,
+        couponId: IssuedCouponId,
+        orderId: OrderId,
+        request: CouponReservationRequested,
+    ): Outcome {
+        val attemptId = request.reservationAttemptId
+        val replacesPriorAttempt = coupon.status == IssuedCouponStatus.RESERVED && coupon.orderId == orderId &&
+            coupon.reservationAttemptId < attemptId
+        if (coupon.status != IssuedCouponStatus.ISSUED && !replacesPriorAttempt) return Outcome.Rejected(NOT_AVAILABLE)
+
+        val policy = definitions.findById(coupon.definitionId)?.discountPolicy
         val now = clock.instant()
-        val result = definition?.discountPolicy?.calculate(request.listAmount, PerformanceId(request.performanceId), now)
-        return when (result) {
+        return when (val result = policy?.calculate(request.listAmount, PerformanceId(request.performanceId), now)) {
             null -> Outcome.Rejected(NOT_FOUND)
 
             is DiscountResult.Rejected -> Outcome.Rejected(result.reason.name)
 
             is DiscountResult.Accepted -> {
-                val reserved = issuedCoupons.reserveIfIssued(
-                    IssuedCouponId(request.issuedCouponId),
-                    OrderId(request.orderId),
-                    result.discountAmount,
-                    now.plus(reservationTtl),
-                )
-                when {
-                    reserved -> Outcome.Reserved(result.discountAmount)
-
-                    // 경합에서 졌다. 다시 읽어 같은 주문의 선점이면 멱등 응답, 아니면 거부한다
-                    !retry -> decide(request, retry = true)
-
-                    else -> Outcome.Rejected(NOT_AVAILABLE)
-                }
+                check(issuedCoupons.reserveIfAvailable(couponId, orderId, result.discountAmount, now.plus(reservationTtl), attemptId))
+                Outcome.Reserved(result.discountAmount)
             }
         }
     }
 
     @Transactional
     override fun release(request: CouponReleaseRequested) {
-        val released = issuedCoupons.releaseIfReservedBy(IssuedCouponId(request.issuedCouponId), OrderId(request.orderId))
-        if (!released) {
-            log.info("쿠폰 해제 무시: 이미 해제됐거나 다른 주문 예약 또는 사용됨 orderId={} couponId={}", request.orderId, request.issuedCouponId)
+        val couponId = IssuedCouponId(request.issuedCouponId)
+        val orderId = OrderId(request.orderId)
+        val attemptId = request.reservationAttemptId
+        val coupon = issuedCoupons.findForUpdate(couponId) ?: return
+        if (coupon.isUsedBy(orderId, attemptId)) return
+
+        val released = issuedCoupons.releaseIfReservedBy(couponId, orderId, attemptId)
+        val latest = attempts.find(couponId, orderId)
+        val closed = latest?.takeIf { it.id == attemptId && it.rejectReason != null }
+        val legacyExpiry = attemptId == 0L && request.reason == "EXPIRED"
+        val invalidatesRecovery = closed?.releasedVersion != null && !legacyExpiry
+        if (released || closed == null || invalidatesRecovery) {
+            val releasedVersion = (coupon.version + 1).takeIf { released && legacyExpiry }
+            attempts.save(couponId, orderId, ReservationAttempt(attemptId, NOT_AVAILABLE, releasedVersion))
         }
     }
 
     @Transactional
     override fun releaseIfStale(issuedCouponId: Long, cutoff: Instant): Boolean {
-        val id = IssuedCouponId(issuedCouponId)
-        // orderId는 로그용으로만 읽는다. 되돌릴지는 조건부 UPDATE가 정하므로 그 사이 확정된 쿠폰은 갱신되지 않는다
-        val orderId = issuedCoupons.findById(id)?.orderId?.value
-        val released = issuedCoupons.releaseIfStale(id, cutoff)
-        if (released) log.info("고아 쿠폰 예약 해제 orderId={} couponId={}", orderId, issuedCouponId)
-        return released
+        val couponId = IssuedCouponId(issuedCouponId)
+        val coupon = issuedCoupons.findForUpdate(couponId) ?: return false
+        val orderId = coupon.orderId
+        val expired = coupon.reservedUntil?.isBefore(cutoff) == true
+        return if (coupon.status == IssuedCouponStatus.RESERVED && expired && orderId != null) {
+            val attemptId = coupon.reservationAttemptId
+            check(issuedCoupons.releaseIfReservedBy(couponId, orderId, attemptId))
+            attempts.save(couponId, orderId, ReservationAttempt(attemptId, NOT_AVAILABLE, coupon.version + 1))
+            log.info("고아 쿠폰 예약 해제 orderId={} couponId={} attemptId={}", orderId.value, issuedCouponId, attemptId)
+            true
+        } else {
+            false
+        }
     }
 
     @Transactional
     override fun confirm(request: CouponUseConfirmed) {
         val couponId = IssuedCouponId(request.issuedCouponId)
         val orderId = OrderId(request.orderId)
-        if (issuedCoupons.confirmIfReservedBy(couponId, orderId, request.confirmedAt)) return
+        val attemptId = request.reservationAttemptId
+        val coupon = issuedCoupons.findForUpdate(couponId) ?: return
+        if (coupon.isUsedBy(orderId, attemptId)) return
 
-        val current = issuedCoupons.findById(couponId)
-        if (current == null) {
-            log.warn("쿠폰 사용 확정 대상 없음 orderId={} couponId={}", request.orderId, request.issuedCouponId)
-        } else if (current.status != IssuedCouponStatus.USED || current.orderId != orderId) {
-            forceUse(current, couponId, orderId, request)
+        val latest = attempts.find(couponId, orderId)
+        if (latest == null || latest.id <= attemptId) {
+            if (!issuedCoupons.confirmIfReservedBy(couponId, orderId, request.confirmedAt, attemptId)) {
+                restoreReleasedUse(coupon, couponId, orderId, latest, request)
+            }
         }
     }
 
-    /** 결제가 이미 끝났으므로 거부하지 않고 USED로 맞춘 뒤 불일치를 남긴다. */
-    private fun forceUse(current: IssuedCoupon, couponId: IssuedCouponId, orderId: OrderId, request: CouponUseConfirmed) {
-        val previous = issuedCoupons.forceUse(couponId, orderId, request.confirmedAt) ?: return
-        val detail = "사용 확정이 RESERVED(같은 주문)가 아닌 상태에 도착: previousOrderId=${current.orderId?.value}"
-        mismatches.record(couponId, orderId, previous, clock.instant(), detail)
-        log.warn("쿠폰 사용 불일치 강제 USED orderId={} couponId={} previous={}", request.orderId, request.issuedCouponId, previous)
+    private fun restoreReleasedUse(
+        coupon: IssuedCoupon,
+        couponId: IssuedCouponId,
+        orderId: OrderId,
+        latest: ReservationAttempt?,
+        request: CouponUseConfirmed,
+    ) {
+        val attemptId = request.reservationAttemptId
+        val releasedVersion = when {
+            latest?.id == attemptId -> latest.releasedVersion
+            attemptId == 0L && !attempts.exists(couponId) -> coupon.version
+            else -> null
+        }
+        if (releasedVersion != null &&
+            issuedCoupons.restoreReleasedUse(couponId, orderId, request.confirmedAt, attemptId, releasedVersion)
+        ) {
+            attempts.save(couponId, orderId, ReservationAttempt(attemptId))
+            val detail = "해제된 시도의 사용 확정: reservationAttemptId=$attemptId"
+            mismatches.record(couponId, orderId, coupon.status, clock.instant(), detail)
+            log.warn("해제된 쿠폰 사용 확정 orderId={} couponId={} attemptId={}", request.orderId, request.issuedCouponId, attemptId)
+        } else {
+            log.warn("현재 쿠폰에 반영할 수 없는 사용 확정 orderId={} couponId={} attemptId={}", request.orderId, request.issuedCouponId, attemptId)
+        }
     }
+
+    private fun IssuedCoupon.isReservedBy(orderId: OrderId, attemptId: Long): Boolean =
+        status == IssuedCouponStatus.RESERVED && this.orderId == orderId && reservationAttemptId == attemptId
+
+    private fun IssuedCoupon.isUsedBy(orderId: OrderId, attemptId: Long): Boolean =
+        status == IssuedCouponStatus.USED && this.orderId == orderId && reservationAttemptId == attemptId
 
     private companion object {
         const val NOT_FOUND = "NOT_FOUND"

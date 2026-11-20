@@ -10,32 +10,33 @@ fun Booking.applyCoupon(issuedCouponId: Long, now: Instant): CouponChange {
     if (current != null && current.issuedCouponId == issuedCouponId && current.state == CouponState.RESERVED) {
         return CouponChange.NONE
     }
-    appliedCoupon = AppliedCoupon(issuedCouponId, CouponState.RESERVING, null, null)
-    return CouponChange(releasedIssuedCouponId = current?.reservedIssuedCouponId(), reservationRequested = true)
+    couponAttemptId += 1
+    appliedCoupon = AppliedCoupon(issuedCouponId, CouponState.RESERVING, null, null, couponAttemptId)
+    return CouponChange(releasedCoupon = current?.reservedCoupon(), reservationRequested = true)
 }
 
 fun Booking.removeCoupon(now: Instant): CouponChange {
     requireCouponChangeable(now)
     val current = appliedCoupon ?: return CouponChange.NONE
     appliedCoupon = null
-    return CouponChange(releasedIssuedCouponId = current.reservedIssuedCouponId(), reservationRequested = false)
+    return CouponChange(releasedCoupon = current.reservedCoupon(), reservationRequested = false)
 }
 
 /**
  * coupon의 예약 성공을 반영한다. 현재 RESERVING 중인 쿠폰의 응답이 아니면(교체·해제·종료 이후의 늦은 응답) 반영하지 않고 false다.
  * 호출자는 false일 때 그 쿠폰의 예약을 해제해야 한다.
  */
-fun Booking.onCouponReserved(issuedCouponId: Long, discount: BigDecimal): Boolean {
-    if (!isAwaitingCoupon(issuedCouponId)) return false
+fun Booking.onCouponReserved(issuedCouponId: Long, discount: BigDecimal, reservationAttemptId: Long): Boolean {
+    val current = awaitingCoupon(issuedCouponId, reservationAttemptId) ?: return false
     if (discount.signum() <= 0 || discount >= listAmount) throw InvalidCouponDiscountException()
-    appliedCoupon = AppliedCoupon(issuedCouponId, CouponState.RESERVED, discount, null)
+    appliedCoupon = current.copy(state = CouponState.RESERVED, discountAmount = discount)
     return true
 }
 
 /** 반영하면 true, 늦은 응답이라 무시하면 false다. 거절되면 쿠폰 없이 정가로 진행한다. */
-fun Booking.onCouponRejected(issuedCouponId: Long, reason: String): Boolean {
-    if (!isAwaitingCoupon(issuedCouponId)) return false
-    appliedCoupon = AppliedCoupon(issuedCouponId, CouponState.REJECTED, null, reason)
+fun Booking.onCouponRejected(issuedCouponId: Long, reason: String, reservationAttemptId: Long): Boolean {
+    val current = awaitingCoupon(issuedCouponId, reservationAttemptId) ?: return false
+    appliedCoupon = current.copy(state = CouponState.REJECTED, rejectReason = reason)
     return true
 }
 
@@ -50,13 +51,15 @@ private fun Booking.requireCouponChangeable(now: Instant) {
     requireNoPendingCoupon()
 }
 
-private fun AppliedCoupon.reservedIssuedCouponId(): Long? = issuedCouponId.takeIf { state == CouponState.RESERVED }
+private fun AppliedCoupon.reservedCoupon(): AppliedCoupon? = takeIf { state == CouponState.RESERVED }
 
-private fun Booking.isAwaitingCoupon(issuedCouponId: Long): Boolean {
-    val current = appliedCoupon ?: return false
-    return status == BookingStatus.PENDING && current.issuedCouponId == issuedCouponId && current.state == CouponState.RESERVING
+fun AppliedCoupon.matches(issuedCouponId: Long, reservationAttemptId: Long): Boolean =
+    this.issuedCouponId == issuedCouponId && this.reservationAttemptId == reservationAttemptId
+
+private fun Booking.awaitingCoupon(issuedCouponId: Long, reservationAttemptId: Long): AppliedCoupon? = appliedCoupon?.takeIf {
+    status == BookingStatus.PENDING && it.state == CouponState.RESERVING && it.matches(issuedCouponId, reservationAttemptId)
 }
 
 /** 예매가 PENDING에서 끝날 때 coupon에 해제를 요청해야 하는 쿠폰이다. RESERVING도 포함한다(늦게 온 Reserved는 결과 리스너가 해제한다). */
-fun Booking.couponToRelease(): Long? =
-    appliedCoupon?.takeIf { it.state == CouponState.RESERVED || it.state == CouponState.RESERVING }?.issuedCouponId
+fun Booking.couponToRelease(): AppliedCoupon? =
+    appliedCoupon?.takeIf { it.state == CouponState.RESERVED || it.state == CouponState.RESERVING }

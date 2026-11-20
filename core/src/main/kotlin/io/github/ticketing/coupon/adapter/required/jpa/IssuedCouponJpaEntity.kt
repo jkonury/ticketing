@@ -29,6 +29,8 @@ internal class IssuedCouponJpaEntity(
     var issuedAt: Instant,
     @Column(name = "used_at")
     var usedAt: Instant?,
+    @Column(name = "reservation_attempt_id", nullable = false)
+    var reservationAttemptId: Long = 0,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

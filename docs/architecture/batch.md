@@ -8,7 +8,7 @@
 | `dailySettlementJob` | `settlement` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
 | `expirePendingBookingsJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
 | `reconcileSeatSnapshotJob` | `booking` | 실행 구분용 식별 파라미터 `run.id` (Long) |
-| `releaseStaleCouponReservationsJob` | `coupon` | 실행 구분용 식별 파라미터 `run.id` (Long). `reserved_until + reservation-release-grace`(기본 10m) 경과한 RESERVED를 조건부 UPDATE로 ISSUED 복원 |
+| `releaseStaleCouponReservationsJob` | `coupon` | 실행 구분용 식별 파라미터 `run.id` (Long). `reserved_until + reservation-release-grace`(기본 10m) 경과한 RESERVED를 잠근 뒤 기한을 재검사한다. 해당 시도를 기록하고 조건부 UPDATE로 ISSUED에 복원한다 |
 | `reconcileCouponStockJob` | `coupon` | 실행 구분용 식별 파라미터 `run.id` (Long). 발급이 시작된 LIMITED 쿠폰의 Redis 재고·회원 Set을 DB 기준으로 보정. `limited-claim.strategy`가 `redis`가 아니면 아무것도 하지 않고 완료 |
 | `paymentReconciliationJob` | `payment` | 식별 파라미터 `targetDate` (ISO 날짜), 재실행별 식별 파라미터 `run.id` (Long) |
 
