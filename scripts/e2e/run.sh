@@ -71,7 +71,7 @@ PIDS+=("$!")
 start core core/build/libs/core.jar
 start realtime-a realtime/build/libs/realtime.jar
 start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_PORT"
-start gateway gateway/build/libs/gateway.jar
+TICKETING_INGRESS_PROOF= start gateway gateway/build/libs/gateway.jar
 health() {
   local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   local health_path=/actuator/health
@@ -106,8 +106,8 @@ if $WEB; then
   if [[ ! -d web/node_modules ]]; then
     (cd web && pnpm install --frozen-lockfile) > "$LOG_DIR/web.log" 2>&1 || { echo "web 설치 실패: $LOG_DIR/web.log" >&2; exit 1; }
   fi
-  (cd web && pnpm build) > "$LOG_DIR/web.log" 2>&1 || { echo "web 빌드 실패: $LOG_DIR/web.log" >&2; exit 1; }
-  (cd web && GATEWAY_URL=http://localhost:18000 GATEWAY_PUBLIC_URL=http://localhost:18000 REDIS_URL=redis://localhost:16379 WEB_ORIGIN=http://localhost:13000 exec setsid pnpm start) >> "$LOG_DIR/web.log" 2>&1 &
+  (cd web && TICKETING_INGRESS_PROOF= pnpm build) > "$LOG_DIR/web.log" 2>&1 || { echo "web 빌드 실패: $LOG_DIR/web.log" >&2; exit 1; }
+  (cd web && TICKETING_INGRESS_PROOF= GATEWAY_URL=http://localhost:18000 GATEWAY_PUBLIC_URL=http://localhost:18000 REDIS_URL=redis://localhost:16379 WEB_ORIGIN=http://localhost:13000 exec setsid pnpm start) >> "$LOG_DIR/web.log" 2>&1 &
   PIDS+=("$!")
   WEB_PGID=$!
   deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))

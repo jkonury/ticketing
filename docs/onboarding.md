@@ -119,12 +119,14 @@ fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scr
 
 ## 개발용 Nginx 설정
 
-`nginx/ticketing.conf.template`은 HTTPS 요청을 web(13000)으로 전달하고 SSE 경로만 Gateway(18000)로 전달한다. Nginx 1.25.1 이상이 필요하며, 기존 Nginx의 `http` 블록에 공통 TLS·프록시 설정과 WebSocket upgrade map이 포함되어 있어야 한다. 인증서와 접근 제어는 사용하는 Nginx 환경에서 관리한다.
+`nginx/ticketing.conf.template`은 HTTPS 요청을 web(13000)으로 전달하고 SSE 경로만 Gateway(18000)로 전달한다. Nginx 1.25.1 이상이 필요하며, `http` 블록에 공통 TLS 설정과 `$connection_upgrade`를 정의하는 WebSocket upgrade map이 있어야 한다. 두 location은 서버 블록의 프록시 헤더를 상속한다. 인증서와 접근 제어는 사용하는 Nginx 환경에서 관리한다. 이 서버의 `$remote_addr`를 외부 요청 헤더로 바꾸는 RealIP 설정을 적용하지 않는다.
 
-`.env`의 `TICKETING_DOMAIN`을 설정하고 다음 스크립트를 실행하면 도메인만 치환해 Nginx sites 디렉터리에 복사한다. Nginx의 `$host` 같은 변수는 치환하지 않는다.
+`.env`의 `TICKETING_DOMAIN`을 설정하고 `openssl rand -hex 32`로 생성한 `TICKETING_INGRESS_PROOF`를 루트 `.env`와 `web/.env.local`에 넣는다. 설치 스크립트는 두 설정을 치환해 Nginx sites 디렉터리에 권한 `0600`으로 복사한다. Nginx 설정을 읽는 프로세스에 파일 접근 권한이 필요하다. 렌더링된 설정과 요청 헤더 전체는 로그나 공유 출력에 남기지 않는다.
 
 ```bash
 ./scripts/dev/install-nginx.sh
 ```
 
 복사 후 `nginx -t`로 검사하고 사용하는 환경의 절차에 따라 Nginx를 다시 로드한다. `web/.env.local`에서 `GATEWAY_PUBLIC_URL`과 `WEB_ORIGIN`을 `https://<설정한 도메인>`으로 설정하고 `SESSION_COOKIE_SECURE=true`로 바꾼다. `GATEWAY_URL`은 서버에서 접근하는 로컬 Gateway 주소를 유지한다. 개발 서버는 `WEB_ORIGIN`의 호스트를 HMR 허용 출처로 사용하므로 설정 변경 후 web을 재시작한다.
+
+증명 값을 변경하면 Gateway도 재시작한다. nginx 없이 로컬에서 접속하거나 CI/E2E의 직접 호출을 실행할 때는 비밀 설정이 필요 없다. 비회원의 전달 주소를 확인할 수 없으면 Gateway가 실제 TCP 연결 주소를 사용한다. [ADR 0046](./adr/0046-attested-client-ip.md)

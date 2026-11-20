@@ -213,6 +213,8 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 `member` 모듈이 JWT를 발급하고 BFF가 토큰을 보관·갱신한다. SSE는 BFF를 거치지 않고 단기 SSE 티켓으로 Gateway에 직접 연결한다. 역할은 USER·ORGANIZER·ADMIN이며 ADMIN은 `.env` 이메일 부트스트랩으로만 만들어진다(M5.5). 상세는 [integrations.md](./architecture/integrations.md)를 본다.
 
+Gateway의 요청 한도는 검증된 회원 ID 또는 클라이언트 IP에 적용한다. 비회원은 증명된 ingress의 단일 IP를 사용하며, 전달값을 검증할 수 없는 요청은 실제 TCP 연결 주소를 사용한다. [ADR 0046](./adr/0046-attested-client-ip.md)
+
 ## 8. BFF (Next.js)
 
 일반 API 요청은 모두 BFF를 거치며 조합 화면(공연 상세, 마이페이지, 주최자 대시보드)을 만든다. 상세는 [integrations.md](./architecture/integrations.md)를 본다.

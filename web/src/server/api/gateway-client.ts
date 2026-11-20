@@ -6,6 +6,7 @@ import { env } from '@/server/env';
 import { sessions } from '@/server/auth/redis';
 import { readSessionId } from '@/server/auth/session-cookie';
 import type { SessionData, SessionStore } from '@/server/auth/session-store';
+import { requestIngressHeaders } from './ingress-address';
 
 const tokenSchema = z.object({
   accessToken: z.string(),
@@ -36,14 +37,32 @@ type Dependencies = {
   sessionId: () => Promise<string | null>;
   clock: () => number;
   baseUrl: string;
+  ingressHeaders?: typeof requestIngressHeaders;
 };
+
+type GatewayRequestInit = RequestInit & { next?: { revalidate: number } };
 
 export function createGatewayClient(deps: Dependencies) {
   const flights = new Map<string, Promise<SessionData>>();
-  async function request(path: string, init: RequestInit, timeoutMs = 3000) {
+  async function request(
+    path: string,
+    init: GatewayRequestInit,
+    timeoutMs = 3000,
+  ) {
+    const headers = new Headers(init.headers);
+    const ingress = headers.has('Authorization')
+      ? null
+      : await deps.ingressHeaders?.();
+    if (ingress) {
+      for (const [name, value] of Object.entries(ingress))
+        headers.set(name, value);
+      // Next의 공유 Data Cache에 요청별 주소와 증명이 남지 않게 한다.
+      init = { ...init, next: undefined, cache: 'no-store', redirect: 'error' };
+    }
     try {
       return await deps.fetch(new URL(path, deps.baseUrl), {
         ...init,
+        headers,
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
@@ -184,6 +203,7 @@ export const gateway = createGatewayClient({
   sessionId: readSessionId,
   clock: Date.now,
   baseUrl: env.GATEWAY_URL,
+  ingressHeaders: requestIngressHeaders,
 });
 export async function getMemberForLogin(token: string) {
   const response = await fetch(new URL('/api/v1/members/me', env.GATEWAY_URL), {

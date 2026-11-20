@@ -6,6 +6,7 @@ import {
   type KeyValueStore,
 } from '@/server/auth/session-store';
 import { createGatewayClient, SessionExpiredError } from './gateway-client';
+import { verifiedIngressHeaders } from './ingress-address';
 
 function setup(expiresAt = 0) {
   const map = new Map<string, string>();
@@ -43,6 +44,79 @@ function setup(expiresAt = 0) {
   return { map, sessions, data, json, tokens };
 }
 describe('Gateway 클라이언트', () => {
+  it('공개 조회와 비회원 변경은 검증된 주소만 전달하고 해당 요청을 캐시하지 않는다', async () => {
+    const { sessions, json } = setup();
+    const fetcher = vi.fn<typeof fetch>(async () => json({}));
+    const proof = '1234abcd'.repeat(8);
+    const source = new Headers({
+      'X-Ticketing-Client-IP': '2001:db8::1',
+      'X-Ticketing-Ingress-Proof': proof,
+      'X-Forwarded-For': '192.0.2.1',
+    });
+    const client = createGatewayClient({
+      fetch: fetcher,
+      sessions,
+      sessionId: async () => null,
+      clock: () => 100000,
+      baseUrl: 'http://example.test',
+      ingressHeaders: async () => verifiedIngressHeaders(source, proof),
+    });
+
+    const options = {
+      schema: z.object({}),
+      auth: 'none' as const,
+      path: '/test',
+    };
+    await client.call({ ...options, cache: { revalidateSeconds: 30 } });
+    await client.call({ ...options, method: 'POST' });
+    source.delete('X-Ticketing-Ingress-Proof');
+    await client.call({ ...options, cache: { revalidateSeconds: 30 } });
+
+    for (const [, init] of fetcher.mock.calls.slice(0, 2)) {
+      const outgoing = new Headers(init?.headers);
+      expect(outgoing.get('X-Ticketing-Client-IP')).toBe('2001:db8::1');
+      expect(outgoing.get('X-Ticketing-Ingress-Proof') === proof).toBe(true);
+      expect(outgoing.has('X-Forwarded-For')).toBe(false);
+      expect(init).toMatchObject({
+        cache: 'no-store',
+        redirect: 'error',
+        next: undefined,
+      });
+    }
+    const direct = fetcher.mock.calls[2][1];
+    expect(new Headers(direct?.headers).has('X-Ticketing-Client-IP')).toBe(
+      false,
+    );
+    expect(new Headers(direct?.headers).has('X-Ticketing-Ingress-Proof')).toBe(
+      false,
+    );
+    expect(direct).toMatchObject({ next: { revalidate: 30 } });
+  });
+
+  it.each([
+    ['192.0.2.1', 'invalid'],
+    ['192.0.2.1', 'duplicate'],
+    ['192.0.2.1, 192.0.2.2', 'valid'],
+    ['192.0.2.1:80', 'valid'],
+    ['localhost', 'valid'],
+    ['fe80::1%en0', 'valid'],
+    ['', 'valid'],
+  ])(
+    '주소 %s 또는 증명 %s 검증에 실패하면 전달 헤더를 만들지 않는다',
+    (address, proofCase) => {
+      const proof = '1234abcd'.repeat(8);
+      const source = new Headers({ 'X-Ticketing-Client-IP': address });
+      source.set(
+        'X-Ticketing-Ingress-Proof',
+        proofCase === 'invalid' ? '0'.repeat(64) : proof,
+      );
+      if (proofCase === 'duplicate')
+        source.append('X-Ticketing-Ingress-Proof', proof);
+
+      expect(verifiedIngressHeaders(source, proof)).toBeNull();
+    },
+  );
+
   it('동시 만료 요청은 한 번만 갱신한다', async () => {
     const t = setup();
     const id = await t.sessions.create(t.data);

@@ -66,6 +66,7 @@ management:
 
 server:
   port: 18000
+  forward-headers-strategy: none
 
 ticketing:
   startup-warmup:
@@ -78,6 +79,7 @@ ticketing:
   jwt:
     secret: ${TICKETING_JWT_SECRET}
   gateway:
+    ingress-proof: ${TICKETING_INGRESS_PROOF:}
     cors:
       allowed-origins: http://localhost:13000
     core-uri: ${CORE_URI:http://localhost:18080}

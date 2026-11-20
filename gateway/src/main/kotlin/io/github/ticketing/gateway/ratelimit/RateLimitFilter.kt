@@ -10,12 +10,12 @@ import org.springframework.cloud.gateway.filter.GatewayFilter
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR
-import org.springframework.cloud.gateway.support.ipresolver.XForwardedRemoteAddressResolver
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
+import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicLong
 
 private const val DEFAULT_REPLENISH_RATE = 20
@@ -34,7 +34,6 @@ data class RateLimitProperties(
     // 임시 기본값이다. 수치는 coupon-drop 부하 측정 후 정한다
     val couponClaim: Limit = Limit(COUPON_CLAIM_REPLENISH_RATE, COUPON_CLAIM_BURST_CAPACITY),
     val streams: Limit = Limit(STREAM_REPLENISH_RATE, STREAM_BURST_CAPACITY),
-    val trustedProxies: Int = 1,
     // 부하 테스트에서 rate limiter Redis 호출의 몫을 가르는 대조용이다. 운영 기본값은 켜짐
     val enabled: Boolean = true,
 ) {
@@ -46,14 +45,13 @@ data class RateLimitProperties(
 class RateLimitConfiguration
 
 @Component
-class RateLimitKeyResolver(properties: RateLimitProperties) : KeyResolver {
-    private val addressResolver = XForwardedRemoteAddressResolver.maxTrustedIndex(properties.trustedProxies)
-
+class RateLimitKeyResolver : KeyResolver {
     override fun resolve(exchange: ServerWebExchange): Mono<String> {
         val memberId = exchange.getAttribute<Long>(GatewayAttributes.MEMBER_ID)
         if (memberId != null) return Mono.just("member:$memberId")
-        val address = addressResolver.resolve(exchange)
-        return Mono.just("ip:${address.address?.hostAddress ?: address.hostString}")
+        val address = exchange.getAttribute<String>(VERIFIED_CLIENT_IP)
+            ?: exchange.request.remoteAddress?.address?.let { InetAddress.getByAddress(it.address).hostAddress }
+        return Mono.just("ip:${address ?: "unknown"}")
     }
 }
 

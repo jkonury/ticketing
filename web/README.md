@@ -16,6 +16,8 @@ bun dev
 
 Open [http://localhost:13000](http://localhost:13000) with your browser to see the result.
 
+개발용 nginx를 사용할 때는 서버 전용 환경 변수 `TICKETING_INGRESS_PROOF`를 루트 `.env`와 `web/.env.local`에 같은 값으로 설정한다. [nginx 설정 절차](../docs/onboarding.md#개발용-nginx-설정)
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 ## Learn More

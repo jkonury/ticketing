@@ -15,6 +15,8 @@ ADR 0008은 실시간 앱이 대기열을 소유하고 Gateway가 입장 토큰�
 3. SSE 티켓은 코어 `member`가 발급하는 1회용 키다. JWT 인증된 `POST /api/v1/sse-tickets`가 난수를 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초로 둔다. Gateway는 `?ticket=`을 `GETDEL`로 소비하고 하위 요청에서 `ticket` 쿼리를 제거한다.
 4. rate limit은 Spring Cloud Gateway 내장 `RedisRateLimiter`를 사용한다. 키는 검증된 회원 ID, 없으면 클라이언트 IP로 정하고 기본 한도와 예매 생성 한도를 설정값으로 둔다.
 
+비회원 IP의 신뢰 경계는 [ADR 0046](0046-attested-client-ip.md)에서 정한다.
+
 ## 검토한 대안
 
 | 대안 | 채택하지 않은 이유 |

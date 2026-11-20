@@ -42,8 +42,7 @@ class ConnectionPoolLimitTests(private val webClient: WebTestClient) : GatewayIn
             (1..CONCURRENT_REQUESTS).map { index ->
                 executor.submit<Int> {
                     startGate.await()
-                    webClient.mutate().defaultHeader("X-Forwarded-For", "10.9.9.$index").build()
-                        .get().uri(path()).headers { it.setBearerAuth(token(subject = (1000 + index).toString())) }
+                    webClient.get().uri(path()).headers { it.setBearerAuth(token(subject = (1000 + index).toString())) }
                         .exchange().returnResult(String::class.java).status.value()
                 }
             }

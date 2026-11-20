@@ -7,6 +7,15 @@ const envSchema = z.object({
   GATEWAY_PUBLIC_URL: z.url().default('http://localhost:18000'),
   REDIS_URL: z.url().default('redis://localhost:16379'),
   WEB_ORIGIN: z.url().default('http://localhost:13000'),
+  TICKETING_INGRESS_PROOF: z
+    .union([
+      z.literal(''),
+      z
+        .string()
+        .length(64)
+        .regex(/^[0-9a-f]{64}$/),
+    ])
+    .default(''),
   SESSION_COOKIE_SECURE: z
     .enum(['true', 'false'])
     .default('false')

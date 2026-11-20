@@ -29,7 +29,7 @@ internal class RateLimitFilterWarmupTests {
                 response()
             }
         },
-        RateLimitKeyResolver(RateLimitProperties()),
+        RateLimitKeyResolver(),
         RateLimitProperties(enabled = enabled),
         SimpleMeterRegistry(),
     )

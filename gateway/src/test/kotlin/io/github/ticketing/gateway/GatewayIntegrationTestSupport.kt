@@ -1,6 +1,8 @@
 package io.github.ticketing.gateway
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret
+import io.github.ticketing.gateway.ratelimit.CLIENT_IP_HEADER
+import io.github.ticketing.gateway.ratelimit.INGRESS_PROOF_HEADER
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient
@@ -28,10 +30,11 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val TEST_SECRET = "test-secret-test-secret-test-secret-0123"
+internal val testIngressProof = "1234abcd".repeat(8)
 
 @AutoConfigureWebTestClient
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClient) {
+abstract class GatewayIntegrationTestSupport(protected val baseClient: WebTestClient) {
     @TestBean(name = RedisRateLimiter.REDIS_SCRIPT_NAME, methodName = "fixedTimeRateLimitScript", enforceOverride = true)
     protected lateinit var rateLimitScript: RedisScript<*>
 
@@ -42,8 +45,10 @@ abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClie
     @BeforeEach
     fun clearRequests() {
         val id = UUID.randomUUID().hashCode()
-        client =
-            baseClient.mutate().defaultHeader("X-Forwarded-For", "10.${(id ushr 16) and 255}.${(id ushr 8) and 255}.${id and 255}").build()
+        client = baseClient.mutate()
+            .defaultHeader(CLIENT_IP_HEADER, "10.${(id ushr 16) and 255}.${(id ushr 8) and 255}.${id and 255}")
+            .defaultHeader(INGRESS_PROOF_HEADER, testIngressProof)
+            .build()
         core.clear()
         realtime.clear()
     }
@@ -78,6 +83,7 @@ abstract class GatewayIntegrationTestSupport(private val baseClient: WebTestClie
             registry.add("ticketing.gateway.rate-limit.streams.replenish-rate") { 1 }
             registry.add("ticketing.gateway.rate-limit.streams.burst-capacity") { 3 }
             registry.add("ticketing.jwt.secret") { TEST_SECRET }
+            registry.add("ticketing.gateway.ingress-proof") { testIngressProof }
             registry.add("ticketing.gateway.core-uri") { TestInfrastructure.core.uri }
             registry.add("ticketing.gateway.realtime-uri") { TestInfrastructure.realtime.uri }
             registry.add("spring.data.redis.host") { TestInfrastructure.redis.host }

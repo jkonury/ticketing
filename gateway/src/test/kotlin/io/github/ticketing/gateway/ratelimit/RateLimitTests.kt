@@ -73,17 +73,43 @@ class RateLimitTests(client: WebTestClient, private val redis: ReactiveStringRed
     }
 
     @Test
-    fun `비로그인 요청은 전달된 클라이언트 IP별로 제한한다`() {
+    fun `비로그인 요청은 검증된 클라이언트 IP별로 제한한다`() {
         val suffix = UUID.randomUUID().hashCode().ushr(16)
         val first = "198.18.${suffix ushr 8}.${suffix and 255}"
         val other = "198.19.${suffix ushr 8}.${suffix and 255}"
-        fun request(ip: String) = client.get().uri("/api/v1/bookings/me").headers { it.set("X-Forwarded-For", ip) }.exchange()
+        fun request(ip: String) = client.get().uri("/api/v1/bookings/me").header(CLIENT_IP_HEADER, ip).exchange()
 
         repeat(2) { request(first).expectStatus().isOk }
         request(first).expectStatus().isEqualTo(429).expectBody().jsonPath("$.code").isEqualTo("RATE_LIMITED")
         request(other).expectStatus().isOk
 
         assertThat(core.requests).hasSize(3)
+        assertThat(core.requests.map { it.headers.containsHeader(INGRESS_PROOF_HEADER) }).containsOnly(false)
+    }
+
+    @Test
+    fun `직접 연결은 전달 헤더가 달라도 같은 IP 버킷을 쓴다`() {
+        fun request(address: String, proof: String?) = baseClient.get().uri("/api/v1/bookings/me").headers {
+            it.set("X-Forwarded-For", address)
+            it.set("Forwarded", "for=$address")
+            it.set("X-Real-IP", address)
+            it.set(CLIENT_IP_HEADER, address)
+            if (proof != null) it.set(INGRESS_PROOF_HEADER, proof)
+        }.exchange()
+
+        request("192.0.2.1", null).expectStatus().isOk
+        request("192.0.2.2", "0".repeat(64)).expectStatus().isOk
+        request("192.0.2.3", null).expectStatus().isEqualTo(429).expectBody().jsonPath("$.code").isEqualTo("RATE_LIMITED")
+
+        assertThat(core.requests).hasSize(2).allSatisfy { request ->
+            assertThat(request.headers.headerNames().map(String::lowercase)).doesNotContain(
+                "x-forwarded-for",
+                "forwarded",
+                "x-real-ip",
+                CLIENT_IP_HEADER.lowercase(),
+                INGRESS_PROOF_HEADER.lowercase(),
+            )
+        }
     }
 
     @Test
