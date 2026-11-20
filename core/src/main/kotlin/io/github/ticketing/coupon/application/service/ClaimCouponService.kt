@@ -19,6 +19,7 @@ class ClaimCouponService internal constructor(
     private val definitions: CouponDefinitionCommandPort,
     private val unlimitedClaimer: UnlimitedCouponClaimer,
     private val limitedClaimer: LimitedCouponClaimer,
+    private val starter: CouponIssueStarter,
     private val clock: Clock,
 ) : ClaimCouponUseCase {
     override fun claim(memberId: Long, definitionId: Long): IssuedCouponView {
@@ -29,6 +30,7 @@ class ClaimCouponService internal constructor(
 
         val member = MemberId(memberId)
         return if (definition.issueMode == IssueMode.UNLIMITED) {
+            if (!definition.issueStarted) starter.ensureStarted(checkNotNull(definition.id), now, IssueMode.UNLIMITED)
             unlimitedClaimer.claim(definition, member, now)
         } else {
             limitedView(limitedClaimer.claim(definition, member, now), definition.validUntil, now)

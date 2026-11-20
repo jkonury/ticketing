@@ -2,6 +2,7 @@ package io.github.ticketing.coupon.application.service
 
 import io.github.ticketing.coupon.application.port.required.CouponDefinitionCommandPort
 import io.github.ticketing.coupon.domain.CouponDefinitionId
+import io.github.ticketing.coupon.domain.IssueMode
 import org.slf4j.LoggerFactory
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
@@ -12,8 +13,9 @@ import java.time.Instant
 @Service
 internal class CouponIssueStartRecorder(private val definitions: CouponDefinitionCommandPort) {
     @Transactional
-    fun record(definitionId: CouponDefinitionId, now: Instant) {
+    fun record(definitionId: CouponDefinitionId, now: Instant, expectedMode: IssueMode?) {
         val definition = definitions.findById(definitionId) ?: throw couponNotFound()
+        if (expectedMode != null && (!definition.canIssue(now) || definition.issueMode != expectedMode)) throw couponNotIssuable()
         if (definition.issueStarted) return
 
         definition.markIssueStarted(now)
@@ -29,18 +31,19 @@ internal class CouponIssueStartRecorder(private val definitions: CouponDefinitio
 internal class CouponIssueStarter(private val definitions: CouponDefinitionCommandPort, private val recorder: CouponIssueStartRecorder) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun ensureStarted(definitionId: CouponDefinitionId, now: Instant) {
+    fun ensureStarted(definitionId: CouponDefinitionId, now: Instant, expectedMode: IssueMode? = null) {
         repeat(MAX_ATTEMPTS - 1) {
             try {
-                recorder.record(definitionId, now)
+                recorder.record(definitionId, now, expectedMode)
                 return
             } catch (e: ObjectOptimisticLockingFailureException) {
                 val definition = definitions.findById(definitionId) ?: throw couponNotFound()
+                if (expectedMode != null && (!definition.canIssue(now) || definition.issueMode != expectedMode)) throw couponNotIssuable()
                 if (definition.issueStarted) return
                 log.debug("발급 시작 표시 저장이 충돌해 다시 시도한다. definitionId={}", definitionId.value, e)
             }
         }
-        recorder.record(definitionId, now)
+        recorder.record(definitionId, now, expectedMode)
     }
 
     private companion object {
