@@ -90,7 +90,7 @@ cd web && pnpm install && pnpm dev
 
 - 대화, 문서, 커밋 메시지는 한국어. 코드 식별자는 영어.
 - 주석은 "왜"가 코드에서 드러나지 않을 때만 쓴다.
-- 커밋은 사용자가 요청할 때만 한다. 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
+- 커밋은 사용자가 요청할 때만 한다. 단, herdr 워크플로 위임 지시는 main 세션의 task별 커밋 요청으로 본다([herdr-workflow.md](docs/rules/herdr-workflow.md#2-실행-범위)). 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
 - 커밋 메시지 형식: `<type>(<scope>): <요약>`. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`. scope는 모듈명(`booking`, `gateway`, `web` 등).
 - 비밀 값은 저장소에 넣지 않는다. 로컬 설정은 `.env`(git 제외)와 `application-local.yml`을 쓴다.
 

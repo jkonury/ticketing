@@ -15,6 +15,7 @@ review_kind=""
 impl_args=""
 review_args=""
 impl_args_set=0
+review_args_set=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -23,7 +24,7 @@ while [ $# -gt 0 ]; do
     --impl-name) impl_name="${2:?}"; shift 2 ;;
     --review-name) review_name="${2:?}"; shift 2 ;;
     --impl-args) impl_args="${2-}"; impl_args_set=1; shift 2 ;;
-    --review-args) review_args="${2-}"; shift 2 ;;
+    --review-args) review_args="${2-}"; review_args_set=1; shift 2 ;;
     *) die "알 수 없는 인자: $1" ;;
   esac
 done
@@ -69,8 +70,9 @@ if [ -n "$existing_review" ] && [ "$existing_review" != "$review_kind" ]; then
   die "살아 있는 $review_name 의 종류($existing_review)가 요청($review_kind)과 다르다. 직접 정리한 뒤 다시 실행한다."
 fi
 
-# 종류별 기본 인자: claude 구현자는 Sonnet
-if [ "$impl_args_set" = 0 ] && [ "$impl_kind" = claude ]; then impl_args="--model sonnet"; fi
+# 종류별 기본 인자: claude는 Sonnet, codex는 gpt-6.1-terra, 추론 강도는 medium
+if [ "$impl_args_set" = 0 ]; then impl_args="$(agent_args "$impl_kind" medium)"; fi
+if [ "$review_args_set" = 0 ]; then review_args="$(agent_args "$review_kind" medium)"; fi
 
 split_pane() { # <pane|--current> <direction> -> 새 pane id
   local target="$1" dir="$2" args=()
