@@ -146,7 +146,7 @@ Claude Code·Codex 모두 모델이 `/context`·`/status`를 직접 실행하거
 ./scripts/agent/herdr/herdr-context.sh impl               # 서브 세션
 ```
 
-- 종료 코드 5(`unknown`)는 상태줄에서 사용률을 읽지 못했다는 뜻이다(Claude는 statusline에 사용률이 표시되어야 한다). 성공으로 보지 않고, 아래 압축 절차를 task마다 수행한다.
+- 종료 코드 5(`unknown`)는 상태줄에서 사용률을 읽지 못했다는 뜻이다. impl·review(자기 pane이 아닌 대상)는 상태줄에 없으면 idle인 pane에 Claude는 `/context`, Codex는 `/status`를 입력해 출력에서 읽는다(대화에 출력이 남는다). main 자신은 턴 중에 입력할 수 없어 이 fallback이 없고, 릴레이가 idle을 확인한 뒤에만 같은 방식으로 `before`·`after-*` 사용률을 기록한다. 그래도 읽지 못하면 성공으로 보지 않고, 아래 압축 절차를 task마다 수행한다.
 - main은 구현 위임 직전, 최종 재검증 직후, 다음 task를 준비하기 전에 확인한다. 구현·리뷰·수정이 끝날 때는 해당 서브 세션도 확인한다.
 - 20%부터 해당 task의 `progress.md`에 현재 task와 마지막으로 허용된 task, 결정, 검증 결과와 로그 경로, 커밋 여부(완료 시 해시), 다음 행동을 기록하거나 갱신한다.
 - 서브 세션은 task마다 새 세션이므로 별도 조치가 없다. task 도중 25% 이상이면 수정 위임 전에 해당 에이전트를 새 세션으로 시작한다(`herdr-delegate.sh --task`가 task 첫 위임에서만 재시작하므로, 필요하면 `restart_agent`를 사용한다).

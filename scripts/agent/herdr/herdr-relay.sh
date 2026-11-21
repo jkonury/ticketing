@@ -42,7 +42,7 @@ deadline=$(( $(date +%s) + timeout_ms / 1000 ))
 record() { # <단계>
   [ -n "$log" ] || return 0
   mkdir -p "$(dirname "$log")"
-  echo "$(date '+%F %T') relay $1 context=$(agent_context_pct self || echo unknown)%" >>"$log"
+  echo "$(date '+%F %T') relay $1 context=$(agent_context_pct self probe || echo unknown)%" >>"$log"
 }
 
 # 턴이 끝나 main이 idle이 될 때까지 기다린다. 호출 직후에는 아직 working으로 바뀌기 전일 수 있어 먼저 working 전이를 잠시 기다린다.
@@ -74,7 +74,7 @@ wait_idle 5
 record "after-$mode"
 
 if [ "$mode" = compact ]; then
-  pct="$(agent_context_pct self || echo 100)"
+  pct="$(agent_context_pct self probe || echo 100)"
   if [ "$pct" -ge "$max" ]; then
     send "/clear"
     wait_idle 3
