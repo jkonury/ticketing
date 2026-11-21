@@ -11,18 +11,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/scripts/agent/hook/stop_quality.sh\"",
-            "timeout": 600,
-            "statusMessage": "ktlint·detekt 검사 중"
-          }
-        ]
-      }
     ]
   }
 }

@@ -16,17 +16,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/scripts/agent/hook/stop_quality.sh\"",
-            "timeout": 600
-          }
-        ]
-      }
     ]
   }
 }

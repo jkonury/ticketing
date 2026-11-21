@@ -49,6 +49,14 @@ def mask_python_strings(source: str) -> str:
     return ''.join(chars)
 
 
+# 본문을 셸 또는 인터프리터로 실행할 수 있는 명령 이름(heredoc 본문 검사 예외 판단에 쓴다).
+EXECUTOR_RE = re.compile(
+    r'(?<![\w./-])(?:sh|bash|zsh|dash|eval|source|xargs|env|exec|sudo|ssh|make|perl|ruby|node|php'
+    r'|python(?:3(?:\.\d+)?)?)(?![\w./-])')
+# 변수 확장, 명령 치환, 프로세스 치환만 셸 확장으로 본다. 단순 리다이렉션(>, <)은 제외한다.
+SHELL_EXPANSION_RE = re.compile(r'\$|`|[<>]\(')
+
+
 def without_literal_heredocs(command: str) -> str:
     """인용된 데이터 heredoc과 단독 Python heredoc의 문자열을 처리한다."""
     pending = []
@@ -78,11 +86,13 @@ def without_literal_heredocs(command: str) -> str:
             parts = list(lexer)
         except ValueError:
             continue
-        # shell에 전달하는 본문 및 pipeline·제어문은 이 예외로 숨기지 않는다.
+        # 본문을 실행할 수 있는 명령(shell, 인터프리터 등)이 같은 줄에 있으면 본문을 데이터로 숨기지 않는다.
+        # 복합문(done·fi·esac)을 닫는 줄은 루프 본문이 본문을 실행할 수 있으므로 명령 전체에 실행기가 없을 때만 숨긴다.
         is_python = (len(parts) == 4 and re.fullmatch(r'python(?:3(?:\.\d+)?)?', Path(parts[0]).name)
                      and parts[1:3] == ['-', '<<'])
-        if not parts or (Path(parts[0]).name not in {'cat', 'tee', ':'} and not is_python) or any(
-                part and all(c in ';&|()' for c in part) for part in parts):
+        closes_compound = bool(parts) and parts[0] in {'done', 'fi', 'esac'}
+        if not parts or (EXECUTOR_RE.search(line) and not is_python) or (
+                closes_compound and EXECUTOR_RE.search(command)):
             continue
         candidates = []
         for index, part in enumerate(parts[:-1]):
@@ -138,10 +148,25 @@ def deletion_reason(root: Path, cwd: Path, target: str) -> str | None:
         for parent, directories, files in os.walk(path):
             entries.extend(Path(parent) / name for name in files)
             entries.extend(Path(parent) / name for name in directories if (Path(parent) / name).is_symlink())
-    for entry in entries:
-        if entry.relative_to(root).as_posix() not in tracked:
-            return f'Recursive deletion would lose untracked or ignored files: {target}'
+    untracked = [entry.relative_to(root).as_posix() for entry in entries
+                 if entry.relative_to(root).as_posix() not in tracked]
+    # gitignore 대상(build/, .gradle/ 등)은 재생성 가능한 산출물이므로 보호 대상에서 뺀다.
+    ignored = ignored_paths(root, untracked)
+    if any(rel not in ignored for rel in untracked):
+        return f'Recursive deletion would lose untracked files: {target}'
     return None
+
+
+def ignored_paths(root: Path, relatives: Sequence[str]) -> set[str]:
+    if not relatives:
+        return set()
+    result = subprocess.run(
+        ['git', '-C', str(root), 'check-ignore', '-z', '--stdin'],
+        input='\0'.join(relatives) + '\0', capture_output=True, text=True, check=False, timeout=5)
+    # 종료 코드 1은 무시된 경로가 하나도 없다는 뜻이고, 그 밖의 실패는 호출자가 deny로 처리하게 둔다.
+    if result.returncode not in (0, 1):
+        raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+    return {path for path in result.stdout.split('\0') if path}
 
 
 SHELLS = {'sh', 'bash', 'zsh', 'dash'}
@@ -153,6 +178,8 @@ BOUNDARIES = {';', ';;', ';&', ';;&', '&&', '||', '|', '|&', '&', '\n', '(', ')'
 APPROVAL_HINT = 'This changes running services or containers; confirm with the user before running.'
 MERGE_HINT = 'PR merge changes shared history; confirm with the user before running.'
 MAIN_HINT = 'This pushes to main; confirm the user intends to push to main.'
+# 이 접두사가 붙은 사유는 차단 대신 사용자 확인(ask)으로 처리한다.
+ASK_PREFIX = 'ask:'
 
 
 def is_command_position(words: Sequence[str], index: int, boundaries: Collection[str]) -> bool:
@@ -192,6 +219,26 @@ def invocations(command: str) -> Iterator[tuple[str, list[str]]]:
                     break
         if name == 'eval' and args:
             yield from invocations(' '.join(args))
+
+
+REDIRECTIONS = {'>', '>>', '<', '>|', '>&', '<&', '&>', '&>>'}
+
+
+def strip_redirections(args: Sequence[str]) -> list[str]:
+    """리다이렉션 연산자와 그 대상(예: >/dev/null, 2>&1)은 파일 인자가 아니므로 뺀다."""
+    kept, index = [], 0
+    while index < len(args):
+        word = args[index]
+        nxt = args[index + 1] if index + 1 < len(args) else ''
+        if word in REDIRECTIONS or re.fullmatch(r'\d*[<>]+&?', word):
+            index += 2  # 연산자 다음 단어가 대상이다
+            continue
+        if re.fullmatch(r'\d+', word) and nxt in REDIRECTIONS:
+            index += 3  # 2 > /dev/null 처럼 fd 번호가 따로 떨어진 경우
+            continue
+        kept.append(word)
+        index += 1
+    return kept
 
 
 def option_parts(args: Sequence[str], value_options: Collection[str] = ()) -> tuple[list[str], list[str]]:
@@ -271,19 +318,26 @@ def git_reason(args: Sequence[str], cwd: Path) -> str | None:
                                  or '--mirror' in options or any(a.startswith('+') for a in operands)):
         return 'Force push is blocked'
     if subcommand == 'reset' and '--hard' in options:
-        return 'Hard reset is blocked'
+        return ASK_PREFIX + 'Hard reset discards uncommitted changes; confirm with the user first.'
     if subcommand == 'clean' and (short_flag(options, 'f') or '--force' in options):
         return 'Forced Git clean is blocked'
-    if subcommand == 'branch' and (short_flag(options, 'dD') or '--delete' in options):
-        return 'Branch deletion is blocked'
+    if subcommand == 'branch' and (short_flag(options, 'D') or ('--delete' in options and '--force' in options)):
+        return 'Force branch deletion is blocked'
+    if subcommand == 'branch' and (short_flag(options, 'd') or '--delete' in options):
+        return ASK_PREFIX + 'Branch deletion requires confirmation with the user.'
     if subcommand in {'checkout', 'restore'}:
+        # --staged만 있는 restore는 인덱스만 되돌리므로 작업 트리 내용을 잃지 않는다.
+        unstage_only = (subcommand == 'restore' and '--staged' in options
+                        and not ('--worktree' in options or short_flag(options, 'W')))
+        if unstage_only:
+            return None
         root = Path(git(target_cwd, 'rev-parse', '--show-toplevel').strip()).resolve()
         for operand in operands:
             if operand in {':/', ':/*', ':(top)', ':(top).', ':(top)*'} or (
                     not operand.startswith('-') and (target_cwd / operand).resolve() == root):
-                return 'Restoring the entire working directory is blocked'
+                return ASK_PREFIX + 'Restoring the entire working directory discards changes; confirm first.'
         if '.' in operands:
-            return 'Restoring the entire working directory is blocked'
+            return ASK_PREFIX + 'Restoring the entire working directory discards changes; confirm first.'
     return None
 
 
@@ -345,7 +399,8 @@ def inspect(command: str, cwd: Path) -> tuple[str | None, list[str]]:
             if denied:
                 return denied, notices
             _, operation, _ = docker_operation(name, args)
-            if operation in {'up', 'down', 'start', 'stop', 'restart', 'kill', 'rm', 'remove', 'run', 'prune'}:
+            # AGENTS.md가 기본으로 지정한 up·start·run은 안내하지 않는다(실행 중인 서비스를 끊는 동작만 안내).
+            if operation in {'down', 'stop', 'restart', 'kill', 'rm', 'remove', 'prune'}:
                 notices.append(APPROVAL_HINT)
         if name == 'gh':
             options, operands = option_parts(args, {'-R', '--repo', '--hostname'})
@@ -365,10 +420,10 @@ def inspect(command: str, cwd: Path) -> tuple[str | None, list[str]]:
             # shell 확장과 디렉터리 이동의 결과는 shlex로 확정할 수 없다.
             if any(n == 'cd' for n, _ in invocations(command)):
                 return 'Run recursive deletion separately from directory changes', notices
-            if any(c in command for c in '$`<>'):
+            if SHELL_EXPANSION_RE.search(command):
                 return 'Recursive deletion with shell expansion requires manual review', notices
             root = Path(git(cwd, 'rev-parse', '--show-toplevel').strip()).resolve()
-            _, paths = option_parts(args)
+            _, paths = option_parts(strip_redirections(args))
             if not paths:
                 return 'Recursive deletion requires an explicit path', notices
             for target in paths:
@@ -398,8 +453,11 @@ def main() -> None:
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as exc:
         denied = f'Command policy could not validate input: {exc}'
     if denied:
+        decision = 'deny'
+        if denied.startswith(ASK_PREFIX):
+            decision, denied = 'ask', denied[len(ASK_PREFIX):]
         print(json.dumps({'hookSpecificOutput': {
-            'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
+            'hookEventName': 'PreToolUse', 'permissionDecision': decision,
             'permissionDecisionReason': denied,
         }}))
     elif notices:

@@ -80,7 +80,7 @@ cd web && pnpm install && pnpm dev
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 하고, `--no-verify`로 우회하지 않는다.
 - web 변경 후 `./scripts/agent/test/web-check.sh`(빌드 확인은 `--build`)를 통과시킨다.
 - 문서를 옮기거나 제목·링크를 바꾸면 `./scripts/agent/docs/check-docs.sh [경로...]`를 실행한다.
-- Stop hook(`scripts/agent/hook/stop_quality.sh`)과 `.githooks/pre-commit`이 같은 품질 검사를 한다. 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행한다.
+- `.githooks/pre-commit`이 스테이지된 Kotlin·web 변경에 대해 같은 품질 검사를 커밋 시점에 실행한다. 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행한다.
 - 같은 작업 디렉터리의 Gradle test·check·성능 측정은 순차 실행한다. 동시에 실행하면 결과 파일이 충돌한다.
 - 모듈 의존을 바꾸면 Modulith 구조 검증을 돌리고 `./gradlew :core:modulithDocs`로 다이어그램을 다시 생성한다. [core 작성 지침](docs/rules/backend-core.md)
 - 실패하면 실패한 그대로 보고한다(실패한 테스트 이름과 메시지 일부). 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
