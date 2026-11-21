@@ -84,7 +84,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 - 만든 pane은 `build/orchestration/panes.json`에 기록되고 `herdr-down.sh`는 그 pane만 닫는다.
 - 가드를 쓰는 실행은 깨끗한 작업 트리에서 시작한다. `build/`처럼 Git에서 제외한 생성물은 상태 검사에 포함되지 않는다. 사용자가 기존 변경을 둔 채 독립 위임을 진행하라고 하면 위치 인자 호출을 사용하고, 시작 변경 목록을 기록해 해당 경로를 위임 범위에서 제외한다.
 - 실행마다 `build/orchestration/<run-id>`를 만들고 그 바로 아래에 task 디렉터리를 둔다. 한 실행은 한 메인이 순차로 진행한다. 모든 구현·리뷰·수정 위임에 같은 실행 디렉터리의 `--task`를 사용한다.
-- `herdr-context.sh self`로 main의 사용률이 읽히는지 확인한다. `unknown`이면 4절 압축 절차를 task마다 수행한다.
+- `herdr-context.sh self`로 main의 사용률이 읽히는지 확인한다. Codex에서 `HERDR_PANE_ID`가 비어 있으면 4절의 pane ID 지정 예시로 조회한다. 그래도 `unknown`이면 4절 압축 절차를 task마다 수행한다.
 - 리뷰 기준 문서([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md))가 있고 읽히는지 확인한다.
 
 | 스크립트 | 용도 |
@@ -146,6 +146,15 @@ Claude Code·Codex 모두 모델이 `/context`·`/status`를 직접 실행하거
 ./scripts/agent/herdr/herdr-context.sh impl               # 서브 세션
 ```
 
+`self`는 `HERDR_PANE_ID`를 사용한다. Codex의 명령 실행 환경에 이 변수가 없으면 `herdr agent list`에서 현재 main Codex의 `pane_id`를 확인한 뒤 명령에 직접 전달한다. 여러 후보가 있으면 작업 디렉터리와 상태를 확인한다. 이 환경에서 `herdr pane current --current`는 다른 pane을 반환할 수 있다.
+
+```bash
+herdr agent list
+# w7:p1은 예시다. 확인한 main Codex의 pane_id로 바꾼다.
+HERDR_PANE_ID=w7:p1 ./scripts/agent/herdr/herdr-context.sh self --max 25
+```
+
+- 릴레이도 `HERDR_PANE_ID`를 사용한다. 변수가 비어 있으면 릴레이 실행 명령 앞에도 확인한 ID를 같은 방식으로 전달한다.
 - 종료 코드 5(`unknown`)는 상태줄에서 사용률을 읽지 못했다는 뜻이다. impl·review(자기 pane이 아닌 대상)는 상태줄에 없으면 idle인 pane에 Claude는 `/context`, Codex는 `/status`를 입력해 출력에서 읽는다(대화에 출력이 남는다). main 자신은 턴 중에 입력할 수 없어 이 fallback이 없고, 릴레이가 idle을 확인한 뒤에만 같은 방식으로 `before`·`after-*` 사용률을 기록한다. 그래도 읽지 못하면 성공으로 보지 않고, 아래 압축 절차를 task마다 수행한다.
 - main은 구현 위임 직전, 최종 재검증 직후, 다음 task를 준비하기 전에 확인한다. 구현·리뷰·수정이 끝날 때는 해당 서브 세션도 확인한다.
 - 20%부터 해당 task의 `progress.md`에 현재 task와 마지막으로 허용된 task, 결정, 검증 결과와 로그 경로, 커밋 여부(완료 시 해시), 다음 행동을 기록하거나 갱신한다.

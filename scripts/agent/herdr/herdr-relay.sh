@@ -54,8 +54,12 @@ wait_idle() { # <settle-secs>
     remain_ms=$(( (deadline - $(date +%s)) * 1000 ))
     herdr agent wait "$self" --timeout "$remain_ms" >/dev/null 2>&1 || true
     status="$(agent_status "$self")" || die "main pane $self 를 찾지 못했다."
+    if [[ "$status" = idle || "$status" = done ]]; then
+      sleep 2
+      status="$(agent_status "$self")" || die "main pane $self 를 찾지 못했다."
+    fi
     case "$status" in
-      idle|done) sleep 2; [ "$(agent_status "$self")" = working ] || return 0 ;;
+      idle|done) return 0 ;;
       blocked) echo "blocked: main (사용자 응답 전에는 입력하지 않는다)"; exit 3 ;;
       *) sleep 3 ;;
     esac

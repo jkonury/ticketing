@@ -80,7 +80,9 @@ agent_context_pct() { # <agent|pane|self> [probe]
   # 상태줄에 사용률이 없으면 idle인 대상에 /context(claude)·/status(codex)를 입력해 출력에서 읽는다. 대화에 출력이 남는다.
   # main 자신은 턴 중에 입력이 안 되므로 idle을 보장하는 호출(릴레이)만 probe로 허용한다.
   if [ -z "$pct" ] && { [ "$target" != "${HERDR_PANE_ID:-}" ] || [ "$probe" = probe ]; }; then
-    kind="$(herdr agent get "$target" 2>/dev/null | jq -r '.result.agent.agent // empty')"
+    kind="$(herdr agent get "$target" 2>/dev/null | jq -er '
+      .result.agent | select(.agent_status == "idle" or .agent_status == "done") | .agent
+    ')" || return 1
     case "$kind" in
       claude) cmd=/context ;;
       codex) cmd=/status ;;
