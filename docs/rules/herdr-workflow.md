@@ -104,7 +104,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 ### 실행 순서
 
 1. 다음 task를 정하고(로드맵 항목이면 다음 미완료 항목) 지시서를 쓴다(5절). `task_dir=build/orchestration/<run-id>/<task-id>`로 두고, 그 안의 `base.txt`에 기준 `HEAD`, 시작 시 `git status --porcelain=v1 -uall` 출력, 허용 경로 목록을 기록한다.
-2. `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task는 `--effort high`를 붙인다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
+2. main의 컨텍스트 사용률을 확인하고 아래 「컨텍스트와 토큰」 절차를 적용한 뒤 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task는 `--effort high`를 붙인다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
 3. `herdr-wait.sh impl`을 메인 클라이언트의 백그라운드 명령으로 실행하고, 결과가 도착하면 이어간다. 완료 판정은 6절을 따른다. 구현이 끝나면 컨텍스트를 점검한다(4절 하단).
 4. 변경 범위가 지시서 안인지 확인한다. `git diff`는 신규 파일과 staged 변경을 놓치므로 다음을 함께 본다. 범위 밖이면 impl에 되돌리도록 지시한다.
    ```bash
@@ -117,9 +117,9 @@ herdr agent list                           # impl·review가 idle인지 확인
    - **초기 구현 1회 + 후속 수정 최대 2회**다. 후속 수정에는 리뷰 차단 사항과 main 재검증 실패가 모두 포함된다.
    - 2회를 넘으면 자동으로 더 시도하지 않고 남은 문제를 사용자에게 보고한다.
 7. 리뷰 차단이 해소되면 main이 검증할 변경을 확정한다. 완료 기준을 충족한 로드맵 항목은 해당 체크박스를 갱신하고 그 변경도 검토한다. 커밋 제외 task가 아니면 리뷰를 마친 경로만 명시해 스테이징한다. `git diff --cached`로 기준 `HEAD` 대비 변경이 리뷰에서 확인한 내용과 일치하는지 확인하고 `git write-tree`로 인덱스 트리 ID를 기록한다. `git diff --quiet --ignore-submodules=none`이 통과하고 `git ls-files --others --exclude-standard` 출력이 비어 있어야 검증을 시작한다.
-8. main은 리뷰된 변경에서 7절의 최종 AC를 순차 실행한다. impl의 관련 회귀 검사 결과는 보고서에서 확인한다. Docker 미기동·포트 충돌·Testcontainers 실패 같은 환경 문제는 수정 횟수에 세지 않는다. 검사가 끝날 때마다 결과와 로그를 보관한다(7절). 필수 검사 실패나 리뷰 차단이 남아 있는 동안에는 해당 task에 머문다.
+8. main은 리뷰된 변경에서 7절의 최종 AC를 순차 실행한다. impl의 관련 회귀 검사 결과는 보고서에서 확인한다. Docker 미기동·포트 충돌·Testcontainers 실패 같은 환경 문제는 수정 횟수에 세지 않는다. 검사가 끝날 때마다 결과와 로그를 보관한다(7절). 최종 AC의 성공·실패가 결정되면 커밋이나 수정 위임 전에 main의 컨텍스트를 점검한다. 필수 검사 실패나 리뷰 차단이 남아 있는 동안에는 해당 task에 머문다.
 9. 최종 AC 통과 후 커밋 제외 task가 아니면 `HEAD`가 시작값인지, `git write-tree` 값이 검증 전과 같은지, unstaged·untracked 변경이 없는지 다시 확인한다. 내용이 바뀌면 영향을 받는 리뷰와 검증을 다시 진행한다. 커밋 훅이 통과한 뒤 커밋의 트리(`git rev-parse 'HEAD^{tree}'`)가 검증한 트리와 같은지, 작업 트리가 깨끗한지 확인한다. 훅이 실패하거나 검증과 커밋 내용이 다르면 해당 task에서 멈춘다. 커밋 메시지는 `AGENTS.md` 7절 형식을 따르고 scope는 그 task의 모듈이다. 커밋 제외 task는 검증 결과와 미커밋 상태를 보고한다.
-10. 실행 범위가 다중 task이고 직전 task를 마무리했을 때만 다음 task로 간다. 단계의 완료 기준을 지킨다.
+10. task를 마무리하면 사용자의 최신 지시에서 마지막으로 허용한 task를 확인한다. 마지막 task이거나 커밋 제외 task이면 결과를 보고하고 종료한다. 허용된 다음 task가 있으면 단계의 완료 기준과 main의 컨텍스트 사용률을 확인한 뒤 1번으로 돌아간다.
 
 ### 위임 전 Git 검사
 
@@ -136,16 +136,16 @@ impl·review는 **task마다 새 세션**으로 시작한다. 이전 task의 탐
 
 ### 컨텍스트와 토큰
 
-구현·리뷰·수정이 끝날 때마다 메인·구현·리뷰 세션의 컨텍스트 사용률을 확인한다. 남은 비율만 표시되면 `100% - 남은 비율`로 계산한다.
+main은 구현 위임 직전, 최종 재검증 직후, 다음 task를 준비하기 전에 자신의 컨텍스트 사용률을 확인한다. 구현·리뷰·수정이 끝날 때는 main과 해당 작업에 참여한 세션의 사용률을 확인한다. 남은 비율만 표시되면 `100% - 남은 비율`로 계산한다.
 
 | 도구 | 사용률 확인 | 같은 task 압축 | 새 대화 |
 |---|---|---|---|
 | Claude Code | `/context` | `/compact` | `/clear` |
 | Codex CLI | `/status` | `/compact` | `/new` |
 
-- 20%부터 해당 task의 `progress.md`에 현재 task, 결정, 검증 결과와 로그 경로, 다음 행동을 남긴다.
-- 25% 이상에 도달한 세션은 실행 중인 명령이 끝난 뒤 정리한다. 같은 task를 계속하면 압축하고, main이 다음 task로 넘어갈 때는 새 대화에서 시작한다(impl·review는 위 규칙대로 task마다 새 세션이다). 압축 후에도 25% 이상이면 `progress.md`를 바탕으로 같은 task를 새 대화에서 재개한다.
-- 25%는 체크포인트에서 정리를 시작하는 기준이다. 자동 압축 설정은 Claude Code 30%와 현재 Codex 설정을 유지한다.
+- 20%부터 해당 task의 `progress.md`에 현재 task와 마지막으로 허용된 task, 결정, 검증 결과와 로그 경로, 커밋 여부(완료 시 해시), 다음 행동을 기록하거나 갱신한다.
+- 25% 이상에 도달한 세션은 실행 중인 명령이 끝난 뒤 정리한다. 같은 task에 커밋 등 남은 작업이 있으면 다음 행동 전에 압축하고 사용률을 다시 확인한다. main이 허용된 다음 task로 넘어갈 때는 새 대화에서 직전 task의 `progress.md`를 읽고 시작한다(impl·review는 위 규칙대로 task마다 새 세션이다). 압축 후에도 25% 이상이면 `progress.md`를 바탕으로 같은 task를 새 대화에서 재개한다.
+- Codex의 턴 종료 후 자동 압축은 진행 중인 턴의 점검을 대신할 수 없다. 25%를 확인한 체크포인트에서 위 절차를 실행한다. 자동 압축 설정은 Claude Code 30%와 현재 Codex 설정을 유지한다.
 - 첫 적용에서는 클라이언트·모델별 최대 관측 사용률, 압축 횟수, 새 대화 횟수를 실행 디렉터리에 기록한다. 클라이언트가 제공하는 입력·캐시 입력·출력 토큰도 함께 기록한다.
 
 [Claude Code 명령](https://code.claude.com/docs/en/commands) · [Codex CLI 명령](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
