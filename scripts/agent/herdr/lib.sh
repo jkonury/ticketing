@@ -69,3 +69,14 @@ restart_agent() { # <name> <effort>
     die "에이전트 $name 를 다시 시작하지 못했다(pane=$pane)."
   echo "restarted: $name ($kind, effort=$effort)"
 }
+
+# 에이전트 상태줄에서 컨텍스트 사용률(정수 %)을 읽는다. 읽지 못하면 종료 코드 1.
+# Claude는 statusline의 "🧠 N%", Codex는 하단의 "Context N% used"를 쓴다. 대상은 이름·pane ID·self.
+agent_context_pct() { # <agent|pane|self>
+  local target="$1" screen pct
+  [ "$target" = self ] && target="${HERDR_PANE_ID:?HERDR_PANE_ID가 없다}"
+  screen="$(herdr agent read "$target" --source visible --lines 20 2>/dev/null)" || return 1
+  pct="$(printf '%s\n' "$screen" | sed -nE 's/.*🧠 *([0-9]+)%.*/\1/p; s/.*Context ([0-9]+)% used.*/\1/p' | tail -n 1)"
+  [ -n "$pct" ] || return 1
+  echo "$pct"
+}

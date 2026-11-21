@@ -84,6 +84,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 - 만든 pane은 `build/orchestration/panes.json`에 기록되고 `herdr-down.sh`는 그 pane만 닫는다.
 - 가드를 쓰는 실행은 깨끗한 작업 트리에서 시작한다. `build/`처럼 Git에서 제외한 생성물은 상태 검사에 포함되지 않는다. 사용자가 기존 변경을 둔 채 독립 위임을 진행하라고 하면 위치 인자 호출을 사용하고, 시작 변경 목록을 기록해 해당 경로를 위임 범위에서 제외한다.
 - 실행마다 `build/orchestration/<run-id>`를 만들고 그 바로 아래에 task 디렉터리를 둔다. 한 실행은 한 메인이 순차로 진행한다. 모든 구현·리뷰·수정 위임에 같은 실행 디렉터리의 `--task`를 사용한다.
+- `herdr-context.sh self`로 main의 사용률이 읽히는지 확인한다. `unknown`이면 4절 압축 절차를 task마다 수행한다.
 - 리뷰 기준 문서([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md))가 있고 읽히는지 확인한다.
 
 | 스크립트 | 용도 |
@@ -91,6 +92,8 @@ herdr agent list                           # impl·review가 idle인지 확인
 | `herdr-up.sh [--impl-kind K] [--review-kind K] [--impl-name N] [--review-name N] [--impl-args "…"] [--review-args "…"]` | pane 생성과 에이전트 시작. args를 생략하면 1절 기본값 |
 | `herdr-delegate.sh [--task <task-dir>] [--effort medium\|high] <agent> <brief.md> [<report.md>]` | 경로를 담은 짧은 프롬프트 전송. `--task`는 실행의 Git 상태를 확인하고, task에서 처음 위임받는 에이전트를 새 세션으로 다시 시작한다. 위치 인자만 주면 독립 위임으로 동작하고 재시작하지 않는다 |
 | `herdr-wait.sh <agent> [--timeout ms]` | 실행 종료 대기 (백그라운드 실행) |
+| `herdr-context.sh <agent\|pane\|self> [--max pct]` | 상태줄에서 컨텍스트 사용률 읽기. 읽지 못하면 종료 코드 5, `--max` 이상이면 6 |
+| `herdr-relay.sh --resume <progress.md> [--mode compact\|clear] [--max pct] [--log file]` | main 자가 압축. 백그라운드로 실행하고 턴을 끝내면 idle 후 `/compact`와 재개 프롬프트를 보낸다 |
 | `herdr-down.sh` | 내가 만든 pane 정리 |
 
 ## 4. task 루프
@@ -105,7 +108,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 
 1. 다음 task를 정하고(로드맵 항목이면 다음 미완료 항목) 지시서를 쓴다(5절). `task_dir=build/orchestration/<run-id>/<task-id>`로 두고, 그 안의 `base.txt`에 기준 `HEAD`, 시작 시 `git status --porcelain=v1 -uall` 출력, 허용 경로 목록을 기록한다.
 2. main의 컨텍스트 사용률을 확인하고 아래 「컨텍스트와 토큰」 절차를 적용한 뒤 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task는 `--effort high`를 붙인다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
-3. `herdr-wait.sh impl`을 메인 클라이언트의 백그라운드 명령으로 실행하고, 결과가 도착하면 이어간다. 완료 판정은 6절을 따른다. 구현이 끝나면 컨텍스트를 점검한다(4절 하단).
+3. `herdr-wait.sh impl`을 메인 클라이언트의 백그라운드 명령으로 실행하고, 결과가 도착하면 이어간다. 완료 판정은 6절을 따른다. 구현이 끝나면 `herdr-context.sh impl`로 컨텍스트를 점검한다(4절 「컨텍스트와 토큰」).
 4. 변경 범위가 지시서 안인지 확인한다. `git diff`는 신규 파일과 staged 변경을 놓치므로 다음을 함께 본다. 범위 밖이면 impl에 되돌리도록 지시한다.
    ```bash
    git status --porcelain=v1 -uall
@@ -136,17 +139,29 @@ impl·review는 **task마다 새 세션**으로 시작한다. 이전 task의 탐
 
 ### 컨텍스트와 토큰
 
-main은 구현 위임 직전, 최종 재검증 직후, 다음 task를 준비하기 전에 자신의 컨텍스트 사용률을 확인한다. 구현·리뷰·수정이 끝날 때는 main과 해당 작업에 참여한 세션의 사용률을 확인한다. 남은 비율만 표시되면 `100% - 남은 비율`로 계산한다.
+Claude Code·Codex 모두 모델이 `/context`·`/status`를 직접 실행하거나 그 결과를 읽을 수 없다. 대신 herdr가 pane의 상태줄을 읽을 수 있으므로 **main도 자기 pane을 포함해 `herdr-context.sh`로 사용률을 확인**한다.
 
-| 도구 | 사용률 확인 | 같은 task 압축 | 새 대화 |
-|---|---|---|---|
-| Claude Code | `/context` | `/compact` | `/clear` |
-| Codex CLI | `/status` | `/compact` | `/new` |
+```bash
+./scripts/agent/herdr/herdr-context.sh self --max 25      # main. 25% 이상이면 종료 코드 6
+./scripts/agent/herdr/herdr-context.sh impl               # 서브 세션
+```
 
+- 종료 코드 5(`unknown`)는 상태줄에서 사용률을 읽지 못했다는 뜻이다(Claude는 statusline에 사용률이 표시되어야 한다). 성공으로 보지 않고, 아래 압축 절차를 task마다 수행한다.
+- main은 구현 위임 직전, 최종 재검증 직후, 다음 task를 준비하기 전에 확인한다. 구현·리뷰·수정이 끝날 때는 해당 서브 세션도 확인한다.
 - 20%부터 해당 task의 `progress.md`에 현재 task와 마지막으로 허용된 task, 결정, 검증 결과와 로그 경로, 커밋 여부(완료 시 해시), 다음 행동을 기록하거나 갱신한다.
-- 25% 이상에 도달한 세션은 실행 중인 명령이 끝난 뒤 정리한다. 같은 task에 커밋 등 남은 작업이 있으면 다음 행동 전에 압축하고 사용률을 다시 확인한다. main이 허용된 다음 task로 넘어갈 때는 새 대화에서 직전 task의 `progress.md`를 읽고 시작한다(impl·review는 위 규칙대로 task마다 새 세션이다). 압축 후에도 25% 이상이면 `progress.md`를 바탕으로 같은 task를 새 대화에서 재개한다.
-- Codex의 턴 종료 후 자동 압축은 진행 중인 턴의 점검을 대신할 수 없다. 25%를 확인한 체크포인트에서 위 절차를 실행한다. 자동 압축 설정은 Claude Code 30%와 현재 Codex 설정을 유지한다.
-- 첫 적용에서는 클라이언트·모델별 최대 관측 사용률, 압축 횟수, 새 대화 횟수를 실행 디렉터리에 기록한다. 클라이언트가 제공하는 입력·캐시 입력·출력 토큰도 함께 기록한다.
+- 서브 세션은 task마다 새 세션이므로 별도 조치가 없다. task 도중 25% 이상이면 수정 위임 전에 해당 에이전트를 새 세션으로 시작한다(`herdr-delegate.sh --task`가 task 첫 위임에서만 재시작하므로, 필요하면 `restart_agent`를 사용한다).
+
+#### main 자가 압축(릴레이)
+
+main은 여러 task를 한 턴에서 이어 가므로 턴 종료 후 자동 압축이 걸리지 않아 컨텍스트가 누적된다. 또 main은 자기 턴 안에서 `/compact`·`/clear`를 실행할 수 없다. 그래서 **턴을 일부러 끝내고 외부 프로세스가 idle이 된 main pane에 명령을 넣는다.**
+
+1. 25% 이상이거나 `unknown`이면, 진행 중인 명령이 끝나고 task가 마무리된 시점(커밋 직후 또는 다음 task 시작 전)에 `progress.md`를 갱신한다. 같은 task에 남은 작업이 있으면 그 작업을 위임하기 전에 한다.
+2. `herdr-relay.sh --resume "$task_dir/progress.md" --log build/orchestration/<run-id>/context.log`를 **백그라운드로 실행**하고 즉시 턴을 끝낸다. 추가 작업이나 긴 설명을 덧붙이지 않는다.
+3. 스크립트가 main이 idle이 되면 `/compact`를 보내고, 압축 후에도 25% 이상이면 `/clear`를 보낸 뒤, `progress.md`를 읽고 이어 가라는 프롬프트를 보낸다. main이 `blocked`이면 보내지 않고 종료한다.
+4. 재개한 main은 `progress.md`의 다음 행동부터 진행한다. 릴레이가 실행되는 동안 사용자가 main 입력창에 입력하면 간섭할 수 있으므로 보고 문구에 알린다.
+
+- 사용률 기록은 릴레이의 `context.log`(단계별 사용률)에 남는다. 클라이언트가 상태줄에 입력·출력 토큰을 표시하면 함께 기록한다.
+- 자동 압축 설정은 Claude Code 30%와 현재 Codex 설정을 유지한다. 자동 압축은 안전망일 뿐 위 점검을 대신하지 않는다.
 
 [Claude Code 명령](https://code.claude.com/docs/en/commands) · [Codex CLI 명령](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 
@@ -267,6 +282,7 @@ main의 최종 검증은 변경 유형에 따라 다음을 모두 통과해야 �
 - `agent_prompt_stalled`·`timeout`은 전달 실패의 증거가 아니다. 다시 보내기 전에 `agent get`·`agent read`로 확인한다.
 - 같은 작업 디렉터리에서 Gradle을 동시에 돌리지 않는다(`AGENTS.md` 6절). impl이 작업 중일 때 main과 review는 Gradle을 실행하지 않는다.
 - 지시서에 긴 본문을 프롬프트로 붙이지 않는다. 경로만 전달하면 `agent prompt` 입력 한도와 이스케이프 문제를 피한다.
+- 상태줄 형식이 바뀌면 `herdr-context.sh`가 `unknown`(종료 코드 5)을 낸다. 0%로 간주하지 않는다.
 - 위임한 작업의 사실(테스트 통과, 파일 변경)은 보고서만 믿지 말고 main이 직접 확인한다.
 
 ## 10. 정리와 최종 보고

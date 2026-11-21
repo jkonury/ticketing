@@ -43,6 +43,8 @@ herdr agent explain <이름|pane>                    # 에이전트 감지 상�
 herdr api snapshot                                 # 라이브 세션 전체 스냅샷
 ```
 
+상태줄(컨텍스트 사용률 등)은 `herdr agent read <이름|pane> --source visible --lines 20`으로 읽는다. main 자신의 pane도 `$HERDR_PANE_ID`로 읽을 수 있다. 사용률 추출은 `scripts/agent/herdr/herdr-context.sh`를 쓴다.
+
 ## 4. 레이아웃(workspace / tab / pane)
 
 ```bash
