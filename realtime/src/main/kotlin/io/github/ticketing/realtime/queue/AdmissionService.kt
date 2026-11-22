@@ -5,9 +5,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -31,8 +31,8 @@ class AdmissionService(
     private val properties: QueueProperties,
     private val clock: Clock,
     private val meters: MeterRegistry,
+    private val tokenGenerator: () -> String = ::randomToken,
 ) {
-    private val random = SecureRandom()
     private val instanceId = UUID.randomUUID().toString()
 
     suspend fun admit(scheduleId: Long): Int {
@@ -41,7 +41,7 @@ class AdmissionService(
 
         val started = System.nanoTime()
         try {
-            val tokens = List(properties.admissionBatchSize) { newToken() }
+            val tokens = List(properties.admissionBatchSize) { tokenGenerator() }
             val keys = listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId), "queue:admitted:{$scheduleId}:")
             val args = listOf(
                 (clock.millis() - properties.presenceGrace.toMillis()).toString(),
@@ -58,24 +58,28 @@ class AdmissionService(
             meters.counter("queue.departure", "reason", "seen_expired").increment(expired.toDouble())
             meters.counter("queue.admission", "result", "lookup_created").increment((admitted.size / 2).toDouble())
             // 토큰마다 왕복을 기다리면 Redis 지연이 인원수만큼 곱해지므로 한꺼번에 보내 왕복을 겹친다.
-            coroutineScope {
+            // 이미 대기열에서 빠진 회원들이므로 한 명의 실패가 나머지 기록을 취소하지 않게 supervisorScope로 결과를 따로 모은다.
+            val written = supervisorScope {
                 admitted.chunked(2).map { pair ->
                     async {
-                        val memberId = pair[0].toString()
                         val tokenKey = "queue:admission:${pair[1]}"
                         runCatching {
                             redis.execute(
                                 writeAdmissionTokenScript,
                                 listOf(tokenKey),
-                                listOf(memberId, scheduleId.toString(), properties.admissionTokenTtl.toMillis().toString()),
+                                listOf(pair[0].toString(), scheduleId.toString(), properties.admissionTokenTtl.toMillis().toString()),
                             ).next().awaitSingle()
+                        }.onSuccess {
                             meters.counter("queue.admission", "result", "gateway_ready").increment()
-                        }.onFailure {
+                        }.onFailure { exception ->
+                            if (exception is CancellationException) throw exception
                             meters.counter("queue.admission", "result", "gateway_write_failed").increment()
-                        }.getOrThrow()
+                        }.isSuccess
                     }
-                }.awaitAll()
+                }.awaitAll().count { it }
             }
+            val failed = admitted.size / 2 - written
+            if (failed > 0) logger.warn("입장 토큰 기록 실패: scheduleId={}, failed={}, total={}", scheduleId, failed, admitted.size / 2)
             if (redis.opsForZSet().size(QueueKeys.waiting(scheduleId)).awaitSingle() == 0L) {
                 redis.opsForSet().remove(QueueKeys.ACTIVE, scheduleId.toString()).awaitSingle()
                 // 크기 확인과 제거 사이에 들어온 등록은 활성 회차를 이미 추가했더라도 방금 제거됐을 수 있다.
@@ -85,7 +89,7 @@ class AdmissionService(
                     meters.counter("queue.active", "result", "restored").increment()
                 }
             }
-            return admitted.size / 2
+            return written
         } finally {
             meters.timer("queue.admission.batch").record(System.nanoTime() - started, TimeUnit.NANOSECONDS)
         }
@@ -101,15 +105,17 @@ class AdmissionService(
         }
     }
 
-    private fun newToken(): String {
-        val bytes = ByteArray(TOKEN_BYTES)
-        random.nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-    }
-
     companion object {
         private const val TOKEN_BYTES = 32
+        private val random = SecureRandom()
         private val logger = LoggerFactory.getLogger(AdmissionService::class.java)
+
+        private fun randomToken(): String {
+            val bytes = ByteArray(TOKEN_BYTES)
+            random.nextBytes(bytes)
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        }
+
         internal val writeAdmissionTokenScript = DefaultRedisScript(loadQueueScript("write-admission-token.lua"), Long::class.java)
         private val admitScript = DefaultRedisScript(
             ClassPathResource("redis/queue/admit.lua").inputStream.use { String(it.readBytes(), Charsets.UTF_8) },

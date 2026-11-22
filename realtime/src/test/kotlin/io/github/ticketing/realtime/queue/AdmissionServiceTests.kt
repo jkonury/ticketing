@@ -56,6 +56,28 @@ class AdmissionServiceTests(
     }
 
     @Test
+    fun `한 명의 입장 토큰 기록이 실패해도 나머지는 기록하고 실패만 센다`() = runTest {
+        val schedule = 207L
+        prepareSchedule(schedule)
+        enter(schedule, 1)
+        enter(schedule, 2)
+        val tokens = ArrayDeque(listOf("fail-token-207", "ok-token-207"))
+        val failing = AdmissionService(redis, properties, clock, meters) { tokens.removeFirst() }
+        redis.opsForValue().set(QueueKeys.admission("fail-token-207"), "not-a-hash").awaitSingle()
+        val failedBefore = meters.counter("queue.admission", "result", "gateway_write_failed").count()
+        val readyBefore = meters.counter("queue.admission", "result", "gateway_ready").count()
+
+        assertThat(failing.admit(schedule)).isEqualTo(1)
+
+        val okKey = QueueKeys.admission("ok-token-207")
+        assertThat(redis.opsForHash<String, String>().entries(okKey).collectMap({ it.key }, { it.value }).awaitSingle())
+            .containsEntry("memberId", "2").containsEntry("scheduleId", schedule.toString())
+        assertThat(redis.getExpire(okKey).awaitSingle()).isPositive()
+        assertThat(meters.counter("queue.admission", "result", "gateway_write_failed").count() - failedBefore).isEqualTo(1.0)
+        assertThat(meters.counter("queue.admission", "result", "gateway_ready").count() - readyBefore).isEqualTo(1.0)
+    }
+
+    @Test
     fun `대기 중이면 입장 기록을 조회하지 않는다`() = runTest {
         var admittedReads = 0
 
