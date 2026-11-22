@@ -6,6 +6,7 @@ import io.github.ticketing.payment.application.port.provided.RequestPaymentComma
 import io.github.ticketing.payment.application.port.required.PgTransactionQueryPort
 import io.github.ticketing.payment.application.service.PaymentTransactionService
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -29,6 +30,7 @@ private const val WARMUP_ORDER_SPAN = 1L shl 40
  * 리스너가 실행되지 않는다. PG에는 결제·환불 요청을 보내지 않고 부작용 없는 거래 조회(GET)만 같은 RestClient로 보낸다.
  */
 @Component
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty("ticketing.startup-warmup.enabled", havingValue = "true")
 internal class PaymentWarmupWork(
     private val transactions: PaymentTransactionService,

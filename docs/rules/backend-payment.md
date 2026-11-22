@@ -9,3 +9,4 @@
 - 결제 조회는 core와 같은 공유 비밀로 HS256 JWT를 검증하고 `role` 클레임의 USER 권한을 요구한다. fake-pg 웹훅은 JWT 없이 받고 요청 서명을 검증한다.
 - 예열을 켜면 `ApplicationRunner`가 readiness 전에 제한 시간 동안 결제와 웹훅 경로를 롤백 트랜잭션으로 실행하고 PG 거래를 읽는다. 예열이 실패해도 앱은 기동한다.
 - 결제·환불 요청의 Kafka 리스너 그룹은 `ticketing-payment`를 유지해 전환 시 core가 커밋한 오프셋을 이어받는다.
+- `batch` 프로필은 결제 대사 Job 전용으로 웹 없이 기동한다. 실행은 [payment-batch](backend-payment-batch.md)가 맡는다.

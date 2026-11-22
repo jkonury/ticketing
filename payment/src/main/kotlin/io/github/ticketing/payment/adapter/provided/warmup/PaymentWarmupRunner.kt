@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component
@@ -29,6 +30,7 @@ internal data class PaymentWarmupProperties(
 }
 
 @Component
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty("ticketing.startup-warmup.enabled", havingValue = "true")
 @EnableConfigurationProperties(PaymentWarmupProperties::class)
 internal class PaymentWarmupRunner(private val work: PaymentWarmupWork, private val properties: PaymentWarmupProperties) :

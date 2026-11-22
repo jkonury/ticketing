@@ -37,13 +37,15 @@ class CommonTestConfiguration {
     fun testPgTransactions() = TestPgTransactions()
 
     @Bean
-    fun sharedTestBeansResetter(clock: MutableClock, pg: TestPg) = SharedTestBeansResetter(clock, pg)
+    fun sharedTestBeansResetter(clock: MutableClock, pg: TestPg, pgTransactions: TestPgTransactions) =
+        SharedTestBeansResetter(clock, pg, pgTransactions)
 }
 
-class SharedTestBeansResetter(private val clock: MutableClock, private val pg: TestPg) {
+class SharedTestBeansResetter(private val clock: MutableClock, private val pg: TestPg, private val pgTransactions: TestPgTransactions) {
     fun reset() {
         clock.reset()
         pg.reset()
+        pgTransactions.reset()
     }
 }
 
@@ -119,5 +121,17 @@ class TestPg : PgPort {
 }
 
 class TestPgTransactions : PgTransactionQueryPort {
-    override fun findTransactions(date: LocalDate): List<PgTransaction> = emptyList()
+    @Volatile var transactions: List<PgTransaction> = emptyList()
+
+    @Volatile var fail = false
+
+    fun reset() {
+        transactions = emptyList()
+        fail = false
+    }
+
+    override fun findTransactions(date: LocalDate): List<PgTransaction> {
+        check(!fail) { "의도된 PG 조회 실패" }
+        return transactions
+    }
 }
