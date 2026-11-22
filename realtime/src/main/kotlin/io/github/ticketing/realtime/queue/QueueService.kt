@@ -61,9 +61,12 @@ class QueueService(
     }
 
     suspend fun leave(scheduleId: Long, memberId: Long) {
-        val removed = redis.opsForZSet().remove(QueueKeys.waiting(scheduleId), memberId.toString()).awaitSingle()
+        val removed = redis.execute(
+            leaveScript,
+            listOf(QueueKeys.waiting(scheduleId), QueueKeys.seen(scheduleId)),
+            listOf(memberId.toString()),
+        ).next().awaitSingle()
         meters.counter("queue.departure", "reason", "explicit").increment(removed.toDouble())
-        redis.opsForZSet().remove(QueueKeys.seen(scheduleId), memberId.toString()).awaitSingle()
     }
 
     private suspend fun requireSchedule(scheduleId: Long) {
@@ -158,6 +161,7 @@ class QueueService(
     companion object {
         private const val ADMITTED_CODE = 2L
         private val registerScript = DefaultRedisScript(loadQueueScript("register.lua"), List::class.java)
+        private val leaveScript = DefaultRedisScript(loadQueueScript("leave.lua"), Long::class.java)
         private val touchSeenScript = DefaultRedisScript(loadQueueScript("touch-seen.lua"), Long::class.java)
     }
 }

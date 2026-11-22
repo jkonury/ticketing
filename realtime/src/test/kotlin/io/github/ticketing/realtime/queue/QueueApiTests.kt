@@ -1,7 +1,9 @@
 package io.github.ticketing.realtime.queue
 
 import io.github.ticketing.realtime.RealtimeIntegrationTestSupport
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.reactor.awaitSingle
+import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -9,7 +11,12 @@ import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.test.web.reactive.server.WebTestClient
 import java.time.Duration
 
-class QueueApiTests(client: WebTestClient, redis: ReactiveStringRedisTemplate) : RealtimeIntegrationTestSupport(client, redis) {
+class QueueApiTests(
+    client: WebTestClient,
+    redis: ReactiveStringRedisTemplate,
+    private val queue: QueueService,
+    private val meters: MeterRegistry,
+) : RealtimeIntegrationTestSupport(client, redis) {
     @Test
     fun `등록 순서대로 순번을 부여하고 재등록하면 유지한다`() = runTest {
         val schedule = 101L
@@ -76,6 +83,27 @@ class QueueApiTests(client: WebTestClient, redis: ReactiveStringRedisTemplate) :
             1,
         ).get().uri("$path/me").exchange().expectStatus().isNotFound.expectBody().jsonPath("$.code").isEqualTo("QUEUE_ENTRY_NOT_FOUND")
         clientFor(2).get().uri("$path/me").exchange().expectStatus().isOk.expectBody().jsonPath("$.position").isEqualTo(1)
+    }
+
+    @Test
+    fun `이탈은 waiting과 seen을 함께 지우고 제거 수만큼 집계하며 재등록하면 둘 다 다시 생긴다`() = runTest {
+        val schedule = 106L
+        prepareSchedule(schedule)
+        val path = "/api/v1/queues/$schedule/entries"
+        clientFor(1).post().uri(path).exchange().expectStatus().isOk
+        val explicit = meters.counter("queue.departure", "reason", "explicit")
+        val before = explicit.count()
+
+        queue.leave(schedule, 1)
+        queue.leave(schedule, 1)
+
+        assertThat(redis.opsForZSet().score(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()).isNull()
+        assertThat(redis.opsForZSet().score(QueueKeys.seen(schedule), "1").awaitSingleOrNull()).isNull()
+        assertThat(explicit.count() - before).isEqualTo(1.0)
+
+        clientFor(1).post().uri(path).exchange().expectStatus().isOk
+        assertThat(redis.opsForZSet().score(QueueKeys.waiting(schedule), "1").awaitSingleOrNull()).isNotNull()
+        assertThat(redis.opsForZSet().score(QueueKeys.seen(schedule), "1").awaitSingleOrNull()).isNotNull()
     }
 
     @Test
