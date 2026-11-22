@@ -19,19 +19,27 @@ class AdmissionTokenFilterTests(client: WebTestClient, private val redis: Reacti
         return token
     }
 
-    private fun post(body: String, admission: String? = null, authenticated: Boolean = true): WebTestClient.ResponseSpec =
-        client.post().uri("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON)
-            .headers {
-                if (authenticated) it.setBearerAuth(token())
-                if (admission != null) it.add("X-Admission-Token", admission)
-            }.bodyValue(body).exchange()
+    // 한도가 검증 필터보다 먼저 적용되므로 테스트마다 다른 회원을 써서 버킷을 공유하지 않는다
+    private fun newMember(): String = UUID.randomUUID().mostSignificantBits.ushr(1).toString()
+
+    private fun post(
+        body: String,
+        admission: String? = null,
+        authenticated: Boolean = true,
+        member: String = "42",
+    ): WebTestClient.ResponseSpec = client.post().uri("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON)
+        .headers {
+            if (authenticated) it.setBearerAuth(token(subject = member))
+            if (admission != null) it.add("X-Admission-Token", admission)
+        }.bodyValue(body).exchange()
 
     @Test
     fun `일치하는 토큰은 재사용할 수 있고 본문을 그대로 전달한다`() {
-        val admission = admission()
+        val member = newMember()
+        val admission = admission(member)
         val body = "{ \"seatIds\": [ 4, 5 ], \"scheduleId\": 7 }"
 
-        repeat(2) { post(body, admission).expectStatus().isOk }
+        repeat(2) { post(body, admission, member = member).expectStatus().isOk }
 
         assertThat(core.requests).hasSize(2)
         core.requests.forEach {
@@ -43,20 +51,32 @@ class AdmissionTokenFilterTests(client: WebTestClient, private val redis: Reacti
     @Test
     fun `토큰 누락과 무효 또는 불일치 시 거부한다`() {
         val body = """{"scheduleId":7,"seatIds":[1]}"""
-        val invalid = listOf(UUID.randomUUID().toString(), admission(member = "43"), admission(schedule = "8"))
+        val scheduleMember = newMember()
+        // (입장 토큰, 요청 JWT 회원): 무효 토큰, 회원 불일치, 같은 회원의 회차 불일치
+        val invalid = listOf(
+            UUID.randomUUID().toString() to newMember(),
+            admission(member = "43") to newMember(),
+            admission(member = scheduleMember, schedule = "8") to scheduleMember,
+        )
 
-        post(body).expectStatus().isForbidden.expectBody().jsonPath("$.code").isEqualTo("ADMISSION_TOKEN_REQUIRED")
-        invalid.forEach { post(body, it).expectStatus().isForbidden.expectBody().jsonPath("$.code").isEqualTo("ADMISSION_TOKEN_INVALID") }
+        post(body, member = newMember()).expectStatus().isForbidden.expectBody().jsonPath("$.code").isEqualTo("ADMISSION_TOKEN_REQUIRED")
+        invalid.forEach { (admission, member) ->
+            post(body, admission, member = member)
+                .expectStatus().isForbidden.expectBody().jsonPath("$.code").isEqualTo("ADMISSION_TOKEN_INVALID")
+        }
 
         assertThat(core.requests).isEmpty()
     }
 
     @Test
     fun `유효하지 않거나 큰 본문은 거부한다`() {
-        val admission = admission()
         val bodies = listOf("{", "{}", """{"scheduleId":"7"}""", """{"scheduleId":7,"padding":"${"x".repeat(16384)}"}""")
 
-        bodies.forEach { post(it, admission).expectStatus().isBadRequest.expectBody().jsonPath("$.code").isEqualTo("INVALID_REQUEST_BODY") }
+        bodies.forEach {
+            val member = newMember()
+            post(it, admission(member), member = member).expectStatus().isBadRequest
+                .expectBody().jsonPath("$.code").isEqualTo("INVALID_REQUEST_BODY")
+        }
 
         assertThat(core.requests).isEmpty()
     }

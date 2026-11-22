@@ -12,7 +12,7 @@ ADR 0008은 실시간 앱이 대기열을 소유하고 Gateway가 입장 토큰�
 
 1. Gateway도 코어와 같은 HS256 비밀로 JWT 서명을 검증한다. `Authorization: Bearer`가 있으면 모든 경로에서 검증하고 실패 시 401로 응답한다. Gateway는 클라이언트가 보낸 `X-Member-Id`를 지우고 realtime 경로에만 검증된 회원 ID를 전달한다. 코어는 자체 검증을 유지한다.
 2. 입장 토큰은 회원과 회차에 묶고 예매 생성에만 적용한다. 불투명 난수를 `X-Admission-Token` 헤더로 받고 Redis `queue:admission:<token>` Hash의 `memberId`, `scheduleId` 필드와 TTL을 확인한다. TTL 동안 여러 번 사용할 수 있다. `POST /api/v1/bookings`에서 Gateway가 본문을 캐시해 회차를 대조한다.
-3. SSE 티켓은 코어 `member`가 발급하는 1회용 키다. JWT 인증된 `POST /api/v1/sse-tickets`가 난수를 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초로 둔다. Gateway는 `?ticket=`을 `GETDEL`로 소비하고 하위 요청에서 `ticket` 쿼리를 제거한다.
+3. SSE 티켓은 코어 `member`가 발급하는 1회용 키다. JWT 인증된 `POST /api/v1/sse-tickets`가 난수를 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초로 둔다. Gateway는 `?ticket=`을 `GETDEL`로 소비하고 하위 요청에서 `ticket` 쿼리를 제거한다. 소비 전에 티켓을 조회해 회원 키로 rate limit을 먼저 적용하므로, 한도 초과(429) 요청은 티켓을 소비하지 않는다.
 4. rate limit은 Spring Cloud Gateway 내장 `RedisRateLimiter`를 사용한다. 키는 검증된 회원 ID, 없으면 클라이언트 IP로 정하고 기본 한도와 예매 생성 한도를 설정값으로 둔다.
 
 비회원 IP의 신뢰 경계는 [ADR 0046](0046-attested-client-ip.md)에서 정한다.

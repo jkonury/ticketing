@@ -129,4 +129,33 @@ class RateLimitTests(client: WebTestClient, private val redis: ReactiveStringRed
 
         assertThat(realtime.requests).hasSize(4)
     }
+
+    @Test
+    fun `스트림 한도에 걸린 요청은 티켓을 소비하지 않는다`() {
+        val member = memberId()
+        repeat(3) {
+            val ticket = UUID.randomUUID().toString()
+            redis.opsForValue().set("sse:ticket:$ticket", "$member", Duration.ofSeconds(30)).block()
+            client.get().uri("/api/v1/streams/1?ticket=$ticket").exchange().expectStatus().isOk
+        }
+        val kept = UUID.randomUUID().toString()
+        redis.opsForValue().set("sse:ticket:$kept", "$member", Duration.ofSeconds(30)).block()
+
+        client.get().uri("/api/v1/streams/1?ticket=$kept").exchange()
+            .expectStatus().isEqualTo(429).expectBody().jsonPath("$.code").isEqualTo("RATE_LIMITED")
+
+        assertThat(redis.hasKey("sse:ticket:$kept").block()).isTrue()
+        assertThat(realtime.requests).hasSize(3)
+    }
+
+    @Test
+    fun `무효 입장 토큰도 예매 생성 한도에 먼저 걸린다`() {
+        val member = memberId()
+        fun invalid() = booking(member, UUID.randomUUID().toString())
+
+        repeat(2) { invalid().expectStatus().isForbidden }
+        invalid().expectStatus().isEqualTo(429).expectBody().jsonPath("$.code").isEqualTo("RATE_LIMITED")
+
+        assertThat(core.requests).isEmpty()
+    }
 }

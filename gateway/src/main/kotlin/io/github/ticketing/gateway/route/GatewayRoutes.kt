@@ -59,11 +59,11 @@ class GatewayRoutes {
                 path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember).filter(rateLimitFilter) }
             }
             route(id = "realtime-streams", order = -1, uri = properties.realtimeUri) {
-                path("/api/v1/streams/**").filters { filters -> filters.filter(sseTicketFilter).filter(rateLimitFilter) }
+                path("/api/v1/streams/**").filters { filters -> filters.filter(sseTicketFilter) }
             }
             route(id = "core-bookings-create", order = -1, uri = properties.coreUri) {
                 path("/api/v1/bookings").and().method(org.springframework.http.HttpMethod.POST)
-                    .filters { filters -> filters.filter(requireBookingMember).filter(admissionTokenFilter).filter(rateLimitFilter) }
+                    .filters { filters -> filters.filter(requireBookingMember).filter(rateLimitFilter).filter(admissionTokenFilter) }
             }
             route(id = "core-coupon-claims", order = -1, uri = properties.coreUri) {
                 path("/api/v1/coupons/*/claims").and().method(org.springframework.http.HttpMethod.POST)

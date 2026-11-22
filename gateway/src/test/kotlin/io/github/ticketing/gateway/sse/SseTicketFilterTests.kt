@@ -7,8 +7,12 @@ import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.test.web.reactive.server.WebTestClient
+import org.springframework.test.web.reactive.server.returnResult
 import java.time.Duration
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class SseTicketFilterTests(client: WebTestClient, private val redis: ReactiveStringRedisTemplate) :
     GatewayIntegrationTestSupport(client) {
@@ -36,6 +40,35 @@ class SseTicketFilterTests(client: WebTestClient, private val redis: ReactiveStr
         client.get().uri("/api/v1/streams/1?ticket=$ticket").exchange()
             .expectStatus().isUnauthorized.expectBody().jsonPath("$.code").isEqualTo("SSE_TICKET_INVALID")
         assertThat(realtime.requests).hasSize(1)
+    }
+
+    @Test
+    fun `같은 티켓으로 동시에 연결하면 한 요청만 성공한다`() {
+        // 다른 테스트의 회원 42 한도 버킷과 섞이지 않도록 고유 회원을 쓴다
+        val ticket = ticket(UUID.randomUUID().mostSignificantBits.ushr(1).toString())
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val statuses = (1..2).map {
+                executor.submit<Pair<Int, String?>> {
+                    start.await()
+                    client.get().uri("/api/v1/streams/1?ticket=$ticket").exchange().returnResult<String>().let {
+                        it.status.value() to
+                            it.responseBody.blockFirst(Duration.ofSeconds(5))
+                    }
+                }
+            }
+            start.countDown()
+
+            val results = statuses.map { it.get(10, TimeUnit.SECONDS) }
+            assertThat(results.map { it.first }).containsExactlyInAnyOrder(200, 401)
+            assertThat(results.single { it.first == 401 }.second).contains("\"code\":\"SSE_TICKET_INVALID\"")
+        } finally {
+            executor.shutdownNow()
+        }
+
+        assertThat(realtime.requests).hasSize(1)
+        assertThat(redis.hasKey("sse:ticket:$ticket").block()).isFalse()
     }
 
     @Test
