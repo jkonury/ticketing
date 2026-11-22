@@ -64,11 +64,11 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 | 7 | k8s 매니페스트: Deployment, Service, Ingress, Batch CronJob, Kafka·PostgreSQL·Redis 구성 | 클러스터에서 전체 시나리오와 Batch가 동작한다 | 로컬 클러스터(kind 또는 minikube)에서 E2E, CronJob 수동 실행 |
 | 8 | realtime HPA 검증 | 부하에서 replica가 늘고 SSE 연결이 유지되며 입장 순서가 깨지지 않는다 | k6 `queue-surge`, 메트릭 확인 |
 
-**3단계 웹훅 경로 이전** (현재 사실):
+**3단계 웹훅 경로 이전** (이전 완료. 2026-11-22 기준 현재 사실):
 
-- 웹훅 수신은 core의 `PaymentWebhookController`(`POST /api/v1/payments/webhooks/fake-pg`)다. 서명 검증은 `PaymentWebhookSignatureVerifier`, 멱등은 `payment.webhook_event`의 `event_id` 기본 키로 처리한다. `SecurityConfig`가 이 경로를 `permitAll`로 연다.
-- fake-pg는 `fake-pg/src/main/resources/application.yml`의 `FAKE_PG_WEBHOOK_URL`(기본 `http://localhost:18080/api/v1/payments/webhooks/fake-pg`, core 직접 호출)로 보낸다. Gateway를 거치지 않는다. 서명 비밀은 `FAKE_PG_WEBHOOK_SECRET`(core `application.yml`과 공유)이다.
-- 따라서 이전 때 할 일: ① fake-pg의 웹훅 URL을 payment 앱 주소로 바꾸고, ② 웹훅은 Gateway를 거치지 않으므로 웹훅용 Gateway 라우팅은 만들지 않는다(payment 앱의 보안 설정에서 해당 경로를 `permitAll`로 이전), ③ Gateway `core-api` 라우트(`/api/v1/**` → core)는 `GET /api/v1/payments/me` 같은 사용자 결제 API가 payment로 옮겨가므로 `/api/v1/payments/**`를 payment 앱으로 보내는 라우트를 추가한다, ④ E2E 스크립트(`scripts/e2e/run.sh`)와 부하 스크립트(`scripts/loadtest/`)의 포트·URL·프로세스 구성을 갱신한다.
+- 웹훅 수신은 payment 앱의 `PaymentWebhookController`(`POST /api/v1/payments/webhooks/fake-pg`)다. 서명 검증은 `PaymentWebhookSignatureVerifier`, 멱등은 `payment_db`의 `payment.webhook_event`의 `event_id` 기본 키로 처리한다. payment 앱의 보안 설정이 이 경로를 `permitAll`로 연다.
+- fake-pg는 `fake-pg/src/main/resources/application.yml`의 `FAKE_PG_WEBHOOK_URL`(기본 `http://localhost:18085/api/v1/payments/webhooks/fake-pg`, payment 앱 직접 호출)로 보낸다. 이전 전 기본값은 core 18080이었다. Gateway를 거치지 않는다. 서명 비밀은 `FAKE_PG_WEBHOOK_SECRET`(payment 앱 `application.yml`과 공유)이다.
+- 이전 때 한 일(3-6): ① fake-pg의 웹훅 URL을 payment 앱 주소로 바꿨다, ② 웹훅은 Gateway를 거치지 않으므로 웹훅용 라우트를 만들지 않았고 Gateway는 `/api/v1/payments/webhooks` 하위를 404로 막는다, ③ Gateway에 `/api/v1/payments/**` → payment 앱 라우트(`payment-api`)를 추가했다, ④ E2E 스크립트(`scripts/e2e/run.sh`)와 부하 스크립트(`scripts/loadtest/`)의 포트·URL·프로세스 구성을 갱신했다.
 - 완료 기준에 포함: 웹훅 멱등 키 처리 유지, 서명 검증 유지, 기존 E2E(웹훅 멱등, 만료 후 환불) 통과.
 
 **2단계 세부 체크리스트** (작성 2026-11-18. 하위 작업 하나씩 진행하고 검증 통과 후 체크한다. 결정은 합의 완료)
@@ -130,7 +130,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - [x] **3-4 payment-batch** — 결제 대사 Job을 payment-batch로 이전하고 배치 메타데이터를 구성한다
 - [x] **3-5 core에서 payment 제거** — core·core-batch에서 payment 코드를 제거하고 core 테스트에 Kafka 결제 대역을 적용한다
 - [x] **3-6 연결 경로 이전** — fake-pg 웹훅 URL, Gateway `/api/v1/payments/**` 라우트, `scripts/e2e`·`scripts/dev`·`scripts/loadtest` 프로세스 구성을 갱신하고 웹훅 E2E를 `e2e` 모듈로 옮긴다
-- [ ] **3-7 데이터 이전·문서** — `pg_dump` 이전 스크립트와 건수·체크섬 대조, runbook, architecture·data-ownership·erd·events·AGENTS.md 반영
+- [x] **3-7 데이터 이전·문서** — `pg_dump` 이전 스크립트(`scripts/db/migrate-payment-data.sh`)와 건수·체크섬 대조, runbook(§9), architecture·data-ownership·erd·events 등·AGENTS.md 반영
 - [ ] **3-8 측정**(후속) — Gatling `hot-seats` 콜드 3회 확정 지연 p95를 01 기준선과 비교한다
 
 각 단계의 세부 체크리스트는 단계를 시작할 때 이 문서에 추가한다. 한 단계의 완료 기준을 만족하기 전에는 다음 단계를 시작하지 않는다.

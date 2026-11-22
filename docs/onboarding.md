@@ -31,6 +31,7 @@ docker compose up -d --wait         # PostgreSQL 15432, Redis 16379, Kafka 19092
 
 ```bash
 ./gradlew :core:bootRun             # 18080 (시드 데이터: SPRING_PROFILES_ACTIVE=seed ./gradlew :core:bootRun)
+./gradlew :payment:bootRun          # 18085. 결제 흐름에는 core와 함께 띄운다
 ./gradlew :realtime:bootRun         # 18081
 ./gradlew :gateway:bootRun          # 18000. 클라이언트·BFF는 여기를 거친다
 cp web/.env.example web/.env.local  # 최초 1회
@@ -40,6 +41,7 @@ cd web && pnpm install && pnpm dev  # 13000
 | 앱 | 포트 | 상태 확인 |
 |---|---|---|
 | core | 18080 | `curl localhost:18080/actuator/health` |
+| payment | 18085 | `curl localhost:18085/actuator/health` |
 | realtime | 18081 | `curl localhost:18081/actuator/health` |
 | gateway | 18000 | `curl localhost:18000/actuator/health` |
 | web | 13000 | 브라우저 |
@@ -47,14 +49,16 @@ cd web && pnpm install && pnpm dev  # 13000
 
 시드 데이터는 공연장 2곳, 공연 3편, 회차 각 3개이며 다시 실행해도 늘지 않는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)다.
 
-fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scripts/dev/run.sh --fake-pg`), 웹훅을 `localhost:18080`의 core로 보낸다. `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 core와 fake-pg가 같아야 서명 검증이 통과한다.
+fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scripts/dev/run.sh --fake-pg`), 웹훅을 `localhost:18085`의 payment 앱으로 직접 보낸다(`FAKE_PG_WEBHOOK_URL`로 바꿀 수 있다). `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 payment 앱과 fake-pg가 같아야 서명 검증이 통과한다.
 
 ## 4. 저장소 지도
 
 | 경로 | 내용 |
 |---|---|
-| `core/` | 코어 Modulith (`member`, `catalog`, `booking`, `payment`, `settlement`, `notification`) |
+| `core/` | 코어 Modulith (`member`, `catalog`, `booking`, `settlement`, `coupon`, `notification`, `audit`) |
 | `core-batch/` | Spring Batch 실행 모듈. core 코드 공유 |
+| `payment/` | 결제 앱. 전용 DB `payment_db` |
+| `payment-batch/` | 결제 대사 Batch 실행 모듈. payment 코드 공유 |
 | `realtime/` | 대기열·SSE. WebFlux + Coroutines, Redis만 사용 |
 | `gateway/` | 라우팅, 입장 토큰·SSE 티켓 검증, rate limit |
 | `fake-pg/` | 가짜 PG |
@@ -99,7 +103,7 @@ fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scr
 | 문서 링크 | `./scripts/agent/docs/check-docs.sh [경로...]` |
 
 - 같은 작업 디렉터리에서 test와 check는 순차 실행한다. 동시에 실행하면 결과 파일이 충돌한다.
-- E2E는 `build`·`check`에 포함되지 않는다. core·gateway·realtime 흐름을 바꿨다면 직접 실행한다. 18000·18080·18081·18082(`--web`이면 13000)가 비어 있어야 한다.
+- E2E는 `build`·`check`에 포함되지 않는다. core·gateway·realtime 흐름을 바꿨다면 직접 실행한다. 18000·18080·18081·18085·18090 등(`--web`이면 13000)이 비어 있어야 한다. 정확한 목록은 `scripts/e2e/run.sh`를 본다.
 - `@Suppress`, baseline 추가, `--no-verify`로 검사를 우회하지 않는다.
 
 ## 8. 코드·커밋 규칙

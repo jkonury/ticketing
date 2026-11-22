@@ -24,6 +24,8 @@
 |---|---|
 | `core/` | 코어 Modulith. WebMVC + Virtual Thread, JPA + jOOQ. 루트 패키지 `io.github.ticketing` |
 | `core-batch/` | Spring Batch 실행 모듈 (core 코드 공유) |
+| `payment/` | 결제 앱. WebMVC + Virtual Thread, 포트 18085, 전용 DB `payment_db` |
+| `payment-batch/` | 결제 대사 Batch 실행 모듈 (payment 코드 공유, `payment_db`) |
 | `realtime/` | WebFlux + Coroutines + SSE. 대기열. Redis만 사용 |
 | `gateway/` | Spring Cloud Gateway. 입장 토큰·SSE 티켓 검증 |
 | `fake-pg/` | 가짜 PG 서버 |

@@ -13,19 +13,29 @@
 
 ## 2. PostgreSQL 스키마 소유
 
+PostgreSQL 인스턴스에는 core DB와 payment 전용 DB(`payment_db`)가 있다. 아래 표는 core DB 기준이고 payment는 별도 표로 둔다. 접근 경계는 애플리케이션 계정 기준이다. core 앱 계정은 `payment_db` 접근 권한을 받지 않도록 설계하고, 로컬 compose의 관리자 계정(슈퍼유저)은 예외다.
+
 | 스키마 | 소유 모듈 | 주요 테이블 | 비고 |
 |---|---|---|---|
 | `member` | member | `member`, `refresh_token` | refresh 토큰은 SHA-256 해시만 저장 |
 | `catalog` | catalog | `venue`, `venue_seat`, `performance`, `performance_price`, `schedule` | 공연·회차의 원본 |
 | `booking` | booking | `schedule`, `schedule_seat`, `booking`, `booking_seat`, `sold_seat` | `schedule`, `schedule_seat`는 catalog 사본. `sold_seat`가 좌석 확정의 유니크 제약 |
-| `payment` | payment | `payment`, `webhook_event`, `pg_transaction_snapshot`, `reconciliation_mismatch` | `payment`는 예매를 모르고 `orderId`만 가짐 |
 | `settlement` | settlement | `booking_sale`, `booking_refund`, `daily_settlement` | 앞의 둘은 booking 이벤트 사본 |
 | `coupon` | coupon | `coupon_definition`, `issued_coupon`, `reservation_attempt`, `use_mismatch` | `issued_coupon`의 `(definition_id, member_id)` 유니크가 중복 발급의 최종 방어선. `booking`은 발급 쿠폰 ID와 예매별 시도 ID를 값으로 보관 |
 | `audit` | audit | `admin_action` | 관리자 행위 이벤트 사본. `source_event_id` 유니크로 멱등 |
 | `batch` | core-batch | Spring Batch 메타데이터 | 공식 DDL을 Flyway로 생성 |
 | `public` | Modulith | `event_publication` | 이벤트 발행 레지스트리 |
 
-컬럼과 관계는 [erd.md](./erd.md)가 기준이다. 원본은 `core/src/main/resources/db/migration/V*.sql`이다.
+**`payment_db`** (소유: payment 앱, 전용 계정 `TICKETING_PAYMENT_POSTGRES_USER`, 마이그레이션은 `payment/src/main/resources/db/migration/`)
+
+| 스키마 | 소유 | 주요 테이블 | 비고 |
+|---|---|---|---|
+| `payment` | payment | `payment`, `webhook_event`, `pg_transaction_snapshot`, `reconciliation_mismatch` | `payment`는 예매를 모르고 `orderId`만 가짐. 웹훅 `event_id`와 `payment`의 `order_id`·`idempotency_key` 유니크가 멱등의 최종 방어선 |
+| `batch` | payment-batch | Spring Batch 메타데이터 | 결제 대사 Job용 |
+| `public` | Modulith | `event_publication` | payment 앱 자체 레지스트리. core와 공유하지 않는다 |
+
+분리 전 데이터는 `scripts/db/migrate-payment-data.sh`로 core DB의 `payment` 스키마에서 옮긴다([runbook](../runbook.md#9-결제-db-이전-core-db-payment-스키마--payment_db)). core DB의 `payment` 스키마와 그 테이블은 이전 뒤 한 단계 검증을 거쳐 별도 마이그레이션으로 제거하기 전까지 남아 있다([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)). 남아 있는 동안에도 core는 이 스키마를 읽거나 쓰지 않는다.
+컬럼과 관계는 [erd.md](./erd.md)가 기준이다. 원본은 core DB는 `core/src/main/resources/db/migration/V*.sql`, `payment_db`는 `payment/src/main/resources/db/migration/V*.sql`이다.
 
 ## 3. Redis 키 소유
 
@@ -65,7 +75,7 @@
 
 ## 5. 분리 대비 규칙
 
-MSA 분리 1순위는 `payment`, `settlement`다. 분리할 때 스키마를 별도 DB로 옮기므로 지금부터 아래를 지킨다.
+MSA 분리 1순위는 `payment`, `settlement`다. `payment`는 별도 DB(`payment_db`)로 분리를 마쳤고 `settlement`가 남았다. 분리할 때 스키마를 별도 DB로 옮기므로 아래를 지킨다.
 
 - 스키마 간 FK와 조인 금지. 조회가 필요하면 사본이나 API로 해결한다.
 - 한 트랜잭션이 두 모듈의 스키마를 함께 쓰지 않는다. 모듈 간 일관성은 이벤트와 보상 흐름으로 맞춘다.

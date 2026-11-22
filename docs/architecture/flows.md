@@ -52,7 +52,7 @@ sequenceDiagram
     actor U as 사용자
     participant B as booking
     participant R as Redis
-    participant P as payment
+    participant P as payment (앱)
     participant PG as fake-pg
 
     U->>B: POST /api/v1/bookings
@@ -100,7 +100,7 @@ sequenceDiagram
 ```
 
 - 금액 불일치(`AMOUNT_MISMATCH`)도 환불 경로이며 위 유니크 위반과 같은 모양이다.
-- `PaymentRequested`, `PaymentSucceeded` 같은 화살표(`-)`)는 Modulith 이벤트(비동기)다.
+- `PaymentRequested`, `PaymentSucceeded` 같은 화살표(`-)`)는 비동기 이벤트다. 결제 계약 5종은 core와 payment 앱 사이를 Kafka로 전달한다. 웹훅(`PG-)P`)은 fake-pg가 payment 앱을 직접 호출하며 Gateway를 거치지 않는다.
 
 ## 6.3 예매 상태 전이
 
@@ -124,31 +124,31 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 
 ## 6.4 결제 (이벤트 기반)
 
-1. `booking`이 결제 요청 이벤트 발행
-2. `payment`가 가짜 PG에 결제 요청 (멱등 키 포함)
-3. 가짜 PG가 웹훅으로 결과 통지 (지연, 실패, 중복 가능)
-4. `payment`가 멱등 키로 중복을 걸러내고 결과 이벤트 발행
-5. `booking`이 `CONFIRMED` 또는 실패 처리(`CANCELLED`, 사유 `PAYMENT_FAILED`, 좌석 반환)
+1. `booking`(core)이 결제 요청 이벤트 발행(Kafka로 외부화)
+2. payment 앱이 이벤트를 받아 가짜 PG에 결제 요청 (멱등 키 포함)
+3. 가짜 PG가 payment 앱의 웹훅 엔드포인트를 직접 호출해 결과 통지 (지연, 실패, 중복 가능)
+4. payment 앱이 멱등 키로 중복을 걸러내고 결과 이벤트 발행(Kafka)
+5. `booking`이 이벤트를 받아 `CONFIRMED` 또는 실패 처리(`CANCELLED`, 사유 `PAYMENT_FAILED`, 좌석 반환)
 
 **자동 환불 조건**: 결제는 성공했는데 (a) 예매가 이미 만료됐거나(`EXPIRED`로 전환), (b) 확정 시 `booking.sold_seat` 유니크 제약에 걸려 좌석이 이미 판매된 경우(`CANCELLED`, 사유 `SEAT_ALREADY_SOLD`), `booking`이 `RefundRequested`를 발행해 자동 환불한다.
 
 **결제 결과 처리의 트랜잭션 구조**
-- 결과 이벤트는 `@ApplicationModuleListener`(비동기 + 새 트랜잭션)로 받고, DB 작업은 그 리스너 트랜잭션 하나에 참여한다. 내부에서 `REQUIRES_NEW`를 또 열지 않는다. 리스너가 가상 스레드로 상한 없이 동시에 돌아 커넥션을 두 개씩 잡으면 풀 고갈과 교착이 생기기 때문이다.
+- 결과 이벤트는 `@KafkaListener`로 받고, DB 작업은 유스케이스의 트랜잭션 하나에 참여한다. 내부에서 `REQUIRES_NEW`를 또 열지 않는다. 동시에 도는 처리가 커넥션을 두 개씩 잡으면 풀 고갈과 교착이 생기기 때문이다.
 - 확정 순서는 확정 가능 여부 판정 → `sold_seat` 삽입(`ON CONFLICT DO NOTHING`) → 전부 들어가면 `CONFIRMED`, 일부라도 충돌하면 같은 트랜잭션에서 이 예매의 `sold_seat`를 지우고 `SEAT_ALREADY_SOLD`로 취소한다. 충돌해도 트랜잭션이 깨지지 않아 롤백 후 재시도가 필요 없다.
 - Redis 반영(SOLD 표시, 선점 해제)은 트랜잭션 `afterCommit`에서 한다. 롤백되면 Redis를 건드리지 않는다. 선점 해제는 이미 SOLD인 좌석의 스냅샷을 `AVAILABLE`로 되돌리지 않는다(선점 키가 유실돼 두 예매가 같은 좌석을 선점한 뒤 확정에 진 쪽의 해제가 이긴 쪽의 SOLD를 덮어쓰는 것을 막는다).
 - **커밋 후 Redis 반영이 실패하면** 경고 로그만 남긴다. 선점 키는 TTL로 정리되고 스냅샷 보정은 M2 Batch가 한다. 중복 판매는 DB 유니크 제약이 막는다.
-- 낙관적 락 충돌은 삼키지 않고 던져 이벤트 발행 레지스트리가 다시 시도하게 한다.
+- 낙관적 락 충돌은 삼키지 않고 던져 컨슈머 오류 처리(재시도 후 DLT)가 다시 시도하게 한다.
 
 이 구조는 MSA 전환 시 Saga로 그대로 이어진다.
 
-**payment 구현 세부**
+**payment 앱 구현 세부** (payment는 별도 앱이며 위 booking 결제 결과 처리와 DB가 다르다. 두 쪽의 일관성은 이벤트와 멱등으로 맞춘다)
 
-- PG를 호출하는 결제·환불 리스너는 `@ApplicationModuleListener(propagation = NOT_SUPPORTED)`로 실행한다. 준비 저장 → 트랜잭션 밖 PG 호출 → 최신 행 재조회·결과 반영으로 나눈다. 위의 booking 결제 결과 리스너 트랜잭션 구조와는 역할이 다르다.
-- 결제 상태는 `REQUESTED`, `SUCCEEDED`, `FAILED`, `REFUND_REQUESTED`, `REFUNDED`다. 결제의 미확정 결과(타임아웃·연결 실패·5xx)는 REQUESTED를 유지하고 예외를 전파해 원 이벤트를 미완료로 남긴다. 확정적 거절만 PaymentFailed로 처리한다.
+- PG를 호출하는 결제·환불 처리는 `@KafkaListener`가 받아 트랜잭션 밖에서 PG를 호출한다. 준비 저장 → 트랜잭션 밖 PG 호출 → 최신 행 재조회·결과 반영으로 나눈다. 위의 booking 결제 결과 리스너 트랜잭션 구조와는 역할이 다르다.
+- 결제 상태는 `REQUESTED`, `SUCCEEDED`, `FAILED`, `REFUND_REQUESTED`, `REFUNDED`다. 결제의 미확정 결과(타임아웃·연결 실패·5xx)는 REQUESTED를 유지하고 예외를 전파해 컨슈머 재시도·DLT에 맡긴다. 확정적 거절만 PaymentFailed로 처리한다.
 - 환불 거절·미확정은 REFUND_REQUESTED를 유지하고 예외를 전파한다. 해당 상태에서도 동일한 `refund-{orderId}` 키로 PG에 다시 요청한다. REFUNDED면 종료한다.
-- 재시작·명시적 이벤트 재제출 시 같은 키와 본문으로 재처리한다. 미완료 기록 자체가 즉시 재시도를 뜻하지 않으며, 주기적 스케줄러는 M1-5에 추가하지 않는다. 웹훅과 M2 대사는 별도 복구 경로다.
+- 같은 이벤트를 다시 받으면(재전달, DLT 재처리) 같은 키와 본문으로 재처리한다. 주기적 스케줄러는 두지 않는다. 웹훅과 결제 대사는 별도 복구 경로다.
 - 웹훅 중복 기록·결제 상태 저장·결과 이벤트 발행은 한 트랜잭션이다. 오류 시 중복 기록도 롤백한다. 웹훅 선도착과 지연 PG 응답이 최신 상태를 되돌리지 않게 한다. 병렬 재처리의 HTTP 호출 횟수 대신 실제 거래·환불과 커밋된 상태 전이·이벤트의 중복 방지를 보장한다.
-- 설계 근거는 [ADR 0018](../adr/0018-payment-retry-boundaries.md), 별도 세션 지시서(`phases/3-payment`)는 완료 후 삭제되어 git 히스토리에만 남아 있다. `PaymentListenerTests`와 `PaymentFlowTests`에서 트랜잭션 경계, 실제 예매 연계와 원 발행 재제출을 검증한다.
+- 설계 근거는 [ADR 0018](../adr/0018-payment-retry-boundaries.md), 별도 세션 지시서(`phases/3-payment`)는 완료 후 삭제되어 git 히스토리에만 남아 있다. payment 앱의 `PaymentListenerTests`가 트랜잭션 경계와 재처리를 검증하고, 분리된 앱 사이의 실제 호출 경로(웹훅 멱등, 만료 후 환불)는 `e2e` 모듈이 검증한다.
 
 ## 6.5 쿠폰 적용 Saga
 

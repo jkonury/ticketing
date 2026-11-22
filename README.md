@@ -20,23 +20,29 @@ flowchart LR
     W[Next.js BFF]
     G[Gateway]
     C["코어 (Modulith)<br/>WebMVC + Virtual Thread"]
+    P["결제 앱<br/>WebMVC + Virtual Thread"]
     R["실시간 앱<br/>WebFlux + Coroutines"]
     PG[가짜 PG]
-    DB[(PostgreSQL)]
+    DB[("PostgreSQL<br/>core DB · payment_db")]
     RD[(Redis)]
 
     B -- 일반 요청 --> W --> G --> C
     B -. "SSE (단기 티켓)" .-> G --> R
+    G --> P
     C --> DB
     C --> RD
+    C <-. "Kafka 계약 이벤트" .-> P
+    P --> DB
     R --> RD
-    C <--> PG
+    P <--> PG
 ```
 
 | 단위 | 역할 |
 |---|---|
-| `core` | 도메인 로직. `member` · `catalog` · `booking` · `payment` · `settlement` · `notification` |
-| `core-batch` | 일별 정산, 미결제 예매 정리, 결제 대사 |
+| `core` | 도메인 로직. `member` · `catalog` · `booking` · `settlement` · `coupon` · `notification` · `audit` (결제는 별도 앱) |
+| `core-batch` | 일별 정산, 미결제 예매 정리 |
+| `payment` | 결제 요청·환불·웹훅·조회. 전용 DB `payment_db`, 포트 18085. 웹훅은 fake-pg가 직접 호출 |
+| `payment-batch` | 결제 대사 Job. core와 별도로 `payment_db`를 쓴다 |
 | `realtime` | 대기열, 순번·좌석 현황 SSE |
 | `gateway` | 라우팅, 입장 토큰·SSE 티켓 검증, rate limit |
 | `fake-pg` | 지연·실패·중복 웹훅을 재현하는 가짜 PG |
@@ -64,7 +70,7 @@ flowchart LR
 
 전체 절차는 [온보딩](docs/onboarding.md)을 따른다.
 
-개발 스택은 `./scripts/dev/run.sh`로 기동한다. `--infra`, `--core`, `--realtime`, `--gateway`, `--web`, `--observability`를 조합해 선택할 수 있으며, 자세한 사용법은 `--help`를 참고한다. 앱은 Ctrl+C로 종료하고 Docker 컨테이너는 유지한다.
+개발 스택은 `./scripts/dev/run.sh`로 기동한다. `--infra`, `--core`, `--payment`, `--realtime`, `--gateway`, `--web`, `--observability`를 조합해 선택할 수 있으며, 자세한 사용법은 `--help`를 참고한다. 앱은 Ctrl+C로 종료하고 Docker 컨테이너는 유지한다.
 
 개발 Java 앱은 Scouter를 연결한다. `.env` 또는 환경 변수의 `SCOUTER_AGENT_DIR`에 에이전트 디렉터리 절대 경로를 지정한다. 개발·부하 테스트 모두 코어는 `deploy/scouter/ticketing.conf`, Gateway는 `deploy/scouter/ticketing-gateway.conf`, realtime은 `deploy/scouter/ticketing-realtime.conf`를 사용한다. Gateway·realtime은 SSE 계측 비용을 줄이기 위해 Reactor 훅을 끄므로 WebFlux HTTP XLog·요청 TPS·응답시간을 수집하지 않는다. HTTP 관측은 Micrometer 지표·추적을 사용한다.
 

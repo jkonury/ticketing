@@ -29,7 +29,7 @@
   - 공연 상세: 공연 정보는 핵심 데이터, 회차별 잔여 좌석과 내 예매 여부는 부가 데이터다.
   - 마이페이지: 예매 목록은 핵심 데이터, 결제 상태는 부가 데이터다.
   - 주최자 대시보드: 판매 현황과 정산은 둘 다 부가 데이터이며 둘 다 실패하면 오류 화면을 표시한다.
-- 조합에 사용하는 코어 API는 `GET /api/v1/schedules/availability?scheduleIds=...`, 확장된 `GET /api/v1/bookings/me?performanceId=...`, `GET /api/v1/payments/me?bookingIds=...`, `GET /api/v1/organizer/sales`다. 각 API는 소유 모듈의 스키마만 조회한다.
+- 조합에 사용하는 API는 `GET /api/v1/schedules/availability?scheduleIds=...`, 확장된 `GET /api/v1/bookings/me?performanceId=...`, `GET /api/v1/payments/me?bookingIds=...`, `GET /api/v1/organizer/sales`다. `payments/me`는 Gateway가 payment 앱으로 보내고 나머지는 코어가 처리한다. 각 API는 소유 모듈(앱)의 스키마만 조회한다.
 - 세션·갱신·조합 API 결정은 [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)를 따른다.
 - 예매 화면은 공개 `GET /api/v1/schedules/{id}`에서 공연 ID·제목과 회차 시각을 조회한다 ([ADR 0023](../adr/0023-schedule-detail-api.md)).
 - 주최자 화면은 최소한으로 만들고, 초기 공연 데이터는 시드 스크립트로 넣는다.
@@ -54,14 +54,14 @@ SSE 티켓 발급은 408·429·5xx와 네트워크 오류를 자동 재시도하
 
 ## 10. 외부 연동
 
-- 결제: **가짜 PG 서버**를 직접 만든다. 지연, 타임아웃, 실패, 중복 웹훅을 설정으로 재현한다. 출력 포트로 추상화하여 추후 실제 PG 어댑터를 추가할 수 있게 한다.
+- 결제: **가짜 PG 서버**를 직접 만든다. 지연, 타임아웃, 실패, 중복 웹훅을 설정으로 재현한다. payment 앱이 출력 포트로 추상화하여 추후 실제 PG 어댑터를 추가할 수 있게 한다.
 - 알림: 로그 출력으로 시작.
 
 ### fake-pg 연동 계약
 
 - 결제: `POST /v1/payments`, `Idempotency-Key`, 본문 `{orderId: string, amount: 정수 원 단위}`. 환불: `POST /v1/payments/{transactionId}/refund`, `Idempotency-Key`. 유효한 접수 응답은 202다.
 - 거래 조회: `GET /v1/transactions?date=YYYY-MM-DD`의 요청 날짜는 Asia/Seoul 기준이다.
-- 웹훅: 코어의 `POST /api/v1/payments/webhooks/fake-pg`로 승인·실패·환불 완료를 전송한다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.
-- 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). 코어와 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
+- 웹훅: payment 앱(기본 `http://localhost:18085`)의 `POST /api/v1/payments/webhooks/fake-pg`를 fake-pg가 직접 호출해 승인·실패·환불 완료를 전송한다(`FAKE_PG_WEBHOOK_URL`). Gateway는 `/api/v1/payments/webhooks` 하위 경로를 어떤 인증 상태에서도 404로 막는다. eventId로 중복 제거하고 transactionId와 orderId·금액의 일치를 검증한다. 동일 거래의 같은 결과는 다른 eventId여도 다시 발행하지 않는다.
+- 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). payment 앱과 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
 - 어댑터 기본 주소는 `http://localhost:18090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 [6.4절](./flows.md#64-결제-이벤트-기반) 정책을 따른다.
 - SUCCESS·FAIL·TIMEOUT·DELAYED·DUPLICATE_WEBHOOK 시나리오는 PG 설정으로 제어한다. TIMEOUT은 HTTP 응답만 늦어도 승인이 진행될 수 있다. fake-pg 자체의 메모리 거래 저장소는 재시작하면 초기화된다.

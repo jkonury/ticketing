@@ -6,28 +6,31 @@
 
 | 구성 | 포트 | 의존 | 상태 확인 |
 |---|---|---|---|
-| gateway | 18000 | Redis, core, realtime | `/actuator/health` |
-| core | 18080 | PostgreSQL, Redis, Kafka, fake-pg | `/actuator/health` |
+| gateway | 18000 | Redis, core, payment, realtime | `/actuator/health` |
+| core | 18080 | PostgreSQL, Redis, Kafka | `/actuator/health` |
+| payment | 18085 | PostgreSQL(`payment_db`), Kafka, fake-pg | `/actuator/health` |
 | realtime | 18081 | Redis | `/actuator/health` |
 | web | 13000 | Gateway, Redis(BFF 세션) | 브라우저 |
-| fake-pg | 18090 | core(웹훅) | `/actuator/health` (호스트 jar) |
+| fake-pg | 18090 | payment(웹훅) | `/actuator/health` (호스트 jar) |
 | PostgreSQL | 15432 | - | `pg_isready` |
 | Redis | 16379 | - | `redis-cli ping` |
 | Kafka | 19092 | - | `docker compose ps` (healthy) |
 
-기동 순서는 PostgreSQL·Redis·Kafka·fake-pg → core·realtime → gateway → web이다. 종료는 역순이다.
+기동 순서는 PostgreSQL·Redis·Kafka·fake-pg → core·payment·realtime → gateway → web이다. 종료는 역순이다.
 
 ## 2. 기동·종료·초기화
 
 ```bash
 docker compose up -d --wait         # 인프라(PostgreSQL, Redis, Kafka) 기동
 ./scripts/dev/run.sh --fake-pg      # fake-pg는 호스트 jar로 기동(로그: build/dev/logs/fake-pg.log)
+./scripts/dev/run.sh --payment      # 결제 앱(18085). 결제 흐름에는 core와 함께 띄운다
+./scripts/db/ensure-payment-db.sh   # 기존 볼륨에 payment_db·전용 계정이 없을 때(멱등)
 docker compose ps                   # 상태
 docker compose down                 # 종료 (데이터 유지)
 docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이터 전부 사라짐)
 ```
 
-- `down -v`는 되돌릴 수 없다. 로컬 데이터를 버려도 될 때만 쓴다. Flyway 마이그레이션은 core 기동 때 다시 적용된다.
+- `down -v`는 되돌릴 수 없다. 로컬 데이터를 버려도 될 때만 쓴다. Flyway 마이그레이션은 core와 payment 앱 기동 때 각자의 DB에 다시 적용된다. 분리 전 결제 데이터도 함께 사라진다.
 - Redis는 볼륨이 없어서 컨테이너를 다시 만들면 대기열·선점·세션이 사라진다.
 - Compose 기본 네트워크의 브릿지 이름은 `br-ticketing`으로 고정한다(서브넷은 Docker가 배정). 방화벽 규칙을 서브넷이 아닌 이 인터페이스에 걸어서 네트워크를 재생성해도, 다른 프로젝트와 서브넷이 겹쳐도 유지된다. 다른 프로젝트도 고유한 브릿지 이름을 쓰고 인터페이스 기준으로 허용하면 같은 문제를 피한다.
 - Linux에서 UFW를 쓰면 최초 1회 `sudo ./scripts/setup-firewall.sh`를 실행한다(멱등). 기존 네트워크에는 이름이 적용되지 않으므로 `docker compose down` 후 다시 기동한다(Redis 데이터는 사라진다).
@@ -44,11 +47,11 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 
 ### 3.2 결제가 PENDING에서 넘어가지 않는다
 
-결제는 이벤트 기반이다. core가 fake-pg에 요청하고 fake-pg가 웹훅으로 결과를 돌려준다.
+결제는 이벤트 기반이다. core가 `PaymentRequested`를 Kafka로 내보내면 payment 앱이 받아 fake-pg에 요청하고, fake-pg가 payment 앱에 웹훅으로 결과를 돌려준다. 결과는 payment 앱이 Kafka로 내보내 core가 받는다.
 
-1. `build/dev/logs/fake-pg.log`(E2E는 `build/e2e/logs/fake-pg.log`)에서 요청이 도착했고 웹훅을 보냈는지 본다.
-2. 웹훅이 닿지 않으면 core가 18080에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://localhost:18080/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다.
-3. 웹훅이 거절되면 core와 fake-pg의 `FAKE_PG_WEBHOOK_SECRET`이 같은지 본다. 서명 검증이 이 값을 쓴다.
+1. `build/dev/logs/fake-pg.log`(E2E는 `build/e2e/logs/fake-pg.log`)에서 요청이 도착했고 웹훅을 보냈는지 본다. payment 앱이 떠 있는지(`--payment`, 로그는 `payment.log`)도 확인한다.
+2. 웹훅이 닿지 않으면 payment 앱이 18085에서 호스트로 떠 있는지, `FAKE_PG_WEBHOOK_URL`(기본 `http://localhost:18085/api/v1/payments/webhooks/fake-pg`)이 맞는지 본다. 웹훅은 Gateway를 거치지 않는다.
+3. 웹훅이 거절되면 payment 앱과 fake-pg의 `FAKE_PG_WEBHOOK_SECRET`이 같은지 본다. 서명 검증이 이 값을 쓴다.
 4. 웹훅은 중복 도착할 수 있다. 멱등 키로 걸러지므로 중복 로그 자체는 정상이다.
 5. 결제 기록과 PG 거래의 불일치는 `paymentReconciliationJob`(4절)으로 검출한다. 자동 보정은 하지 않는다.
 6. 만료된 예매에 결제 성공이 늦게 도착하면 자동 환불 경로로 처리된다. 흐름은 [flows.md §6.4](./architecture/flows.md#64-결제-이벤트-기반)를 본다.
@@ -88,7 +91,7 @@ Gateway의 Redis rate limiter가 응답을 429로 내린다. 부하 테스트 �
 
 ### 3.7 미완료 이벤트 발행이 쌓인다
 
-Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. 리스너가 실패했거나 처리 중 프로세스가 죽으면 남는다. Kafka 외부화 전송 실패도 같은 테이블에 쌓인다. Kafka 소비 실패는 별도의 DLT에서 확인한다.
+Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. payment 앱은 자기 DB(`payment_db`)에 별도 레지스트리를 두므로 결제 쪽 미완료 행은 거기서 본다(아래 확인 SQL의 접속 대상만 `payment_db`·전용 계정으로 바꾼다. 예: `scripts/loadtest/verify-compensation.sh`의 `psql_payment`). 리스너가 실패했거나 처리 중 프로세스가 죽으면 남는다. Kafka 외부화 전송 실패도 같은 테이블에 쌓인다. Kafka 소비 실패는 별도의 DLT에서 확인한다.
 
 **증상·지표** (core만 수집한다. core-batch는 `ticketing.event-publication.metrics.enabled=false`로 중복 수집을 끈다)
 
@@ -188,7 +191,7 @@ returning id, listener_id, event_type;
 
 ## 4. Batch 실행
 
-Job은 `core-batch`에서 하나씩 실행한다. 규칙과 파라미터의 기준은 [batch.md](./architecture/batch.md)다.
+Job은 `core-batch`(결제 대사는 `payment-batch`)에서 하나씩 실행한다. 규칙과 파라미터의 기준은 [batch.md](./architecture/batch.md)다.
 
 | Job | 파라미터 | 언제 |
 |---|---|---|
@@ -196,7 +199,7 @@ Job은 `core-batch`에서 하나씩 실행한다. 규칙과 파라미터의 기�
 | `expirePendingBookingsJob` | `run.id` | 미결제 예매 만료 처리 |
 | `reconcileSeatSnapshotJob` | `run.id` | 좌석 스냅샷 보정 |
 | `releaseStaleCouponReservationsJob` | `run.id` | 기한 지난 RESERVED 쿠폰 복원 |
-| `paymentReconciliationJob` | `targetDate`, `run.id` | 결제 대사 |
+| `paymentReconciliationJob` | `targetDate`, `run.id` | 결제 대사(`payment-batch`, `payment_db`) |
 
 ```bash
 ./gradlew :core-batch:bootRun --args='--spring.batch.job.name=dailySettlementJob targetDate=2026-11-10,java.time.LocalDate run.id=1,java.lang.Long'
@@ -205,7 +208,8 @@ Job은 `core-batch`에서 하나씩 실행한다. 규칙과 파라미터의 기�
 - 완료된 같은 날짜를 다시 계산하려면 `run.id`를 새 값으로 바꾼다. 결과는 upsert 또는 날짜 단위 재적재라서 같다.
 - 실패한 실행은 같은 `targetDate`와 `run.id`로 재시작한다. 새 `run.id`를 쓰면 새 실행이 된다.
 - 정산일은 Asia/Seoul 기준이다. 지난 날짜의 정산은 다시 계산하지 않는다.
-- Batch 메타데이터는 PostgreSQL `batch` 스키마에 있다. 실행 이력은 여기서 조회한다.
+- 결제 대사는 `java -jar payment-batch/build/libs/payment-batch.jar --spring.batch.job.name=paymentReconciliationJob targetDate=<Asia/Seoul 날짜>`로 실행한다([payment-batch 지침](rules/backend-payment-batch.md)).
+- Batch 메타데이터는 PostgreSQL `batch` 스키마에 있다(core DB와 `payment_db`가 각자). 실행 이력은 여기서 조회한다.
 
 ```bash
 docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" \
@@ -214,7 +218,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 
 ## 5. 데이터 확인
 
-- 스키마는 `member`, `catalog`, `booking`, `payment`, `settlement`, `batch`다. 스키마 사이의 조인은 코드에서 만들지 않는다. 디버깅용 조회도 한 스키마씩 한다.
+- core DB의 스키마는 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`이고, 결제는 `payment_db`의 `payment`, `batch`다(core DB에는 이전 후 제거 전까지 옛 `payment` 스키마가 남아 있다). 스키마 사이의 조인은 코드에서 만들지 않는다. 디버깅용 조회도 한 스키마씩 한다.
 - 구조는 [erd.md](./architecture/erd.md)를 본다.
 - 스키마 변경은 Flyway 마이그레이션으로만 한다. 적용된 마이그레이션 파일은 수정하지 않고 새 버전을 추가한다.
 
@@ -224,7 +228,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 - 로그는 전체를 출력하지 않고 `rg -n -m 20 '오류 패턴' 로그경로`로 위치를 좁힌다.
 - Gradle 테스트 결과 파일이 깨졌다면 test와 check를 동시에 돌렸는지 확인하고 순차로 다시 실행한다.
 - E2E 실패 시 `build/e2e/logs/`의 앱별 로그를 보고, `--keep`으로 스택을 남겨 재현한다.
-- 포트 점유로 E2E가 시작되지 않으면 18000, 18080, 18081, 18082, 13000(`--web`)을 비운다.
+- 포트 점유로 E2E가 시작되지 않으면 18000, 18080, 18081, 18082, 18085, 13000(`--web`)을 비운다.
 - Testcontainers 컨테이너가 남아 있으면 `docker ps`로 확인하고 Ryuk이 정리하지 못한 것만 지운다.
 
 ## 7. 변경 시 확인 사항
@@ -232,6 +236,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 | 바꾼 것 | 확인 |
 |---|---|
 | core 모듈 간 의존 | Modulith 구조 검증, `./gradlew :core:modulithDocs` |
+| payment 데이터 이전 스크립트 | `./scripts/db/test-migrate-payment-data.sh`(임시 DB, 실제 `payment_db`는 건드리지 않는다) |
 | core·gateway·realtime 흐름 | `./scripts/e2e/run.sh` |
 | web | `./scripts/agent/test/web-check.sh`, 필요하면 `./scripts/e2e/run.sh --web` |
 | Kotlin | `ktlintCheck detekt` |
@@ -281,3 +286,165 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 1. 실행 디렉터리의 `integrity.log`(검증 스크립트 출력)와 `integrity.json`(위반 목록과 상태별 예매 수). 원본은 `build/loadtest/integrity-<scheduleId>.json`이다.
 2. 같은 실행의 `core.log`. 좌석 확정·결제 웹훅 처리 중 예외와 보상 실패를 찾는다. 로그는 `rg -n -m 20 'ERROR|Exception' 로그경로`로 좁힌다.
 3. 중복 판매(같은 좌석이 두 번 확정)는 DB 유니크 제약이 막아야 하는 사건이다. 위반이 있으면 측정 결과로 넘기지 말고 원인을 먼저 찾는다.
+
+## 9. 결제 DB 이전 (core DB payment 스키마 → payment_db)
+
+[ADR 0040](adr/0040-payment-separate-database-same-instance.md)의 이전 절차 2~4단계를 수행한다. 무중단 이중 쓰기는 하지 않고 짧은 점검 창을 둔다. 이미 대상 DB(기본 `payment_db`)에 데이터가 있으면(분리 후 새로 쌓인 데이터 포함) 스크립트가 덮어쓰지 않고 중단한다. 이때는 이전이 필요 없는지부터 판단한다.
+
+대상 테이블은 `payment.payment`, `payment.webhook_event`, `payment.pg_transaction_snapshot`, `payment.reconciliation_mismatch` 네 개다. Flyway 이력과 `event_publication`은 옮기지 않는다.
+
+**대상 DB는 한 번만 정한다.** payment 앱과 payment-batch는 환경 변수 `TICKETING_PAYMENT_POSTGRES_DB`(기본 `payment_db`)가 가리키는 DB에 접속하고, 이전 스크립트의 `--target-db` 기본값도 `.env`의 같은 변수다. 다른 이름의 DB로 이전하려면 `--target-db`만 바꾸지 말고 `.env`의 `TICKETING_PAYMENT_POSTGRES_DB`를 그 이름으로 바꾼 뒤 아래 모든 단계(DB 준비, Flyway, 이전, 재대조, 앱 기동, 복구)를 같은 값으로 수행한다. `--target-db`만 다르면 이전은 성공해도 앱은 기본 DB를 봐서 기존 결제가 조회되지 않는다. 이 절의 명령은 `TARGET_DB`를 쓴다.
+
+```bash
+set -a; source .env; set +a                  # 앱·스크립트가 읽는 값과 같은 값을 쓰기 위해
+TARGET_DB="${TICKETING_PAYMENT_POSTGRES_DB:-payment_db}"
+echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를 가리킨다
+```
+
+**스크립트가 하는 일** (`scripts/db/migrate-payment-data.sh [--verify-only] [--source-db 이름] [--target-db 이름]`)
+
+1. 전제 검사(빠른 실패용): 대상 4테이블이 비어 있는지, 원본·대상의 `event_publication`에 미완료(`completion_date IS NULL`) 행이 없는지 본다.
+2. 원본에서 `REPEATABLE READ` 세션을 열어 스냅샷을 내보내고, 그 스냅샷으로 `pg_dump --data-only`와 원본의 미완료 이벤트·체크섬을 같은 시점에 읽는다. 원본 시퀀스의 다음 발급 값은 MVCC 스냅샷에 묶이지 않고 조회 시점의 값이므로 점검 창의 쓰기 중지에 의존한다. 덤프는 컨테이너 임시 파일에 받고 정상 종료를 확인한 뒤에만 적재한다.
+3. 대상에서 `READ COMMITTED`를 명시한 한 트랜잭션을 연다(대상 DB·역할의 기본 격리 수준이 `REPEATABLE READ`여도 잠금 뒤 재검사가 최신 커밋을 본다). advisory lock으로 같은 대상을 향한 실행을 직렬화하고, 대상 4테이블과 `event_publication`을 쓰기 차단 모드(`EXCLUSIVE`)로 잠근 뒤 **비어 있음과 미완료 이벤트를 다시 검사**한다. 데이터를 적재하고 `ALTER SEQUENCE payment.payment_id_seq RESTART WITH max(max(id)+1, 원본 다음 발급 값)`로 시퀀스를 맞춘다. 덤프의 `setval`은 트랜잭션으로 되돌릴 수 없어 적용하지 않는다.
+4. **COMMIT 전에** 대상 건수·금액 합계·상태 분포·행 해시(행 전체를 기본 키 순으로 이은 텍스트의 `md5`)를 스냅샷 시점의 원본 값과 비교하고, 시퀀스 다음 발급 값이 최대 id보다 크고 원본 값 이상인지 본다. 하나라도 다르면 롤백한다(시퀀스 변경도 함께 되돌아간다).
+5. 커밋 뒤 새 세션에서 같은 대조를 한 번 더 한다(커밋 가시성 확인).
+
+덤프나 적재 SQL이 중간에 실패하면 `COMMIT`에 이르지 못해 롤백된다. 적재 `psql`이 비정상 종료하면 스크립트는 **먼저 대상의 적재 트랜잭션이 끝나기를 기다린 뒤**(같은 advisory lock을 새 세션에서 얻을 때까지 대기. 대기 시간은 기본 30초) 확정된 상태를 읽어 구분해 출력한다. 서버의 적재 트랜잭션이 아직 진행 중일 때 읽으면 커밋 전 데이터가 0건으로 보이기 때문이다.
+
+- 적재 종료 뒤 대상 4테이블과 시퀀스가 적재 전 상태와 같다 → "반영된 변경이 없음을 확인했습니다". 원인을 고치고 바로 다시 실행하면 된다.
+- 4테이블에 데이터가 있고 원본 스냅샷과 일치한다 → "커밋 응답만 잃은 것으로 보입니다". **다시 실행하지 않는다.**
+- 4테이블은 비어 있는데 시퀀스가 적재 전과 다르다 → 원본 4테이블이 비어 있고 시퀀스만 앞서 있던 적재가 커밋된 경우다("시퀀스만 반영하는 적재가 커밋되고 응답만 잃은 것"). 다시 실행하지 않는다.
+- 데이터가 있으나 원본과 다르거나 종료를 시간 안에 확인하지 못했다(잠금 대기 시간 초과·접속 실패) → "커밋 결과를 확인할 수 없는 오류입니다". 아래 "커밋 결과를 알 수 없을 때"를 따른다.
+
+비밀번호는 컨테이너 환경 변수로만 쓰며 명령행·출력에 남기지 않는다.
+
+**사전 준비 (점검 창 전)**
+
+1. `.env`에 `TICKETING_PAYMENT_POSTGRES_*`가 있고 `./scripts/db/ensure-payment-db.sh`로 `$TARGET_DB`와 전용 계정이 준비돼 있다(이 스크립트도 같은 환경 변수를 쓴다).
+2. `$TARGET_DB`에 payment 앱의 Flyway 마이그레이션(V1~V3: `payment` 스키마, `event_publication`, `batch`)을 적용한다. 일반 payment 앱은 점검 창 전에 띄우지 않는다. 기동하면 Kafka 소비자 그룹 `ticketing-payment`에 합류해 결제·환불 이벤트를 비어 있는 DB에서 처리하기 때문이다. 대신 `payment-batch`를 Job 없이 띄운다. 같은 셸(위에서 `.env`를 읽은 셸)에서 실행해 대상 DB 변수를 그대로 쓴다.
+
+   ```bash
+   ./gradlew :payment-batch:bootJar
+   TICKETING_PAYMENT_POSTGRES_DB="$TARGET_DB" java -jar payment-batch/build/libs/payment-batch.jar --spring.batch.job.enabled=false
+   ```
+
+   `batch` 프로필(`payment/src/main/resources/application-batch.yml`)이 웹 서버를 끄고(`web-application-type: none`), Kafka 리스너 자동 기동을 끄고(`spring.kafka.listener.auto-startup: false`), 미완료 이벤트 재발행을 끈다(`republish-outstanding-events-on-restart: false`). 예열 러너 같은 웹 전용 빈도 만들지 않는다. `--spring.batch.job.enabled=false`로 어떤 Job도 실행하지 않으므로 Flyway를 적용하고 종료한다. 임시 DB로 확인한 결과는 `./scripts/db/test-migrate-payment-data.sh --flyway-boot`가 재현한다. 이미 적용돼 있으면 건너뛴다. 확인은 같은 DB에서 한다.
+
+   ```bash
+   docker compose exec -T postgres psql -X -At -U "$TICKETING_POSTGRES_USER" -d "$TARGET_DB" \
+     -c "select current_database(), count(*) from public.flyway_schema_history where success"   # 대상 DB 이름과 3건
+   ```
+3. 스크립트 자체를 임시 DB로 확인하려면 `./scripts/db/test-migrate-payment-data.sh`(`--full`은 실제 core DB를 읽기만 해 대용량 경로까지 본다)를 실행한다.
+
+**점검 창 절차**
+
+1. **신규 유입 차단**: web과 gateway를 내려 사용자 요청을 막는다. 이때 core(분리 전 구성), fake-pg는 그대로 둔다.
+2. **기존 구성에서 배출 확인**: 진행 중인 결제·환불이 끝나고 이벤트와 웹훅이 모두 비워질 때까지 기다린다. 아래를 **모두** 확인한다.
+   - 결제·환불 처리 중 건이 없다: `select status, count(*) from payment.payment group by status`에서 `REQUESTED`, `REFUND_REQUESTED`가 없다. 단 이 값만으로 충분하지 않다. 결제 요청 이벤트가 발행돼 완료 처리된 뒤 소비 단계에서 실패해 DLT로 갔다면 결제 행이 아예 만들어지지 않으므로 `REQUESTED` 행도 lag도 미완료 발행도 0인 채로 요청이 처리되지 않을 수 있다. 그래서 다음 DLT 확인이 필요하다.
+   - **DLT를 기준선으로 확인한다.** 결제·환불 계약 이벤트 5개 토픽의 `.dlt` 끝 오프셋을 읽어 기록한다. 레코드가 있으면 [3.7의 DLT 확인과 재처리](#37-미완료-이벤트-발행이-쌓인다)에 따라 건별로 재처리하거나 폐기·보류를 결정하고 그 결과(주문별 결제·예매 상태)를 확인한다. 처리한 레코드는 DLT에서 자동 삭제되지 않으므로 결정을 끝낸 시점의 끝 오프셋을 **기준선**으로 기록한다. 결정하지 못한 건이 있으면 전환하지 않는다.
+
+     ```bash
+     for t in payment-requested refund-requested payment-succeeded payment-failed payment-refunded; do
+       docker run --rm --network host apache/kafka:4.3.2 /opt/kafka/bin/kafka-get-offsets.sh \
+         --bootstrap-server localhost:19092 --topic-partitions "ticketing.payment.$t.dlt"   # 토픽:파티션:끝 오프셋
+     done
+     ```
+   - **fake-pg의 웹훅 발송이 끝났다.** fake-pg는 접수한 거래의 웹훅을 메모리 스케줄러에 예약하고, 예약된 발송은 Kafka lag이나 `event_publication`에 나타나지 않는다. 발송은 거래마다 최초 시도를 포함해 **최대 3번**(`fake-pg.webhook.max-attempts`)이고 재시도 간격은 1초다. 시도 하나는 연결 타임아웃 3초에 HTTP 타임아웃 5초까지 걸릴 수 있다. 첫 시도 전 지연은 기본 500ms이고 DELAYED 시나리오는 6분(`delayed-webhook-delay`)이다. 중복 웹훅 시나리오(`duplicate-count`)는 같은 본문을 여러 번 예약한다. 그러므로 마지막 결제·환불 요청 이후 **지연(최대 6분) + 시도 3회 × 8초 + 재시도 간격 2초** 이상(여유를 두어 8분)이 지난 뒤, 로그의 마지막 줄이 늦게 나올 수 있다고 가정하고 아래를 거래별로 확인한다. 로그가 조용하다는 사실만으로 소진을 판정하지 않는다.
+     - `build/dev/logs/fake-pg.log`에서 접수한 거래(transactionId)마다 `웹훅 발송 완료` 또는 `웹훅 발송 포기`가 있고 `웹훅 연결 실패`만 마지막으로 남은 거래가 없다.
+     - `웹훅 발송 포기`가 있는 거래는 payment 쪽 상태(`select status from payment.payment where pg_transaction_id = '<거래 ID>'`)를 보고 종결(`SUCCEEDED`, `FAILED`, `REFUNDED`)됐는지, 아니면 대사·수동 처리로 보류할지 결정한다.
+   - Kafka 소비자 그룹 lag이 0이다.
+
+     ```bash
+     for group in ticketing-payment ticketing-booking; do
+       docker run --rm --network host apache/kafka:4.3.2 /opt/kafka/bin/kafka-consumer-groups.sh \
+         --bootstrap-server localhost:19092 --describe --group "$group"
+     done
+     ```
+   - core DB와 `$TARGET_DB`의 `public.event_publication`에서 `completion_date IS NULL` 행이 0건이다. 남으면 [3.7](#37-미완료-이벤트-발행이-쌓인다)로 처리한다.
+   - **정지 직전 최종 재확인.** 위 웹훅 대기와 소비 재시도(최초 1회와 지수 백오프 3회, 1초부터 시작)가 모두 끝난 뒤, 기존 앱을 내리기 직전에 다음을 다시 확인한다. 지연된 웹훅이나 재처리로 생긴 이벤트가 늦게 DLT로 갈 수 있기 때문이다. (1) 위 `for` 명령으로 다섯 DLT의 파티션별 끝 오프셋이 **기준선과 같다**. (2) 소비자 그룹 lag이 0이다. (3) 두 DB의 미완료 `event_publication`이 0건이다. (4) fake-pg 로그에 마지막 확인 이후 새 `웹훅 발송` 줄이 없다. 하나라도 달라졌으면 그 건을 처리·결정해 기준선을 갱신하고 **2단계의 웹훅 대기부터 다시 수행한다.** 모두 같을 때만 3단계로 간다.
+3. **쓰기 중지**: core, payment 앱(있으면), core-batch, payment-batch를 멈추고 실행 중인 Batch가 없는지 확인한다. **fake-pg는 멈추지 않는다.** 아래 한계를 본다.
+4. **이전**: 저장소 루트에서 위에서 정한 대상 DB를 명시해 실행한다.
+
+   ```bash
+   ./scripts/db/migrate-payment-data.sh --target-db "$TARGET_DB"
+   ```
+5. **대조 확인**: 스크립트가 커밋 전·후에 대조해 일치하면 `대조 일치`와 함께 종료 코드 0을 낸다. 나중에 대조만 다시 하려면 같은 대상을 지정한다(원본이 그대로일 때만 의미가 있다). 원본 시퀀스는 조회 시점 값이므로 쓰기 중지 뒤에 읽어야 한다.
+
+   ```bash
+   ./scripts/db/migrate-payment-data.sh --verify-only --target-db "$TARGET_DB"
+   ```
+6. **새 구성 기동(유입은 아직 닫혀 있다)**: 이전이 일치하면 payment 앱을 **같은 셸**(`TICKETING_PAYMENT_POSTGRES_DB`가 `$TARGET_DB`와 같은 상태)에서 일반 모드로 띄우고, 결제 구현이 제거된 core를 올린다. **gateway와 web은 아직 올리지 않는다.**
+7. **fake-pg 웹훅 목적지 확인(유입을 열기 전)**: 실행 중인 fake-pg가 새 payment 주소(`http://localhost:18085/api/v1/payments/webhooks/fake-pg`)로 웹훅을 보내는지 확인한다. 설정은 환경 변수 `FAKE_PG_WEBHOOK_URL`이다(비밀 값인 `FAKE_PG_WEBHOOK_SECRET`은 출력하지 않는다).
+
+   ```bash
+   tr '\0' '\n' < "/proc/$(pgrep -f 'fake-pg.jar' | head -1)/environ" | grep '^FAKE_PG_WEBHOOK_URL='   # 값이 payment(18085)여야 한다
+   ```
+
+   변수가 없으면 jar의 기본값을 쓴다. 기본값은 `fake-pg/src/main/resources/application.yml`에서 payment 앱(18085)이다(분리 전에 빌드한 jar는 core 18080일 수 있으므로 같은 커밋의 jar인지 확인한다). 목적지가 다르면 **유입이 닫힌 지금** fake-pg를 올바른 값으로 재기동하고 기동 확인(`curl localhost:18090/actuator/health`)과 같은 확인 명령으로 목적지를 다시 확인한 뒤에만 다음으로 간다. 재기동하면 아래 한계대로 기존 거래와 예약이 사라진다. 이 확인이 끝나기 전에는 gateway·web을 올리지 않는다. 열린 상태에서 접수한 신규 결제의 웹훅이 옛 주소로 가거나 재기동으로 신규 거래가 사라질 수 있기 때문이다.
+8. **유입 재개**: 목적지 확인이 끝나면 gateway, web을 올려 사용자 요청을 받는다.
+9. **전환 후 검증**(아래).
+10. **점검 창 종료 후**: core DB의 payment 스키마는 지금 지우지 않는다. 한 단계 동안 payment 앱이 정상 운영되는지 검증한 뒤 별도 Flyway 마이그레이션으로 제거한다. 그 전까지 이 스키마가 원본 사본 역할을 하므로 core는 읽지도 쓰지도 않는다.
+
+**커밋 결과를 알 수 없을 때**
+
+적재 `psql`이 `커밋 결과를 확인할 수 없는 오류입니다`로 끝나거나 위 "커밋 응답만 잃은 것으로 보입니다" 계열로 끝나면 이미 커밋됐을 수 있다(서버가 `COMMIT`을 처리한 뒤 연결이 끊기거나 프로세스가 죽은 경우, 또는 서버의 적재 트랜잭션이 아직 끝나지 않은 경우). 쓰기 차단을 유지하고 다음 순서로 확인한 뒤 전환·재시도·복구를 결정한다. 4테이블 건수만으로 커밋 여부를 판단하지 않는다(원본이 비어 있으면 적재는 시퀀스만 바꿔 커밋한다).
+
+1. 대상 DB의 적재 트랜잭션이 끝났는지 확인한다. 대상에 아직 진행 중인 세션이 없어야 한다.
+
+   ```bash
+   docker compose exec -T postgres psql -X -At -U "$TICKETING_POSTGRES_USER" -d "$TARGET_DB" -c "
+     select pid, state, wait_event_type, left(query, 60) from pg_stat_activity
+     where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'"
+   ```
+
+   행이 남아 있으면 끝나기를 기다린 뒤 다시 본다. 끝나지 않으면 4테이블·시퀀스 판단을 보류하고 원인을 조사한다.
+2. 대상 DB 이름과 네 테이블의 건수, 시퀀스 상태를 읽는다. `current_database()`가 이전 대상(`$TARGET_DB`)과 같아야 한다.
+
+   ```bash
+   docker compose exec -T postgres psql -X -At -U "$TICKETING_POSTGRES_USER" -d "$TARGET_DB" -c "
+     select current_database(),
+            (select count(*) from payment.payment), (select count(*) from payment.webhook_event),
+            (select count(*) from payment.pg_transaction_snapshot), (select count(*) from payment.reconciliation_mismatch),
+            (select last_value || ',' || is_called from payment.payment_id_seq)"
+   ```
+3. 읽기 전용으로 원본과 대조한다: `./scripts/db/migrate-payment-data.sh --verify-only --target-db "$TARGET_DB"`. 시퀀스 다음 발급 값(`is_called`가 `t`면 `last_value + 1`, `f`면 `last_value`)이 원본의 다음 발급 값 이상인지도 이 대조가 본다.
+4. 판단
+   - 대조가 일치한다 → 커밋은 끝난 것이다(원본이 비어 있어 시퀀스만 반영된 경우 포함). 다시 실행하지 말고 6단계(새 구성 기동)로 진행한다.
+   - 4테이블이 0건이고 시퀀스도 이전 상태(적재 전 값. 새 대상은 `1,f`)다 → 반영된 변경이 없다. 원인을 고쳐 다시 실행한다.
+   - 데이터가 있으나 대조가 다르거나 시퀀스 상태를 판별할 수 없다 → 다른 세션의 쓰기이거나 일부만 반영된 상태일 수 있다. payment 앱을 띄우지 말고 원인을 조사한 뒤 아래 복구 절차로 비울지 결정한다.
+
+**커밋 뒤에만 가능한 검사와 복구 범위**
+
+- 스크립트는 `COMMIT` 전에 건수·체크섬·시퀀스를 대조해 어긋나면 롤백한다. 커밋 뒤에는 새 세션에서 다시 대조해 커밋된 결과가 읽히는지만 확인한다. 이 단계에서 실패하면 이미 커밋된 상태이므로 롤백되지 않는다.
+- 복구: payment 앱을 띄우지 않은 채 대상 DB의 네 테이블이 이번 이전으로 채워진 것뿐인지 확인한다(스크립트가 비어 있음을 검사했으므로 그 사이 다른 쓰기가 없었어야 한다). 비우기 전에 **같은 접속에서 `current_database()`가 이전 대상과 같은지 먼저 확인**한다. 다른 이름이면 중단한다.
+
+  ```bash
+  EXPECTED_DB='<이전 스크립트 출력의 "대상(...)"에 찍힌 DB 이름>'   # 예: EXPECTED_DB='payment_db'
+  docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$TICKETING_POSTGRES_USER" -d "$TARGET_DB" -c "
+    DO \$\$ BEGIN
+      IF current_database() <> '$EXPECTED_DB' THEN RAISE EXCEPTION '접속 DB(%)가 이전 대상($EXPECTED_DB)과 다릅니다. 중단합니다', current_database(); END IF;
+    END \$\$;
+    TRUNCATE payment.payment, payment.webhook_event, payment.pg_transaction_snapshot, payment.reconciliation_mismatch"
+  ```
+
+  `-c`의 여러 문장은 한 트랜잭션으로 실행되므로 이름이 다르면 `TRUNCATE`는 실행되지 않는다.
+
+  시퀀스는 다음 실행이 `RESTART`로 다시 맞춘다. 원인을 조사한 뒤 다시 실행한다. payment 앱이 새 결제를 받기 시작한 뒤에는 이렇게 비울 수 없다.
+
+**전환 후 검증** (기동된 스택에서 읽기·확인 위주로 한다)
+
+- readiness: `curl -s localhost:18085/actuator/health/readiness`(payment), `localhost:18080/actuator/health/readiness`(core), `localhost:18000/actuator/health`(gateway).
+- 접속 DB 일치: payment 앱이 이전한 DB를 보고 있는지는 결제 조회가 이전 결제를 돌려주는지로 확인한다(아래). 조회가 비어 있으면 `TICKETING_PAYMENT_POSTGRES_DB`가 `$TARGET_DB`와 같은 값으로 기동됐는지 먼저 본다.
+- 결제 조회: Gateway 경유로 이전된 예매의 결제를 읽는다. 테스트 사용자로 로그인해 받은 access 토큰으로 `GET http://localhost:18000/api/v1/payments/me?bookingIds=<이전된 예매 ID>`가 이전 결제 상태를 돌려주는지 본다.
+- 웹훅 차단: `curl -i -X POST http://localhost:18000/api/v1/payments/webhooks/fake-pg`가 404다(Gateway가 라우팅 전에 막는다. 웹훅은 fake-pg가 payment 앱을 직접 호출한다).
+- Kafka: `ticketing-payment` 그룹이 payment 앱으로 붙고 lag이 0으로 유지되는지, 위의 `--describe`로 본다. 결제·환불 `.dlt` 끝 오프셋이 늘지 않는지도 본다.
+- 이벤트: core DB와 `$TARGET_DB`의 미완료 `event_publication`이 0건으로 유지된다.
+- 대사(선택): `payment-batch`로 `paymentReconciliationJob`을 실행해 `reconciliation_mismatch` 증가분이 예상과 맞는지 본다. 이 Job은 결과 행을 기록한다(자동 보정은 하지 않는다).
+- `./scripts/e2e/run.sh`는 이 단계의 검증 수단이 아니다. E2E 러너는 18000·18080·18081·18085·18090 등의 포트가 비어 있어야 시작하고 앱을 직접 띄우며, `.env`의 DB에 테스트 결제·환불을 남긴다. 전체 E2E는 포트가 비어 있고 DB가 격리된(운영 데이터가 없는 새 볼륨) 별도 환경에서만 돌린다.
+
+**로컬 fake-pg의 한계** (실제 PG는 외부 시스템이라 해당하지 않는다)
+
+- fake-pg는 거래·멱등 키 상태를 메모리(`TransactionStore`)에만 두고 웹훅 발송·재시도도 메모리 스케줄러에 예약한다. 재기동하면 이전 거래가 모두 사라져 이전한 결제의 환불·조회·대사 요청이 PG에서 거래를 찾지 못해 실패한다. 그래서 점검 창 중에 fake-pg를 끄지 않는다. 앱 구성을 되돌리는 롤백으로도 사라진 PG 거래와 예약은 복원되지 않는다.
+- 웹훅 목적지는 `FAKE_PG_WEBHOOK_URL`(`fake-pg.webhook.url`)이며 fake-pg가 기동 때 설정으로 읽고 실행 중 바꾸는 수단이 없다. 이 저장소의 기본값은 payment 앱(18085)이므로 이미 이 기본값으로 떠 있는 fake-pg는 재기동하지 않아도 된다. 분리 전 기본값(core 18080)이나 다른 값으로 떠 있다면 목적지를 바꾸려면 재기동해야 하고, 그러면 위와 같이 이전 거래가 사라진다. 이 경우 이전 결제에 대한 환불·대사는 로컬에서 검증할 수 없는 것으로 받아들이거나, 데이터를 이전하지 않고 새 볼륨으로 시작한다.
+
+**롤백**: 8단계(유입 재개) 전에는 core DB의 `payment` 스키마가 그대로 있고 대상 DB(`$TARGET_DB`)만 위 복구 절차로 비우면 이전 구성으로 돌릴 수 있다. payment 앱이 새 결제를 받기 시작한 뒤에는 데이터가 대상 DB에서 갈라지므로 단순 롤백이 불가능하다. fake-pg를 재기동했다면 위 한계 때문에 이전 거래는 복원되지 않는다.

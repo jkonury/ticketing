@@ -33,10 +33,10 @@ ticketing의 문서·코드 주석·issue·PR·커밋 메시지에서 쓰는 표
 | 예매 취소 | `CANCELLED` | 사용자가 예매를 취소한 상태. 결제된 예매는 환불 흐름이 수반된다 |
 | 좌석 반환 | — | 실패·만료·취소 등으로 좌석을 다시 예매할 수 있도록 해제하는 것 |
 | 좌석 스냅샷 | Redis | 회차별 현재 좌석 현황. SSE 접속 시 전달할 초기 상태 |
-| 결제 | `payment` | PG 결제 요청·결과 처리·환불을 맡는 코어 모듈 및 업무 |
+| 결제 | `payment` | PG 결제 요청·결과 처리·환불을 맡는 별도 앱(`payment`, `payment_db`) 및 업무 |
 | PG | Payment Gateway | 결제를 처리하는 외부 시스템. 요청을 라우팅하는 Gateway 앱과 구분한다 |
 | 가짜 PG | `fake-pg` | 지연·타임아웃·실패·중복 웹훅을 재현하는 별도 앱. 실제 PG 연동은 후속 범위다 |
-| 웹훅 | webhook | PG가 코어에 결제 결과를 알리는 요청. 중복·지연 도착할 수 있다 |
+| 웹훅 | webhook | PG가 payment 앱에 결제 결과를 알리는 요청. 중복·지연 도착할 수 있다 |
 | 멱등성 / 멱등 키 | idempotency / idempotency key | 같은 요청을 반복해도 업무 결과가 중복되지 않는 성질 / 결제 요청·웹훅 중복 처리의 기준 키 |
 | 환불 | refund | 결제 금액을 돌려주는 처리. 예매 취소라는 상태 변경과 구분한다 |
 | 만료 후 결제 성공 | — | 좌석 선점이 만료된 뒤 결제 성공이 도착한 경우. 자동 환불로 보상한다 |
@@ -67,11 +67,11 @@ ticketing의 문서·코드 주석·issue·PR·커밋 메시지에서 쓰는 표
 
 | 표준 표기 | 영어·식별자 | 프로젝트에서의 뜻 |
 | --- | --- | --- |
-| 코어 모듈 | Modulith application module | `io.github.ticketing` 바로 아래의 member, catalog, booking, payment, settlement, notification 패키지 경계 |
-| Gradle 모듈 | subproject | core, core-batch, realtime, gateway, fake-pg 등 빌드 단위. 코어 모듈과 구분한다 |
-| 실행 앱 / 배포 단위 | application | 별도로 실행하는 앱. `core-batch`는 코어 코드를 공유하는 배치 실행 앱이다 |
+| 코어 모듈 | Modulith application module | core 앱에서 `io.github.ticketing` 바로 아래의 member, catalog, booking, settlement, coupon, notification, audit 패키지 경계. payment는 별도 앱이라 core 모듈이 아니다 |
+| Gradle 모듈 | subproject | core, core-batch, payment, payment-batch, realtime, gateway, fake-pg 등 빌드 단위. 코어 모듈과 구분한다 |
+| 실행 앱 / 배포 단위 | application | 별도로 실행하는 앱. `core-batch`는 코어 코드를, `payment-batch`는 payment 코드를 공유하는 배치 실행 앱이다 |
 | Modulith | Spring Modulith | 코어를 한 앱으로 실행하면서 패키지별 모듈 경계를 검증하고 이벤트로 연동하는 구조 |
-| MSA | Microservices Architecture | 모듈을 독립 배포 단위로 분리하는 후속 구조. payment·settlement가 우선 분리 대상이다 |
+| MSA | Microservices Architecture | 모듈을 독립 배포 단위로 분리하는 후속 구조. payment는 분리했고 settlement가 다음 후보다 |
 | 헥사고날 | hexagonal architecture | booking·payment·settlement에 적용하는 도메인·포트·어댑터 구조 |
 | 입력 포트 / 출력 포트 | `provided` / `required` | 유스케이스를 제공하는 경계 / 영속성·외부 시스템에 요구하는 경계. 패키지 명명은 ADR 0016을 따른다 |
 | application 서비스 | `application.service` | 유스케이스를 구현하는 계층. 제품 전체나 독립 배포 서비스를 뜻하는 표현과 구분한다 |
