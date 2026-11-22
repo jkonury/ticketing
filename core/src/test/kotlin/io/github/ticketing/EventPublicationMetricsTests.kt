@@ -6,6 +6,7 @@ import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
 import java.time.Duration
@@ -21,6 +22,7 @@ class EventPublicationMetricsTests(
     @Autowired private val dsl: DSLContext,
     @Autowired private val registry: MeterRegistry,
     @Autowired private val clock: MutableClock,
+    private val beanFactory: ListableBeanFactory,
 ) : IntegrationTestSupport() {
 
     private val table = DSL.table(DSL.name("public", "event_publication"))
@@ -37,6 +39,7 @@ class EventPublicationMetricsTests(
     fun `미완료가 없으면 건수와 경과 시간이 0이다`() {
         clock.now = base
 
+        assertThat(beanFactory.getBeanNamesForType(EventPublicationMetrics::class.java)).containsExactly("eventPublicationMetrics")
         assertThat(count()).isZero()
         assertThat(oldestAge()).isZero()
     }

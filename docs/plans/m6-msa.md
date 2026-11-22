@@ -1,7 +1,7 @@
 # M6 MSA + k8s 계획
 
 - 작성일: 2026-11-18
-- 상태: M6 진행 중. 사전 작업과 1·2단계 완료, 3단계 미착수. 결정은 ADR 0039~0041·0043 참조
+- 상태: 3단계 진행 중
 - 관련: [로드맵](../roadmap.md), [아키텍처](../architecture.md), [이벤트 카탈로그](../architecture/events.md), [데이터 소유](../architecture/data-ownership.md), [ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [ADR 0040](../adr/0040-payment-separate-database-same-instance.md), [ADR 0041](../adr/0041-auth-stays-in-core-sas-deferred.md)
 
 ## 1. 배경과 범위
@@ -106,6 +106,33 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - [x] **2-6 문서**: architecture.md(§3 구성도·기술 스택), events.md(외부화 구현 반영·"구현 전" 문구 제거), AGENTS.md(§6 명령·§7 사전 조건), 필요 시 ADR(직렬화·실패 처리), 이 문서 갱신
   - 검증: `./scripts/agent/docs/check-docs.sh`
 
+**3단계 세부 체크리스트** (작성 2026-11-22. 결정은 2026-11-22 합의)
+
+결정
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 앱 구성 | 새 Gradle 앱 `payment`(포트 18085, 루트 패키지 `io.github.ticketing`, 패키지 `io.github.ticketing.payment` 유지) | `contract`의 결제 계약 이벤트와 같은 패키지를 유지해 코드 이동을 단순화한다 |
+| 결제 대사 Batch | `payment-batch` 모듈 신설(core-batch와 같은 패턴, payment 코드를 공유하는 별도 jar). 배치 메타데이터는 `payment_db`에 둔다 | ADR 0019에 따라 소유 모듈에서 실행하며, 이후 k8s CronJob으로 이전하기 쉽다 |
+| JWT 검증 | core와 같은 resource server(HS256, `TICKETING_JWT_SECRET` 공유) | ADR 0041에 따라 인증 구조를 유지한다 |
+| 웹훅 노출 | fake-pg가 payment 앱을 직접 호출한다. payment 보안 설정에서 웹훅 경로를 `permitAll`로 열고 웹훅용 Gateway 라우트는 만들지 않는다 | 기존 직접 호출 구조를 유지한다 |
+| Kafka 공용 설정 | `KafkaTopics`·재시도/DLT·JSON 변환기·`EventPublicationMetrics`를 `common`으로 추출 | core와 payment(이후 settlement)가 같은 설정을 쓴다 |
+| 예열 | payment 앱이 기동 때 자체 예열한다. core의 `PaymentWarmupRequested` 발행은 제거한다 | 프로세스 간에는 로컬 이벤트가 전달되지 않는다 |
+| core 테스트 | 결제 결과가 필요한 core 테스트는 Kafka 결제 대역(테스트 전용 컨슈머·발행자)을 쓴다. 웹훅 멱등·만료 후 환불처럼 실제 payment가 필요한 E2E는 프로세스 수준의 `e2e` 모듈로 옮긴다 | core 단독 테스트를 유지하고 분리된 서비스의 실제 호출 경로는 E2E로 검증한다 |
+| core DB의 payment 스키마 | 이번 단계에서는 남긴다. ADR 0040의 6단계에 따라 한 단계 검증 뒤 별도 마이그레이션으로 제거한다 | ADR 0040 |
+| 성능 측정 | Gatling `hot-seats` 콜드 3회 확정 지연 측정은 후속으로 미룬다. 로드맵 항목은 측정 후 체크한다 | 2026-11-22 합의 |
+
+체크리스트
+
+- [x] **3-1 Kafka 공용 설정 common 추출**
+- [ ] **3-2 payment 앱 뼈대** — Gradle 앱, `payment_db`·전용 계정(신규·기존 볼륨 모두), 자체 Flyway(payment 스키마·`event_publication`), jOOQ 생성, Testcontainers
+- [ ] **3-3 payment 코드 이전** — core의 payment 코드·테스트를 payment 앱으로 복사하고 웹훅, Kafka 리스너, JWT, 자체 예열을 적용한다. 이 작업에서는 core의 payment 코드도 유지한다
+- [ ] **3-4 payment-batch** — 결제 대사 Job을 payment-batch로 이전하고 배치 메타데이터를 구성한다
+- [ ] **3-5 core에서 payment 제거** — core·core-batch에서 payment 코드를 제거하고 core 테스트에 Kafka 결제 대역을 적용한다
+- [ ] **3-6 연결 경로 이전** — fake-pg 웹훅 URL, Gateway `/api/v1/payments/**` 라우트, `scripts/e2e`·`scripts/dev`·`scripts/loadtest` 프로세스 구성을 갱신하고 웹훅 E2E를 `e2e` 모듈로 옮긴다
+- [ ] **3-7 데이터 이전·문서** — `pg_dump` 이전 스크립트와 건수·체크섬 대조, runbook, architecture·data-ownership·erd·events·AGENTS.md 반영
+- [ ] **3-8 측정**(후속) — Gatling `hot-seats` 콜드 3회 확정 지연 p95를 01 기준선과 비교한다
+
 각 단계의 세부 체크리스트는 단계를 시작할 때 이 문서에 추가한다. 한 단계의 완료 기준을 만족하기 전에는 다음 단계를 시작하지 않는다.
 
 ## 4. 위험과 대응
@@ -125,7 +152,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 | payment DB 분리 방식 | 같은 인스턴스의 별도 DB. 점검 창으로 이전 | [ADR 0040](../adr/0040-payment-separate-database-same-instance.md) |
 | 인증 구조 | 유지. SAS는 M6 후 별도 ADR | [ADR 0041](../adr/0041-auth-stays-in-core-sas-deferred.md) |
 
-미결 세부 사항(해당 단계에서 정한다): 결제 대사 Batch의 실행 구성, payment 서비스의 JWT 검증 방식(3단계), 웹훅 경로의 payment 앱 직접 노출 방식(3단계). 토픽 단위(이벤트별)·명명 규칙, 로컬 리스너 제거 방식, 본문 직렬화, 단일 브로커는 ADR 0043에서 확정.
+결제 대사 Batch는 `payment-batch`에서 실행하고 `payment_db`에 메타데이터를 둔다. payment 앱은 core와 같은 HS256 및 공유 시크릿으로 JWT를 검증한다. fake-pg는 payment 앱의 `permitAll` 웹훅 경로를 직접 호출한다. 세 결정은 3단계에서 확정했다. 토픽 단위(이벤트별)·명명 규칙, 로컬 리스너 제거 방식, 본문 직렬화, 단일 브로커는 ADR 0043에서 확정했다.
 
 ## 6. 문서 반영 계획
 

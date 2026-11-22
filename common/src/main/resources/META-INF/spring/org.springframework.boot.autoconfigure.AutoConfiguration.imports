@@ -1,2 +1,6 @@
 io.github.ticketing.CommonAutoConfiguration
 io.github.ticketing.ApiExceptionHandler
+io.github.ticketing.KafkaTopicConfig
+io.github.ticketing.KafkaConsumerConfig
+io.github.ticketing.KafkaMessageConfig
+io.github.ticketing.EventPublicationMetricsAutoConfiguration

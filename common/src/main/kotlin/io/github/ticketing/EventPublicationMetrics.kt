@@ -5,14 +5,32 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Bean
 import org.springframework.dao.DataAccessException
-import org.springframework.stereotype.Component
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.concurrent.atomic.AtomicReference
+
+@AutoConfiguration(
+    afterName = [
+        "org.springframework.boot.jooq.autoconfigure.JooqAutoConfiguration",
+        "org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration",
+    ],
+)
+@ConditionalOnClass(DSLContext::class, MeterRegistry::class)
+@ConditionalOnBean(DSLContext::class, MeterRegistry::class)
+@ConditionalOnProperty("ticketing.event-publication.metrics.enabled", matchIfMissing = true)
+class EventPublicationMetricsAutoConfiguration {
+    @Bean
+    fun eventPublicationMetrics(dsl: DSLContext, clock: Clock, registry: MeterRegistry): EventPublicationMetrics =
+        EventPublicationMetrics(dsl, clock, registry)
+}
 
 /**
  * Modulith 이벤트 발행 레지스트리(`public.event_publication`)의 미완료 건수와 최고령 경과 시간을 지표로 노출한다.
@@ -20,8 +38,6 @@ import java.util.concurrent.atomic.AtomicReference
  * 스크레이프마다 조회하지 않도록 [CACHE_TTL] 동안 결과를 재사용한다.
  * 같은 DB를 쓰는 core-batch가 중복 수집하지 않게 batch 프로필은 `ticketing.event-publication.metrics.enabled=false`로 끈다.
  */
-@Component
-@ConditionalOnProperty("ticketing.event-publication.metrics.enabled", matchIfMissing = true)
 class EventPublicationMetrics(private val dsl: DSLContext, private val clock: Clock, registry: MeterRegistry) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val cached = AtomicReference<Snapshot?>(null)
