@@ -38,18 +38,25 @@ baseline_file() {
 }
 
 # 종류별 서브 세션 기본 인자. 추론 강도는 medium이 기본이고 어려운 task만 high를 쓴다.
-agent_args() { # <kind> <effort>
-  local kind="$1" effort="${2:-medium}"
+# 모델은 세 번째 인자로 바꿀 수 있다(비우면 기본 모델).
+agent_args() { # <kind> <effort> [model]
+  local kind="$1" effort="${2:-medium}" model="${3:-}"
   case "$effort" in
     medium|high) ;;
     *) die "추론 강도는 medium 또는 high다: $effort" ;;
   esac
   case "$kind" in
-    claude) echo "--model sonnet --effort $effort" ;;
+    claude) echo "--model ${model:-sonnet} --effort $effort" ;;
     # 업데이트 안내 화면이 재시작마다 시작을 막으므로 끈다.
-    codex) echo "-m gpt-6.1-terra -c model_reasoning_effort=$effort -c check_for_update_on_startup=false" ;;
+    codex) echo "-m ${model:-gpt-6.2-sol} -c model_reasoning_effort=$effort -c check_for_update_on_startup=false" ;;
     *) die "기본 인자가 없는 에이전트 종류다: $kind" ;;
   esac
+}
+
+# herdr-up이 기록한 에이전트의 지정 모델(없으면 빈 문자열). 재시작 후에도 같은 모델을 쓰기 위해 쓴다.
+agent_model() { # <name>
+  [ -f "$STATE_FILE" ] || return 0
+  jq -r --arg n "$1" '[.impl, .review] | map(select(.name == $n) | .model // "") | first // ""' "$STATE_FILE" 2>/dev/null || true
 }
 
 # 에이전트를 같은 pane에서 종료하고 새 세션으로 다시 시작한다. herdr에 agent stop이 없어 /exit로 끝낸다.
@@ -65,7 +72,7 @@ restart_agent() { # <name> <effort>
     sleep 0.5
   done
   # shellcheck disable=SC2046
-  herdr agent start "$name" --kind "$kind" --pane "$pane" -- $(agent_args "$kind" "$effort") >/dev/null ||
+  herdr agent start "$name" --kind "$kind" --pane "$pane" -- $(agent_args "$kind" "$effort" "$(agent_model "$name")") >/dev/null ||
     die "에이전트 $name 를 다시 시작하지 못했다(pane=$pane)."
   echo "restarted: $name ($kind, effort=$effort)"
 }

@@ -29,8 +29,9 @@
 | 종류 | 모델 | 추론 강도 |
 |---|---|---|
 | claude | `sonnet` | `--effort medium` |
-| codex | `gpt-6.1-terra` | `model_reasoning_effort=medium` |
+| codex | `gpt-6.2-sol` | `model_reasoning_effort=medium` |
 
+- 모델은 `herdr-up.sh --impl-model M`·`--review-model M`으로 지정한다. 모델만 바꾸고 추론 강도 등 나머지 기본 인자는 유지한다. 지정값은 `panes.json`에 기록되어 task별 새 세션 재시작에도 적용된다. 이미 살아 있는 에이전트를 재사용할 때는 다음 재시작부터 적용되며, 다시 지정하지 않으면 이전 기록을 유지한다. 인자 전체를 바꾸려면 `--impl-args`·`--review-args`를 쓴다(재시작 후에는 적용되지 않는다).
 - 설계 판단이 많은 task(모듈 경계 재구성, 메시징·멱등성, 동시성)만 `herdr-delegate.sh --effort high`로 올린다. 기준은 [서브에이전트 위임 지침](subagent-delegation.md) 8번과 같다.
 - 추론 강도는 task 첫 위임에서 세션을 다시 시작할 때 적용된다(4절). 같은 task의 수정·재리뷰는 그 세션을 이어 쓴다.
 
@@ -89,7 +90,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 
 | 스크립트 | 용도 |
 |---|---|
-| `herdr-up.sh [--impl-kind K] [--review-kind K] [--impl-name N] [--review-name N] [--impl-args "…"] [--review-args "…"]` | pane 생성과 에이전트 시작. args를 생략하면 1절 기본값 |
+| `herdr-up.sh [--impl-kind K] [--review-kind K] [--impl-model M] [--review-model M] [--impl-name N] [--review-name N] [--impl-args "…"] [--review-args "…"]` | pane 생성과 에이전트 시작. args를 생략하면 1절 기본값 |
 | `herdr-delegate.sh [--task <task-dir>] [--effort medium\|high] <agent> <brief.md> [<report.md>]` | 경로를 담은 짧은 프롬프트 전송. `--task`는 실행의 Git 상태를 확인하고, task에서 처음 위임받는 에이전트를 새 세션으로 다시 시작한다. 위치 인자만 주면 독립 위임으로 동작하고 재시작하지 않는다 |
 | `herdr-wait.sh <agent> [--timeout ms]` | 실행 종료 대기 (백그라운드 실행) |
 | `herdr-context.sh <agent\|pane\|self> [--max pct]` | 상태줄에서 컨텍스트 사용률 읽기. 읽지 못하면 종료 코드 5, `--max` 이상이면 6 |
