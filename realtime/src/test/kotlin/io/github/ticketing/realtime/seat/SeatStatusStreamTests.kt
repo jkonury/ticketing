@@ -1,6 +1,8 @@
 package io.github.ticketing.realtime.seat
 
 import io.github.ticketing.realtime.RealtimeIntegrationTestSupport
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -23,8 +25,12 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 
 @TestPropertySource(properties = ["ticketing.realtime.queue.heartbeat-interval=100ms"])
-class SeatStatusStreamTests(client: WebTestClient, redis: ReactiveStringRedisTemplate, private val hub: SeatEventHub) :
-    RealtimeIntegrationTestSupport(client, redis) {
+class SeatStatusStreamTests(
+    client: WebTestClient,
+    redis: ReactiveStringRedisTemplate,
+    private val hub: SeatEventHub,
+    private val meters: MeterRegistry,
+) : RealtimeIntegrationTestSupport(client, redis) {
     @Test
     fun `스냅샷과 두 구독자의 실시간 좌석 변경 및 heartbeat를 보낸다`() = runTest {
         withContext(Dispatchers.Default) {
@@ -180,12 +186,56 @@ class SeatStatusStreamTests(client: WebTestClient, redis: ReactiveStringRedisTem
     }
 
     @Test
+    fun `잘못된 레코드는 건너뛰고 이후 정상 레코드를 전달한다`() = runTest {
+        withContext(Dispatchers.Default) {
+            val schedule = 409L
+            prepareSchedule(schedule)
+            coroutineScope {
+                val events = stream(schedule).asFlow().produceIn(this)
+                next(events, "snapshot")
+                addRaw(schedule, mapOf("seatIds" to "1", "status" to "SOLD"))
+                addRaw(schedule, mapOf("seatIds" to "", "status" to "SOLD", "at" to "100"))
+                val valid = add(schedule, "HELD")
+                assertThat(next(events, "seat").id()).isEqualTo(valid)
+                assertThat(withTimeoutOrNull(300) { next(events, "seat") }).isNull()
+                events.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun `잘못된 레코드 처리 중 meter 등록이 실패해도 리더는 이후 이벤트를 전달한다`() = runTest {
+        withContext(Dispatchers.Default) {
+            val schedule = 410L
+            prepareSchedule(schedule)
+            // 같은 이름의 Gauge가 있으면 counter 등록이 IllegalArgumentException을 던진다
+            val conflict = Gauge.builder("seat.events.invalid") { 0.0 }.register(meters)
+            try {
+                coroutineScope {
+                    val events = stream(schedule).asFlow().produceIn(this)
+                    next(events, "snapshot")
+                    addRaw(schedule, mapOf("seatIds" to "1", "status" to "SOLD"))
+                    val valid = add(schedule, "HELD")
+                    assertThat(next(events, "seat").id()).isEqualTo(valid)
+                    events.cancel()
+                }
+            } finally {
+                meters.remove(conflict)
+            }
+        }
+    }
+
+    @Test
     fun `회원 헤더 누락과 없는 회차는 스트림 시작 전 오류다`() = runTest {
         client.get().uri("/api/v1/streams/schedules/403/seats").exchange().expectStatus().isUnauthorized.expectBody()
             .jsonPath("$.code").isEqualTo("UNAUTHORIZED")
         clientFor(1).get().uri("/api/v1/streams/schedules/404/seats").exchange().expectStatus().isNotFound.expectBody()
             .jsonPath("$.code").isEqualTo("SCHEDULE_NOT_FOUND")
     }
+
+    private suspend fun addRaw(schedule: Long, fields: Map<String, String>): String = redis.opsForStream<String, String>().add(
+        StreamRecords.mapBacked<String, String, String>(fields).withStreamKey(streamKey(schedule)),
+    ).awaitSingle().value
 
     private suspend fun add(schedule: Long, status: String): String = redis.opsForStream<String, String>().add(
         StreamRecords.mapBacked<String, String, String>(
