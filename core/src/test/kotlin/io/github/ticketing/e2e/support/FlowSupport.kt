@@ -3,7 +3,7 @@ package io.github.ticketing.e2e.support
 import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.MutableClock
-import io.github.ticketing.TestPg
+import io.github.ticketing.support.KafkaPaymentStub
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -14,16 +14,13 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester
 import org.springframework.test.web.servlet.assertj.MvcTestResult
 import tools.jackson.databind.json.JsonMapper
 import java.time.Duration
-import java.util.HexFormat
 import java.util.UUID
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 abstract class FlowSupport(
     val mockMvcTester: MockMvcTester,
     val jdbc: JdbcTemplate,
     val redis: StringRedisTemplate,
-    val pg: TestPg,
+    val payments: KafkaPaymentStub,
     val clock: MutableClock,
     val collector: EventCollector,
 ) : IntegrationTestSupport() {
@@ -91,6 +88,8 @@ abstract class FlowSupport(
         assertThat(parse(result)["status"]).isEqualTo("PENDING")
         return (parse(result)["bookingId"] as Number).toLong()
     }
+
+    /** 결제를 요청하고 PaymentRequested가 Kafka를 거쳐 결제 대역에 닿을 때까지 기다린다. */
     fun pay(token: String, id: Long) {
         val result = mockMvcTester.post()
             .uri("/api/v1/bookings/$id/payments")
@@ -98,27 +97,7 @@ abstract class FlowSupport(
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .exchange()
         assertThat(result).hasStatus(HttpStatus.ACCEPTED)
-        eventually {
-            assertThat(pg.requests.any { it.orderId == id.toString() }).isTrue()
-            assertThat(paymentStatus(id)).isEqualTo("REQUESTED")
-        }
-    }
-    fun webhook(id: Long, type: String, amount: Int = 100000, eventId: String = UUID.randomUUID().toString()): MvcTestResult {
-        val timestamp = clock.instant().epochSecond.toString()
-        val failureReason = if (type == "PAYMENT_FAILED") "\"declined\"" else "null"
-        val raw = """{"eventId":"$eventId","type":"$type","transactionId":"tx-$id","orderId":"$id","amount":$amount,""" +
-            """"occurredAt":"${clock.instant()}","failureReason":$failureReason}"""
-        val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec("test-webhook-secret".toByteArray(), "HmacSHA256")) }
-        val signature = HexFormat.of().formatHex(mac.doFinal("$timestamp.$raw".toByteArray()))
-        val result = mockMvcTester.post()
-            .uri("/api/v1/payments/webhooks/fake-pg")
-            .contentType(MediaType.APPLICATION_JSON)
-            .header("X-FakePg-Timestamp", timestamp)
-            .header("X-FakePg-Signature", signature)
-            .content(raw)
-            .exchange()
-        assertThat(result).hasStatus(HttpStatus.OK)
-        return result
+        payments.awaitPaymentRequested(id)
     }
     fun detail(token: String, id: Long): Map<*, *> {
         val result = mockMvcTester.get().uri("/api/v1/bookings/$id").header("Authorization", "Bearer $token").exchange()
@@ -126,8 +105,6 @@ abstract class FlowSupport(
         return parse(result)
     }
     fun awaitStatus(token: String, id: Long, state: String) = eventually { assertThat(detail(token, id)["status"]).isEqualTo(state) }
-    fun paymentStatus(id: Long): String? =
-        jdbc.queryForList("select status from payment.payment where order_id = ?", String::class.java, id).firstOrNull()
     fun reason(id: Long): String? =
         jdbc.queryForList("select cancel_reason from booking.booking where id = ?", String::class.java, id).firstOrNull()
     fun sold(schedule: Schedule): Int =

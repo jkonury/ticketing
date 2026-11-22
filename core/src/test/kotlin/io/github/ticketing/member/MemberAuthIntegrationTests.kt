@@ -95,6 +95,13 @@ class MemberAuthIntegrationTests(private val mockMvcTester: MockMvcTester) : Int
     }
 
     @Test
+    fun `결제 웹훅 경로는 core가 공개하지 않아 인증 없이는 401이다`() {
+        mockMvcTester.post().uri("/api/v1/payments/webhooks/fake-pg")
+            .assertThat()
+            .hasStatus(HttpStatus.UNAUTHORIZED)
+    }
+
+    @Test
     fun `리프레시 토큰으로 새 토큰을 받고 이전 리프레시 토큰은 다시 쓸 수 없다`() {
         val first = tokens(email())["refreshToken"] as String
 

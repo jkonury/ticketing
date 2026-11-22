@@ -133,7 +133,7 @@ internal class BookingWarmupWork(
 
     /**
      * 결제 요청 예열이다. 롤백 트랜잭션 안에서 만든 예매에 실제 결제 요청 유스케이스를 호출한다. 발행되는 [PaymentRequested]는
-     * 트랜잭션과 함께 사라져 AFTER_COMMIT 리스너(실제 PG 요청)가 실행되지 않는다.
+     * 트랜잭션과 함께 사라져 커밋 뒤 외부화(Kafka 발행)가 일어나지 않는다.
      */
     fun requestPayment(): PaymentRequestResult = isolated(1) { schedule, seats ->
         rolledBack {

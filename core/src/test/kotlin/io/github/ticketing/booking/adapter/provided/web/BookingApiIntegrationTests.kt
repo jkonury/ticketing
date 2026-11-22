@@ -7,8 +7,6 @@ import io.github.ticketing.booking.application.port.provided.RegisterScheduleSea
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
 import io.github.ticketing.expectStatus
-import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
-import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate

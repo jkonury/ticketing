@@ -2,10 +2,9 @@ package io.github.ticketing.booking.adapter.provided.warmup
 
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.MutableClock
-import io.github.ticketing.TestPg
 import io.github.ticketing.booking.adapter.provided.web.BookingController
 import io.github.ticketing.expectStatus
-import io.github.ticketing.payment.adapter.provided.warmup.PaymentWarmupWork
+import io.github.ticketing.support.KafkaPaymentStub
 import org.assertj.core.api.Assertions.assertThat
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
@@ -36,8 +35,7 @@ internal class StartupWarmupSecurityTests(
     private val availability: ApplicationAvailability,
     private val clock: MutableClock,
     private val jdbc: JdbcTemplate,
-    private val testPg: TestPg,
-    private val paymentWarmup: PaymentWarmupWork,
+    private val payments: KafkaPaymentStub,
 ) : IntegrationTestSupport() {
     private val warmupRole = jwt().authorities(SimpleGrantedAuthority("ROLE_STARTUP_WARMUP"))
 
@@ -144,15 +142,12 @@ internal class StartupWarmupSecurityTests(
         "select count(*) from booking.booking",
         "select count(*) from booking.schedule",
         "select count(*) from booking.schedule_seat",
-        "select count(*) from payment.payment",
-        "select count(*) from payment.webhook_event",
         "select count(*) from event_publication",
     ).map { requireNotNull(jdbc.queryForObject(it, Int::class.java)) }
 
     @Test
-    fun `예열 결제 요청은 실제 핸들러를 거치지만 결제 웹훅 이벤트 PG 요청을 남기지 않는다`() {
+    fun `예열 결제 요청은 실제 핸들러를 거치지만 예매 이벤트 결제 요청을 남기지 않는다`() {
         val before = counts()
-        val probesBefore = paymentWarmup.pgProbes
 
         val result = payment().with(warmupRole).header(STARTUP_WARMUP_HEADER, secret()).exchange()
         assertThat(result)
@@ -161,9 +156,8 @@ internal class StartupWarmupSecurityTests(
         assertThat(result.response.getHeader(STARTUP_WARMUP_IO_HEADER)).matches("db=\\d+;redis=\\d+")
 
         assertThat((result.mvcResult.handler as HandlerMethod).beanType).isEqualTo(BookingController::class.java)
-        assertThat(paymentWarmup.pgProbes).isEqualTo(probesBefore + 1)
         assertThat(counts()).isEqualTo(before)
-        assertThat(testPg.requests).isEmpty()
+        assertThat(payments.paymentRequests).isEmpty()
         assertThat(redis.keys("booking:warmup:*")).isEmpty()
     }
 
@@ -196,8 +190,6 @@ internal class StartupWarmupSecurityTests(
         assertThat(mockMvcTester.get().uri("/api/v1/bookings/-2").with(warmupRole).header(STARTUP_WARMUP_HEADER, real))
             .hasStatus(HttpStatus.FORBIDDEN)
         assertThat(mockMvcTester.post().uri("/api/v1/bookings/-1/cancel").with(warmupRole).header(STARTUP_WARMUP_HEADER, real))
-            .hasStatus(HttpStatus.FORBIDDEN)
-        assertThat(mockMvcTester.post().uri("/api/v1/payments/webhooks/fake-pg").with(warmupRole).header(STARTUP_WARMUP_HEADER, real))
             .hasStatus(HttpStatus.FORBIDDEN)
 
         assertThat(counts()).isEqualTo(before)

@@ -8,10 +8,8 @@ import io.github.ticketing.booking.application.port.provided.CreateBookingResult
 import io.github.ticketing.booking.application.port.provided.CreateBookingUseCase
 import io.github.ticketing.booking.application.port.provided.PaymentRequestResult
 import io.github.ticketing.booking.application.port.provided.RequestPaymentUseCase
-import io.github.ticketing.payment.PaymentWarmupRequested
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Primary
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.core.context.SecurityContextHolder
@@ -85,23 +83,17 @@ internal class WarmupAwareBookingQuery(
     }
 }
 
-/**
- * 예열 principal의 `POST /api/v1/bookings/-1/payments`만 격리 환경의 결제 요청으로 보낸다. 롤백이 끝난 뒤 payment 모듈에
- * 이벤트로 PG 송신·웹훅 예열을 요청한다(모듈 간 호출은 이벤트로만 한다).
- */
+/** 예열 principal의 `POST /api/v1/bookings/-1/payments`만 격리 환경의 결제 요청으로 보낸다. 결제 경로의 예열은 payment 앱이 자체로 한다. */
 @Primary
 @Component
 @ConditionalOnProperty("ticketing.startup-warmup.enabled", havingValue = "true")
 internal class WarmupAwareRequestPayment(
     @Qualifier("requestPaymentService") private val delegate: RequestPaymentUseCase,
     private val work: BookingWarmupWork,
-    private val events: ApplicationEventPublisher,
 ) : RequestPaymentUseCase {
     override fun request(memberId: Long, bookingId: Long): PaymentRequestResult {
         if (!isWarmupPrincipal()) return delegate.request(memberId, bookingId)
         if (bookingId != WARMUP_BOOKING_ID) throw AccessDeniedException("예열 템플릿이 아닙니다.")
-        return measuredWarmup {
-            work.requestPayment().also { events.publishEvent(PaymentWarmupRequested()) }
-        }
+        return measuredWarmup { work.requestPayment() }
     }
 }

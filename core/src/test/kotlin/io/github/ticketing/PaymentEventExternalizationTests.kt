@@ -1,5 +1,6 @@
 package io.github.ticketing
 
+import io.github.ticketing.payment.RefundRequested
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
@@ -8,34 +9,35 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
 import ticketing.contractfixtures.ContractEventFixtures
 import tools.jackson.databind.json.JsonMapper
 import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** 실제 브로커로 나간 메시지의 토픽·키·본문이 계약(골든 JSON, events.md)과 같은지 확인한다. */
+/** core가 실제 브로커로 내보내는 메시지의 토픽·키·본문이 계약(골든 JSON, events.md)과 같은지 확인한다. */
 class PaymentEventExternalizationTests(
     private val publisher: ApplicationEventPublisher,
     private val transactions: TransactionTemplate,
     private val kafkaProperties: KafkaProperties,
     private val topics: KafkaTopics,
+    private val jdbc: JdbcTemplate,
 ) : IntegrationTestSupport() {
     private val tree = JsonMapper()
 
+    // core가 발행하는 결제 계약 이벤트는 요청 2종뿐이다. 결과 3종은 payment 앱이 발행한다
     private val expectedTopics = mapOf(
         "PaymentRequested" to topics.paymentRequested,
         "RefundRequested" to topics.refundRequested,
-        "PaymentSucceeded" to topics.paymentSucceeded,
-        "PaymentFailed" to topics.paymentFailed,
-        "PaymentRefunded" to topics.paymentRefunded,
     )
 
     @Test
-    fun `결제 계약 이벤트 5종은 이벤트별 토픽에 orderId 키와 골든 JSON 본문으로 발행된다`() {
+    fun `결제 요청 계약 이벤트 2종은 이벤트별 토픽에 orderId 키와 골든 JSON 본문으로 발행된다`() {
         val events = ContractEventFixtures.samples.filter { it.javaClass.simpleName in expectedTopics }
         val consumer = consumer()
         val partitions = expectedTopics.values.flatMap { topic -> (0 until KafkaTopics.PARTITIONS).map { TopicPartition(topic, it) } }
@@ -63,6 +65,47 @@ class PaymentEventExternalizationTests(
             assertNull(record.headers().lastHeader("__TypeId__"), event.javaClass.simpleName)
             assertTrue(record.headers().none { it.key().startsWith("__") }, event.javaClass.simpleName)
         }
+    }
+
+    @Test
+    fun `결제 결과 이벤트 3종은 core가 외부화하지 않는다`() {
+        val results = ContractEventFixtures.samples.filter { it.javaClass.simpleName in RESULT_EVENTS }
+        val barrier = RefundRequested(102, "USER_CANCELLED", Instant.parse("2026-01-02T03:04:05Z"))
+        val consumer = consumer()
+        val partitions = (0 until KafkaTopics.PARTITIONS).map { TopicPartition(topics.refundRequested, it) }
+        consumer.assign(partitions)
+        consumer.seekToEnd(partitions)
+        partitions.forEach { consumer.position(it) }
+
+        transactions.executeWithoutResult {
+            results.forEach(publisher::publishEvent)
+            publisher.publishEvent(barrier)
+        }
+
+        // 결과 이벤트와 같은 트랜잭션에서 발행한 요청 이벤트가 브로커에 도착한 뒤에도 결과 토픽에는 아무것도 없어야 한다
+        val deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos()
+        var delivered = false
+        while (!delivered && System.nanoTime() < deadline) {
+            delivered = consumer.poll(Duration.ofMillis(500)).any { it.key() == "102" }
+        }
+        consumer.close()
+
+        assertTrue(delivered)
+        listOf(topics.paymentSucceeded, topics.paymentFailed, topics.paymentRefunded).forEach { topic ->
+            assertEquals(emptyList(), KafkaTestSupport.recordsOf(kafkaProperties.bootstrapServers, topic, "101"), topic)
+        }
+        assertEquals(
+            0,
+            jdbc.queryForObject(
+                "select count(*) from public.event_publication where event_type in (?, ?, ?)",
+                Int::class.java,
+                *results.map { it.javaClass.name }.toTypedArray(),
+            ),
+        )
+    }
+
+    private companion object {
+        val RESULT_EVENTS = setOf("PaymentSucceeded", "PaymentFailed", "PaymentRefunded")
     }
 
     private fun consumer() = KafkaConsumer(

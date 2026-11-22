@@ -39,9 +39,13 @@
 ### Spring 컨텍스트 재사용
 
 - 코어 통합 테스트는 `IntegrationTestSupport`를 상속하고 공통 애플리케이션 클래스·MockMvc·컨테이너 설정을 사용한다. 하위 테스트에 같은 `@SpringBootTest`·`@AutoConfigureMockMvc` 설정을 반복하지 않는다.
-- 공통 테스트 설정은 명시적으로 재사용한다. 클래스별 `@Import`, 프로필, 테스트 프로퍼티, 빈 대체는 다른 컨텍스트를 만들 수 있으므로 테스트 동작에 필요한 경우에만 추가한다. Clock·가짜 PG·배치 실패 주입 같은 대체는 `CommonTestConfiguration`의 공용 가변 빈으로 두고 `IntegrationTestSupport`가 매 테스트 전에 초기화한다. 테스트가 필요한 시각·응답은 `@BeforeEach`에서 설정한다. `@MockitoBean`·클래스별 빈 대체는 공용 빈으로 표현할 수 없을 때만 쓴다. 시작 시 데이터를 넣는 seed 프로필은 격리를 유지한다.
+- 공통 테스트 설정은 명시적으로 재사용한다. 클래스별 `@Import`, 프로필, 테스트 프로퍼티, 빈 대체는 다른 컨텍스트를 만들 수 있으므로 테스트 동작에 필요한 경우에만 추가한다. Clock·Kafka 결제 대역·배치 실패 주입 같은 대체는 `CommonTestConfiguration`의 공용 가변 빈으로 두고 `IntegrationTestSupport`가 매 테스트 전에 초기화한다. 테스트가 필요한 시각·응답은 `@BeforeEach`에서 설정한다. `@MockitoBean`·클래스별 빈 대체는 공용 빈으로 표현할 수 없을 때만 쓴다. 시작 시 데이터를 넣는 seed 프로필은 격리를 유지한다.
 - `@DirtiesContext`는 컨텍스트 자체를 복구할 수 없게 변경한 경우에만 쓴다. 테스트 데이터 정리를 대신하는 용도로 사용하지 않는다.
 - 같은 컨텍스트의 테스트는 고유 식별자로 데이터를 구분하고(잡처럼 전역을 훑는 결과는 자기 데이터 기준으로 단언한다), 비동기 이벤트 처리가 끝난 뒤 검증한다. 공유 Clock·가짜 구현의 가변 상태는 각 테스트가 필요한 초기 상태로 설정한다.
+
+### Kafka 결제 대역
+
+결제는 payment 앱이 맡으므로 core 테스트에서는 `KafkaPaymentStub`(`core/src/test/.../support/`)이 payment 앱 자리에 선다. `CommonTestConfiguration`의 공용 빈이며 `SharedTestBeansResetter`가 매 테스트 전에 초기화한다. 대역은 `PaymentRequested`·`RefundRequested` 토픽을 `ticketing-payment`와 다른 임의 그룹으로 소비해 `paymentRequests`·`refundRequests`에 기록하고(`awaitPaymentRequested`, `awaitRefundRequested`로 도착을 기다린다), 컨텍스트별 토픽 접두어를 따라 자기 컨텍스트의 토픽만 본다. 결과는 두 방식으로 발행한다. 요청 전에 `respondToPayment(orderId, Succeeded/Failed(times))`·`respondToRefund(orderId)`를 지정하면 요청이 도착할 때 응답하고(지정하지 않은 주문은 응답 없음), `publishSucceeded`·`publishFailed`·`publishRefunded`를 직접 호출하면 원하는 시점에 보낸다. 직접 호출을 반복하거나 `times`를 늘리면 같은 결과를 중복 발행해 booking의 멱등을 검증하고, 응답이 늦거나 없는 상황은 호출 시점으로 만든다. 결과는 `orderId` 키와 타입 헤더 없는 JSON으로 나가므로 실제 payment 앱과 같다. booking 소비자가 중복까지 처리했는지는 `awaitResultsConsumedByBooking`으로 확인한다(커밋된 오프셋과 DLT 비어 있음). 결제 결과 이벤트를 `ApplicationEventPublisher`로 직접 발행하지 않는다. core는 결과를 외부화하지 않으므로 Kafka로 나가지 않는다.
 
 ### Testcontainers 재사용
 
@@ -62,13 +66,13 @@
 
 ## 이벤트 계약
 
-- `contract`의 `ContractEventSerializationTests`와 `core`의 `ContractEventPublicationSerializationTests`에서 JSON 골든 파일을 공유한다. 계약 이벤트 변경 시 기본 직렬화와 실제 Modulith `EventSerializer`의 호환성을 모두 검증한다. [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)
+- `contract`의 `ContractEventSerializationTests`와 `core`의 `ContractEventPublicationSerializationTests`에서 JSON 골든 파일을 공유한다. 계약 이벤트 변경 시 기본 직렬화와 실제 Modulith `EventSerializer`의 호환성을 모두 검증한다. core는 결제 요청 2종의 외부화(`PaymentEventExternalizationTests`)와 결과 3종의 수신(Kafka 메시지 변환기)도 같은 골든으로 확인한다. [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)
 
 ## E2E·부하·CI 실행
 
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
 
-- 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)가 필요하다.
+- 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)가 필요하다. 결제 결과는 payment 앱이 발행하므로 `scripts/e2e`는 payment 앱을 띄우도록 바뀌기(M6 3-6) 전까지 결제 흐름이 동작하지 않는다.
 - E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`. core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
   - 사전 조건: `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18090 포트. `--web`은 Playwright web 앱을 13000 포트에 추가하므로 그 포트도 비어 있어야 한다.
   - `core-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)는 별도 프로세스로 실행한다.

@@ -2,8 +2,6 @@ package io.github.ticketing.booking.application.flow
 
 import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
-import io.github.ticketing.KafkaTestSupport
-import io.github.ticketing.KafkaTopics
 import io.github.ticketing.MutableClock
 import io.github.ticketing.booking.BookingCancelled
 import io.github.ticketing.booking.BookingConfirmed
@@ -15,22 +13,17 @@ import io.github.ticketing.booking.application.port.provided.RegisterScheduleSea
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
 import io.github.ticketing.expectStatus
-import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRequested
-import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.payment.RefundRequested
-import io.github.ticketing.payment.adapter.provided.event.PaymentRequestListener
-import io.github.ticketing.payment.adapter.provided.event.RefundRequestListener
 import io.github.ticketing.publicationCompleted
 import io.github.ticketing.publicationIds
+import io.github.ticketing.support.KafkaPaymentStub
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
@@ -43,7 +36,6 @@ import org.springframework.stereotype.Component
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.assertj.MockMvcTester
 import org.springframework.test.web.servlet.assertj.MvcTestResult
-import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.time.Clock
@@ -58,13 +50,10 @@ class BookingPaymentFlowTests(
     private val register: RegisterScheduleSeatsUseCase,
     private val redis: StringRedisTemplate,
     private val jdbc: JdbcTemplate,
-    private val publisher: ApplicationEventPublisher,
-    private val tx: TransactionTemplate,
     private val clock: MutableClock,
     private val collector: EventCollector,
     private val meters: MeterRegistry,
-    private val topics: KafkaTopics,
-    private val kafkaProperties: KafkaProperties,
+    private val payments: KafkaPaymentStub,
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
@@ -135,11 +124,7 @@ class BookingPaymentFlowTests(
         paymentId: Long = bookingId,
         amount: BigDecimal = BigDecimal(100000),
         paidAt: Instant = Instant.now(),
-    ) {
-        tx.executeWithoutResult {
-            publisher.publishEvent(PaymentSucceeded(paymentId, bookingId, amount, paidAt))
-        }
-    }
+    ) = payments.publishSucceeded(bookingId, amount, paymentId, paidAt)
 
     private fun snapshot(scheduleId: Long, seatId: Long): String? =
         redis.opsForHash<String, String>().get(snapshotKey(ScheduleId(scheduleId)), seatId.toString())
@@ -226,10 +211,7 @@ class BookingPaymentFlowTests(
         }
         assertThat(soldSeatCount(id)).isEqualTo(2)
 
-        KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.paymentSucceeded, id.toString(), "ticketing-booking", 3)
-        assertThat(
-            KafkaTestSupport.recordsOf(kafkaProperties.bootstrapServers, topics.deadLetterOf(topics.paymentSucceeded), id.toString()),
-        ).isEmpty()
+        payments.awaitResultsConsumedByBooking(payments.topics.paymentSucceeded, id, 3)
         awaitConfirmedListeners(id)
         assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).hasSize(1)
         assertThat(statusOf(token, id)).isEqualTo("CONFIRMED")
@@ -248,7 +230,7 @@ class BookingPaymentFlowTests(
         val id = book(token, schedule, listOf(1))
         pay(token, id).expectStatus(HttpStatus.ACCEPTED)
 
-        tx.executeWithoutResult { publisher.publishEvent(PaymentFailed(1, id, "카드 한도 초과", Instant.now())) }
+        payments.publishFailed(id, "카드 한도 초과")
 
         awaitStatus(token, id, "CANCELLED")
         await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE") }
@@ -261,6 +243,57 @@ class BookingPaymentFlowTests(
         assertThat(cancelled.refundRequired).isFalse()
 
         book(token(), schedule, listOf(1))
+    }
+
+    @Test
+    fun `결제 요청이 Kafka로 나가 결제 대역이 승인하면 예매가 확정된다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1, 2))
+        payments.respondToPayment(id, KafkaPaymentStub.PaymentResponse.Succeeded())
+
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
+
+        val request = payments.awaitPaymentRequested(id)
+        assertThat(request.idempotencyKey).isEqualTo("booking-$id")
+        assertThat(request.amount).isEqualByComparingTo(BigDecimal(200000))
+        awaitStatus(token, id, "CONFIRMED")
+        await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("SOLD") }
+        assertThat(soldSeatCount(id)).isEqualTo(2)
+        assertThat(payments.paymentRequestsOf(id)).hasSize(1)
+    }
+
+    @Test
+    fun `결제 대역이 거절하면 예매는 CANCELLED가 되고 좌석을 다시 선점할 수 있다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1))
+        payments.respondToPayment(id, KafkaPaymentStub.PaymentResponse.Failed("카드 한도 초과"))
+
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
+
+        awaitStatus(token, id, "CANCELLED")
+        await().atMost(Duration.ofSeconds(10)).untilAsserted { assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE") }
+        assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == id }.single().reason).isEqualTo("PAYMENT_FAILED")
+        assertThat(soldSeatCount(id)).isZero()
+
+        book(token(), schedule, listOf(1))
+    }
+
+    @Test
+    fun `같은 결제 실패 이벤트를 여러 번 받아도 한 번만 취소하고 확정되지 않는다`() {
+        val schedule = newSchedule()
+        val token = token()
+        val id = book(token, schedule, listOf(1))
+        payments.respondToPayment(id, KafkaPaymentStub.PaymentResponse.Failed(times = 3))
+
+        pay(token, id).expectStatus(HttpStatus.ACCEPTED)
+
+        awaitStatus(token, id, "CANCELLED")
+        payments.awaitResultsConsumedByBooking(payments.topics.paymentFailed, id, 3)
+        assertThat(collector.of(BookingCancelled::class.java) { it.bookingId == id }).hasSize(1)
+        assertThat(statusOf(token, id)).isEqualTo("CANCELLED")
+        assertThat(soldSeatCount(id)).isZero()
     }
 
     @Test
@@ -279,10 +312,7 @@ class BookingPaymentFlowTests(
         awaitStatus(token, id, "CONFIRMED")
         succeed(id, paymentId = 999)
 
-        KafkaTestSupport.awaitConsumed(kafkaProperties.bootstrapServers, topics.paymentSucceeded, id.toString(), "ticketing-booking", 2)
-        assertThat(
-            KafkaTestSupport.recordsOf(kafkaProperties.bootstrapServers, topics.deadLetterOf(topics.paymentSucceeded), id.toString()),
-        ).isEmpty()
+        payments.awaitResultsConsumedByBooking(payments.topics.paymentSucceeded, id, 2)
         awaitConfirmedListeners(id)
         assertThat(lag.count() - countBefore).isEqualTo(1L)
         assertThat(lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) - totalBefore).isEqualTo(1500.0)
@@ -293,6 +323,7 @@ class BookingPaymentFlowTests(
         val schedule = newSchedule()
         val token = token()
         val id = book(token, schedule, listOf(1))
+        payments.respondToRefund(id)
         pay(token, id).expectStatus(HttpStatus.ACCEPTED)
         clock.now = clock.now.plus(Duration.ofMinutes(6))
 
@@ -305,6 +336,12 @@ class BookingPaymentFlowTests(
         assertThat(collector.of(BookingExpired::class.java) { it.bookingId == id }).hasSize(1)
         assertThat(soldSeatCount(id)).isZero()
         assertThat(collector.of(BookingConfirmed::class.java) { it.bookingId == id }).isEmpty()
+
+        // RefundRequested가 Kafka로 나가 결제 대역에 닿고, 대역이 보낸 PaymentRefunded를 booking이 오류 없이 소비한다
+        assertThat(payments.awaitRefundRequested(id).reason).isEqualTo("BOOKING_EXPIRED")
+        payments.awaitResultsConsumedByBooking(payments.topics.paymentRefunded, id, 1)
+        assertThat(statusOf(token, id)).isEqualTo("EXPIRED")
+        assertThat(snapshot(schedule, 1)).isEqualTo("AVAILABLE")
     }
 
     @Test

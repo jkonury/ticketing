@@ -6,12 +6,12 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 
 - 모듈은 `io.github.ticketing.<모듈명>` 직계 패키지다.
 - 다른 모듈에 공개하는 것은 **이벤트 클래스와 최소한의 API 타입**뿐이며 모듈 루트 패키지에 둔다. 나머지는 하위 패키지에 두어 비공개로 한다. 공유 계약 이벤트의 소스 위치와 호환 규칙은 [contract 작성 지침](backend-contract.md)을 따른다.
-- 모듈 간 호출은 이벤트로 한다. 발행은 `ApplicationEventPublisher`를 쓴다. 로컬 이벤트는 `@ApplicationModuleListener`, Kafka로 외부화한 결제 계약 5종은 `@KafkaListener`로 수신한다([이벤트 카탈로그](../architecture/events.md#kafka-외부화-대상-m6)).
+- 모듈 간 호출은 이벤트로 한다. 발행은 `ApplicationEventPublisher`를 쓴다. 로컬 이벤트는 `@ApplicationModuleListener`로 수신한다. 결제는 payment 앱이 맡으므로 core가 발행하는 결제 요청 2종(`PaymentRequested`·`RefundRequested`)은 Kafka로 외부화하고(`booking`의 `BookingEventExternalizationConfig`), payment 앱이 발행하는 결과 3종(`PaymentSucceeded`·`PaymentFailed`·`PaymentRefunded`)은 `@KafkaListener`로 수신한다([이벤트 카탈로그](../architecture/events.md#kafka-외부화-대상-m6)).
 - 이벤트는 불변이고 과거형 이름을 쓴다 (`BookingConfirmed`, `PaymentFailed`). 엔티티가 아니라 ID와 필요한 값만 담는다. Kafka 외부화 대상도 직렬화 가능한 단순 타입만 쓴다.
 - 이벤트 리스너는 **멱등**하게 만든다. 같은 이벤트가 다시 와도 결과가 같아야 한다.
 - 모듈을 추가하거나 의존을 바꾸면 Modulith 검증 테스트를 실행하고, `./gradlew :core:modulithDocs`로 `docs/modulith/` 다이어그램을 다시 생성해 같은 변경에 포함한다. 기본 `test`는 문서를 생성하지 않는다.
 
-## 헥사고날 (`booking`, `payment`, `settlement`, `coupon`)
+## 헥사고날 (`booking`, `settlement`, `coupon`)
 
 ```
 <module>
@@ -25,7 +25,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
     └── required.jpa / required.jooq / required.redis / required.pg
 ```
 
-- 의존 방향: `adapter → application → domain`. 반대 방향 import 금지. 현재 ArchUnit 계층 검사의 대상은 `booking`, `payment`, `settlement`다. `coupon`에도 설계 규칙을 적용하며 검사 범위 확대는 별도 작업으로 확인한다.
+- 의존 방향: `adapter → application → domain`. 반대 방향 import 금지. 현재 ArchUnit 계층 검사의 대상은 `booking`, `settlement`다. `coupon`에도 설계 규칙을 적용하며 검사 범위 확대는 별도 작업으로 확인한다.
 - 도메인 모델과 JPA 엔티티를 분리한다. 변환은 `adapter.required.jpa` 안의 매퍼가 맡는다.
 - 컨트롤러는 `port.provided`만 호출한다. 요청/응답 DTO는 `adapter.provided.web`에 두고 도메인 타입을 그대로 응답으로 내보내지 않는다.
 - 비즈니스 규칙(상태 전이, 최대 4매 등)은 `domain`에 둔다. 서비스는 흐름 조율만 한다.
@@ -82,6 +82,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 ## Batch Job
 
 - Job은 데이터를 소유한 `core` 모듈의 `adapter.provided.batch`에 두고 `batch` 프로필에서 활성화한다. 재시작·재실행해도 결과의 정합성을 유지한다. 날짜 기준 Job은 `targetDate`와 `run.id`, 예매·쿠폰 보정 등 시각 기준 Job은 `run.id`를 쓴다. 각 Job의 파라미터와 재실행 조건은 [Batch 설계](../architecture/batch.md)를 따른다.
+- 결제 대사 Job은 core가 아니라 payment 앱이 소유하며 [payment-batch](backend-payment-batch.md)가 실행한다.
 - 대량 읽기에는 jOOQ와 chunk 처리를 사용해 메모리 사용량을 제한한다. Step의 처리 방식과 쓰기 전략은 Job별로 정한다.
 
 실행 설정은 [core-batch 작성 지침](backend-core-batch.md)을 따른다.
@@ -99,8 +100,9 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 
 ### payment
 
-- 결제 요청과 웹훅은 멱등 키로 중복을 처리한다. PG 웹훅의 서명을 검증한다.
-- 예매는 `orderId`로 참조한다. 결제 계약 이벤트의 패키지와 의존 방향은 [코어 모듈 규칙](../architecture.md#모듈-규칙)을 따른다.
+- core에는 payment 구현이 없다. 결제·환불 처리, 웹훅 서명·멱등, 결제 대사는 payment 앱이 맡는다([payment 작성 지침](backend-payment.md)).
+- `io.github.ticketing.payment` 패키지는 contract의 결제 계약 이벤트 5종만 담는다. Modulith는 이를 `payment` 모듈로 인식하고 `booking`이 이 이벤트에만 의존한다([코어 모듈 규칙](../architecture.md#모듈-규칙)). 이 패키지에 core 구현 클래스를 두지 않는다.
+- 예매는 `orderId`로 결제를 참조한다. 결과 이벤트는 순서와 중복이 보장되지 않으므로 booking의 상태 전이 검사로 멱등하게 처리한다.
 
 ### settlement
 

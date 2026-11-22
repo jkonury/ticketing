@@ -2,8 +2,8 @@ package io.github.ticketing.e2e
 
 import io.github.ticketing.EventCollector
 import io.github.ticketing.MutableClock
-import io.github.ticketing.TestPg
 import io.github.ticketing.e2e.support.FlowSupport
+import io.github.ticketing.support.KafkaPaymentStub
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -21,10 +21,10 @@ class SeatHoldConcurrencyTests(
     mockMvcTester: MockMvcTester,
     jdbc: JdbcTemplate,
     redis: StringRedisTemplate,
-    pg: TestPg,
+    payments: KafkaPaymentStub,
     clock: MutableClock,
     collector: EventCollector,
-) : FlowSupport(mockMvcTester, jdbc, redis, pg, clock, collector) {
+) : FlowSupport(mockMvcTester, jdbc, redis, payments, clock, collector) {
 
     private fun concurrent(requests: List<() -> MvcTestResult>): List<MvcTestResult> {
         val ready = CountDownLatch(requests.size)
@@ -71,7 +71,7 @@ class SeatHoldConcurrencyTests(
         val id = created(results[index])
 
         pay(users[index], id)
-        webhook(id, "PAYMENT_APPROVED")
+        payments.publishSucceeded(id)
         awaitStatus(users[index], id, "CONFIRMED")
 
         assertThat(sold(schedule)).isEqualTo(1)
@@ -114,7 +114,7 @@ class SeatHoldConcurrencyTests(
         val firstId = created(book(first, schedule, listOf(seat)))
 
         pay(first, firstId)
-        webhook(firstId, "PAYMENT_APPROVED")
+        payments.publishSucceeded(firstId)
         awaitStatus(first, firstId, "CONFIRMED")
         eventually { assertThat(redis.opsForHash<String, String>().get(snapshot(schedule), seat.toString())).isEqualTo("SOLD") }
 
@@ -125,11 +125,11 @@ class SeatHoldConcurrencyTests(
         val secondId = created(book(second, schedule, listOf(seat)))
 
         pay(second, secondId)
-        webhook(secondId, "PAYMENT_APPROVED")
+        payments.publishSucceeded(secondId)
         awaitStatus(second, secondId, "CANCELLED")
 
         assertThat(reason(secondId)).isEqualTo("SEAT_ALREADY_SOLD")
-        eventually { assertThat(pg.refunds.filter { it.first == "tx-$secondId" }).hasSize(1) }
+        eventually { assertThat(payments.refundRequestsOf(secondId)).hasSize(1) }
         assertThat(sold(schedule)).isEqualTo(1)
         assertThat(detail(first, firstId)["status"]).isEqualTo("CONFIRMED")
         assertThat(output.all).doesNotContain(" 500 ", "Internal Server Error")

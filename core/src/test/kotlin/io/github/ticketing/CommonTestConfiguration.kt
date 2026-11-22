@@ -3,29 +3,22 @@ package io.github.ticketing
 import io.github.ticketing.booking.application.port.provided.ExpireBookingUseCase
 import io.github.ticketing.booking.application.port.provided.ExpireResult
 import io.github.ticketing.booking.application.service.ExpireBookingService
-import io.github.ticketing.payment.application.port.required.PgPaymentRequest
-import io.github.ticketing.payment.application.port.required.PgPort
-import io.github.ticketing.payment.application.port.required.PgRequestResult
-import io.github.ticketing.payment.application.port.required.PgTransaction
-import io.github.ticketing.payment.application.port.required.PgTransactionQueryPort
 import io.github.ticketing.settlement.adapter.required.jooq.DailySettlementJooqAdapter
 import io.github.ticketing.settlement.application.port.required.DailySettlementCommandPort
 import io.github.ticketing.settlement.domain.DailySettlement
+import io.github.ticketing.support.KafkaPaymentStub
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.context.event.EventListener
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.stereotype.Component
-import org.springframework.transaction.support.TransactionSynchronizationManager
+import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -38,13 +31,10 @@ class CommonTestConfiguration {
     @Primary
     fun mutableClock() = MutableClock()
 
+    /** payment 앱 자리에 서는 Kafka 결제 대역. 결제 요청·환불 요청을 소비하고 지정한 결과를 발행한다. */
     @Bean
-    @Primary
-    fun testPg() = TestPg()
-
-    @Bean
-    @Primary
-    fun testPgTransactions() = TestPgTransactions()
+    fun kafkaPaymentStub(kafkaProperties: KafkaProperties, topics: KafkaTopics, json: JsonMapper) =
+        KafkaPaymentStub(kafkaProperties.bootstrapServers, topics, json)
 
     @Bean
     fun eventCollector() = EventCollector()
@@ -52,11 +42,10 @@ class CommonTestConfiguration {
     @Bean
     fun sharedTestBeansResetter(
         clock: MutableClock,
-        pg: TestPg,
-        pgTransactions: TestPgTransactions,
+        paymentStub: KafkaPaymentStub,
         expireUseCase: FailingExpireBookingUseCase,
         settlementWriter: FailingDailySettlementWriter,
-    ) = SharedTestBeansResetter(clock, pg, pgTransactions, expireUseCase, settlementWriter)
+    ) = SharedTestBeansResetter(clock, paymentStub, expireUseCase, settlementWriter)
 
     @Bean
     @Primary
@@ -69,15 +58,13 @@ class CommonTestConfiguration {
 
 class SharedTestBeansResetter(
     private val clock: MutableClock,
-    private val pg: TestPg,
-    private val pgTransactions: TestPgTransactions,
+    private val paymentStub: KafkaPaymentStub,
     private val expireUseCase: FailingExpireBookingUseCase,
     private val settlementWriter: FailingDailySettlementWriter,
 ) {
     fun reset() {
         clock.reset()
-        pg.reset()
-        pgTransactions.reset()
+        paymentStub.reset()
         expireUseCase.reset()
         settlementWriter.reset()
     }
@@ -100,72 +87,6 @@ class MutableClock : Clock() {
     override fun getZone(): ZoneId = ZoneId.of("UTC")
     override fun withZone(zone: ZoneId): Clock = this
     override fun instant(): Instant = now
-}
-
-class TestPg : PgPort {
-    val requests = CopyOnWriteArrayList<PgPaymentRequest>()
-    val refunds = CopyOnWriteArrayList<Pair<String, String>>()
-    val transactions = ConcurrentHashMap<String, String>()
-
-    /** 주문 또는 거래 ID별로 호출 시점에 트랜잭션이 활성이었는지 기록한다. */
-    val flags = ConcurrentHashMap<String, Boolean>()
-
-    @Volatile var gate: CountDownLatch? = null
-
-    @Volatile var paymentResult = "accepted"
-
-    @Volatile var refundResult = "accepted"
-
-    fun reset() {
-        requests.clear()
-        refunds.clear()
-        transactions.clear()
-        flags.clear()
-        gate = null
-        paymentResult = "accepted"
-        refundResult = "accepted"
-    }
-
-    override fun requestPayment(request: PgPaymentRequest): PgRequestResult {
-        val active = TransactionSynchronizationManager.isActualTransactionActive()
-        flags[request.orderId] = active
-        check(!active)
-        requests += request
-        gate?.let { check(it.await(10, TimeUnit.SECONDS)) }
-        val transaction = transactions.computeIfAbsent(request.idempotencyKey) { "tx-${request.orderId}" }
-        return when {
-            paymentResult == "unknown" || request.idempotencyKey.startsWith("unknown") -> PgRequestResult.Unknown("timeout")
-            paymentResult == "rejected" -> PgRequestResult.Rejected("declined")
-            else -> PgRequestResult.Accepted(transaction)
-        }
-    }
-
-    override fun requestRefund(transactionId: String, idempotencyKey: String): PgRequestResult {
-        val active = TransactionSynchronizationManager.isActualTransactionActive()
-        flags[transactionId] = active
-        check(!active)
-        refunds += transactionId to idempotencyKey
-        return when {
-            refundResult == "unknown" -> PgRequestResult.Unknown("timeout")
-            refundResult == "rejected" || transactionId.startsWith("reject") -> PgRequestResult.Rejected("declined")
-            else -> PgRequestResult.Accepted(transactionId)
-        }
-    }
-}
-
-class TestPgTransactions : PgTransactionQueryPort {
-    var transactions: List<PgTransaction> = emptyList()
-    var fail = false
-
-    fun reset() {
-        transactions = emptyList()
-        fail = false
-    }
-
-    override fun findTransactions(date: LocalDate): List<PgTransaction> {
-        check(!fail) { "의도된 PG 조회 실패" }
-        return transactions
-    }
 }
 
 @Component

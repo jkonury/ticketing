@@ -16,7 +16,9 @@ import org.springframework.data.jpa.repository.Query
 class HexagonalArchitectureTests {
 
     private val classes get() = importedClasses
-    private val hexagonalModules = listOf("booking", "payment", "settlement")
+
+    // payment 구현은 payment 앱으로 옮겨 core에는 계약 이벤트만 남았다
+    private val hexagonalModules = listOf("booking", "settlement")
 
     companion object {
         // 테스트 메서드마다 인스턴스가 새로 만들어지므로 클래스 분석은 한 번만 한다

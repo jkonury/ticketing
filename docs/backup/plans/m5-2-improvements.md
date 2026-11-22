@@ -223,7 +223,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 - [기준 측정](../../performance/m5-baseline.md)의 후보 2와 Hikari 표
 - `core/src/main/kotlin/io/github/ticketing/booking/application/service/CreateBookingService.kt`, `PaymentResultService.kt`, `RequestPaymentService.kt`
 - `core/src/main/kotlin/io/github/ticketing/booking/adapter/required/jpa/`의 `BookingPersistenceAdapter`, `ScheduleSeatPersistenceAdapter`
-- `core/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentTransactionService.kt`, `PaymentRequestService.kt`
+- `payment/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentTransactionService.kt`, `PaymentRequestService.kt`
 - `core/src/test/kotlin/io/github/ticketing/booking/application/service/CreateBookingServiceTests.kt`, `core/src/test/kotlin/io/github/ticketing/booking/application/flow/BookingPaymentFlowTests.kt`, `core/src/main/resources/application.yml`
 
 ## 작업
@@ -291,7 +291,7 @@ M5-1에서 확인한 대기열 이탈·404, 인기 좌석 예매 지연, Gateway
 
 - [기준 측정](../../performance/m5-baseline.md)의 「정합성」, [예매 시퀀스](../../architecture/flows.md#621-예매-흐름-시퀀스-대기열-제외), [fake-pg 계약](../../architecture/integrations.md)
 - `BookingPaymentFlowTests`의 「다른 예매가 이미 sold_seat를 가진 좌석이면…」 테스트
-- `PaymentResultService`, `core/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentRefundService.kt`
+- `PaymentResultService`, `payment/src/main/kotlin/io/github/ticketing/payment/application/service/PaymentRefundService.kt`
 - `scripts/loadtest/verify-integrity.sh`, `scripts/loadtest/run.sh`, `loadtest/scenarios/`, `loadtest/lib/`
 
 ## 작업

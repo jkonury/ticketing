@@ -34,11 +34,10 @@ import io.github.ticketing.coupon.domain.IssuedCouponId
 import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import io.github.ticketing.coupon.domain.MemberId
 import io.github.ticketing.expectStatus
-import io.github.ticketing.payment.PaymentFailed
 import io.github.ticketing.payment.PaymentRequested
-import io.github.ticketing.payment.PaymentSucceeded
 import io.github.ticketing.publicationCompleted
 import io.github.ticketing.publicationIds
+import io.github.ticketing.support.KafkaPaymentStub
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.awaitility.Awaitility.await
@@ -84,6 +83,7 @@ class BookingCouponSagaTests(
     private val serializer: EventSerializer,
     private val bookings: BookingCommandPort,
     private val bookingCoupons: BookingCouponUseCase,
+    private val payments: KafkaPaymentStub,
 ) : IntegrationTestSupport() {
     private val json = JsonMapper.builder().build()
 
@@ -195,7 +195,7 @@ class BookingCouponSagaTests(
     }
 
     private fun succeed(bookingId: Long, amount: BigDecimal) {
-        tx.executeWithoutResult { publisher.publishEvent(PaymentSucceeded(bookingId, bookingId, amount, Instant.now())) }
+        payments.publishSucceeded(bookingId, amount)
     }
 
     private fun releases(bookingId: Long) = collector.of(CouponReleaseRequested::class.java) { it.orderId == bookingId }
@@ -235,7 +235,7 @@ class BookingCouponSagaTests(
         val (id, couponId) = reservedBooking(m, newSchedule())
         pay(m, id).expectStatus(HttpStatus.ACCEPTED)
 
-        tx.executeWithoutResult { publisher.publishEvent(PaymentFailed(1, id, "카드 한도 초과", Instant.now())) }
+        payments.publishFailed(id, "카드 한도 초과")
 
         awaitStatus(m, id, "CANCELLED")
         awaitCoupon(couponId, IssuedCouponStatus.ISSUED)

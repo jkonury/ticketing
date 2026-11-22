@@ -26,8 +26,8 @@ System_Boundary("TicketingApplication_boundary", "TicketingApplication", $tags="
 }
 
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Coupon, "listens to", $techn="", $tags="", $link="")
-Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Payment, "listens to", $techn="", $tags="", $link="")
 Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Catalog, "listens to", $techn="", $tags="", $link="")
+Rel(TicketingApplication.TicketingApplication.Booking, TicketingApplication.TicketingApplication.Payment, "depends on", $techn="", $tags="", $link="")
 
 SHOW_LEGEND(true)
 hide stereotypes

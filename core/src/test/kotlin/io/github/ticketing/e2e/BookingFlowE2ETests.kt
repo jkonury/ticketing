@@ -2,23 +2,24 @@ package io.github.ticketing.e2e
 
 import io.github.ticketing.EventCollector
 import io.github.ticketing.MutableClock
-import io.github.ticketing.TestPg
 import io.github.ticketing.e2e.support.FlowSupport
+import io.github.ticketing.support.KafkaPaymentStub
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.servlet.assertj.MockMvcTester
+import java.math.BigDecimal
 
 class BookingFlowE2ETests(
     mockMvcTester: MockMvcTester,
     jdbc: JdbcTemplate,
     redis: StringRedisTemplate,
-    pg: TestPg,
+    payments: KafkaPaymentStub,
     clock: MutableClock,
     collector: EventCollector,
-) : FlowSupport(mockMvcTester, jdbc, redis, pg, clock, collector) {
+) : FlowSupport(mockMvcTester, jdbc, redis, payments, clock, collector) {
 
     @Test
     fun `공연 등록부터 두 좌석 결제 확정까지 진행한다`() {
@@ -28,9 +29,9 @@ class BookingFlowE2ETests(
 
         pay(user, id)
 
-        assertThat(pg.requests.filter { it.orderId == id.toString() }).hasSize(1)
+        assertThat(payments.paymentRequestsOf(id)).hasSize(1)
 
-        webhook(id, "PAYMENT_APPROVED", 200000)
+        payments.publishSucceeded(id, BigDecimal(200000))
         awaitStatus(user, id, "CONFIRMED")
 
         val listResult = mockMvcTester.get().uri("/api/v1/bookings/me").header("Authorization", "Bearer $user").exchange()
