@@ -14,10 +14,10 @@ usage() {
             [--tool k6|gatling] [--gatling-heap 2g] [--gatling-report] [--booking-p95-ms N] [--jvm-opts '-XX:옵션 ...']
 --warmup은 같은 앱(JVM 재시작 없음)에서 별도 회차로 같은 시나리오 부하를 N회 보낸 뒤, 비동기 처리(결제 웹훅·확정, 대기열 정리)가
 끝났는지 확인하고 새 회차·좌석으로 측정합니다. 기본은 워밍업 없는 콜드 실행입니다.
---internal-warmup은 core·gateway readiness 전 내부 예열을 켭니다. 외부 --warmup·--aot-cache와 함께 쓰지 않으며 별도 계열로 기록합니다.
+--internal-warmup은 core·gateway·payment readiness 전 내부 예열을 켭니다. 외부 --warmup·--aot-cache와 함께 쓰지 않으며 별도 계열로 기록합니다.
 --warmup-rounds는 워밍업 횟수입니다(기본 5). Gatling 회차별 결과는 warmup-<n>/, settle은 warmup-settle-<n>.json에 남깁니다.
 서버 지표는 본 부하 직전·직후 직접 수집한 누적 카운터의 차분(server-delta.json)으로 계산합니다.
---aot-cache는 core·gateway·realtime을 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
+--aot-cache는 core·gateway·realtime·payment를 jar로 풀어 학습 기동(부하 N회, 기본 15)으로 AOT 캐시를 만든 뒤, 측정 기동마다 그 캐시로 띄웁니다(워밍업 요청 없음).
 --no-rate-limit은 Gateway rate limiter를 끄는 대조 실험용입니다.
 --restart-after-warmup은 진단 전용으로 --warmup 15회 직후 지정한 서비스(쉼표 구분)만 새 JVM으로 다시 띄웁니다. core·gateway는 내부 예열을 켜고 realtime은 예열 없이 띄웁니다. 재기동 서비스의 이전 로그는 <서비스>-prewarm.log로 남기며 워밍업 구간 차분 검사는 건너뜁니다.
 --codelist는 진단 전용으로 본 부하 직전과 CODELIST_DELAY초(기본 52, 예매 폭주 직전) 뒤에 core·gateway의 jcmd Compiler.codelist를 codelist-<서비스>-<pre|burst>.txt로 남깁니다.
@@ -57,7 +57,7 @@ WARMUP_ROUNDS=5
 # 워밍업 한 회차의 비동기 처리 완료 대기 상한(초)과 대기열 정리 대기 상한(초). 넘으면 그 실행은 실패로 둔다
 WARMUP_SETTLE_TIMEOUT=120
 WARMUP_QUEUE_TIMEOUT=30
-METRIC_TARGETS=(core=18080 realtime=18081 gateway=18000 fake-pg=18090)
+METRIC_TARGETS=(core=18080 realtime=18081 gateway=18000 fake-pg=18090 payment=18085)
 AOT_CACHE=false
 AOT_TRAIN_ROUNDS=15
 NO_RATE_LIMIT=false
@@ -138,7 +138,7 @@ for command in docker curl java jq taskset; do
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo 'Docker가 실행 중이어야 합니다.' >&2; exit 1; }
-for port in 18000 18080 18081 18090; do
+for port in 18000 18080 18081 18085 18090; do
   if command -v ss >/dev/null; then
     occupied=$(ss -ltnp "sport = :$port" | tail -n +2)
   else
@@ -172,7 +172,7 @@ while IFS= read -r -d '' source_file; do
   diff_status=0
   git diff --no-index --binary -- /dev/null "$source_file" >> "$RUN_ROOT/source.patch" || diff_status=$?
   ((diff_status <= 1)) || exit "$diff_status"
-done < <(git ls-files --others --exclude-standard -z -- core/src core-batch/src realtime/src gateway/src fake-pg/src loadtest/gatling scripts/loadtest scripts/lib observability)
+done < <(git ls-files --others --exclude-standard -z -- core/src core-batch/src payment/src realtime/src gateway/src fake-pg/src loadtest/gatling scripts/loadtest scripts/lib observability)
 
 PIDS=()
 SAMPLER_PID=
@@ -204,7 +204,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-build_tasks=(:core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar)
+build_tasks=(:core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar :payment:bootJar)
 if [[ $TOOL == gatling ]]; then
   build_tasks+=(:loadtest-gatling:gatlingDist)
 elif [[ $SCENARIO != smoke ]]; then
@@ -227,6 +227,9 @@ if $OBSERVABILITY; then
 fi
 "${compose[@]}" up -d --wait "${services[@]}" > "$RUN_ROOT/compose.log" 2>&1 \
   || { echo "Compose 기동 실패: $RUN_ROOT/compose.log" >&2; tail -n 30 "$RUN_ROOT/compose.log" >&2; exit 1; }
+# 기존 볼륨에는 payment_db가 없을 수 있으므로 매 실행마다 멱등하게 준비한다
+"$ROOT/scripts/db/ensure-payment-db.sh" > "$RUN_ROOT/ensure-payment-db.log" 2>&1 \
+  || { echo "payment_db 준비 실패: $RUN_ROOT/ensure-payment-db.log" >&2; tail -n 30 "$RUN_ROOT/ensure-payment-db.log" >&2; exit 1; }
 
 # start <name> <dir> <heap> <jar> [환경변수...]  (환경변수는 NAME=VALUE 형태)
 start() {
@@ -241,7 +244,8 @@ start() {
     read -r -a extra_opts <<< "$JVM_OPTS"
     opts+=("${extra_opts[@]}")
   fi
-  if [[ -n "${SCOUTER_AGENT_DIR:-}" ]]; then
+  # payment는 전용 Scouter 설정 파일이 없어 에이전트를 붙이지 않는다
+  if [[ -n "${SCOUTER_AGENT_DIR:-}" && $name != payment ]]; then
     local scouter_conf
     scouter_conf=$(scouter_config_file "$name")
     opts+=("-javaagent:$SCOUTER_AGENT_DIR/scouter.agent.jar"
@@ -268,7 +272,7 @@ start() {
 health() {
   local name=$1 port=$2 pid=$3 dir=$4 deadline=$((SECONDS + 180))
   local health_path=/actuator/health
-  [[ $name != core && $name != gateway ]] || health_path=/actuator/health/readiness
+  [[ $name != core && $name != payment && $name != gateway ]] || health_path=/actuator/health/readiness
   until curl -fsS "http://localhost:$port$health_path" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
     if ((SECONDS >= deadline)) || ! kill -0 "$pid" 2>/dev/null; then
       printf '%s 기동 실패. 로그: %s/%s.log\n' "$name" "$dir" "$name" >&2
@@ -316,11 +320,11 @@ write_env() {
     printf 'hikari-maximum-pool-size: %s\n' "${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:-10}"
     if $AOT_CACHE; then
       printf 'aot-cache: 사용(학습 부하 %s회)\n' "$AOT_TRAIN_ROUNDS"
-      for name in core gateway realtime; do printf 'aot-cache-size-%s: %s\n' "$name" "$(stat -c %s "$AOT_DIR/$name.aot")"; done
+      for name in core gateway realtime payment; do printf 'aot-cache-size-%s: %s\n' "$name" "$(stat -c %s "$AOT_DIR/$name.aot")"; done
     else
       printf 'aot-cache: 미사용\n'
     fi
-    printf 'heap: core 2g, realtime 1g, gateway 1g, fake-pg 512m\n'
+    printf 'heap: core 2g, payment 1g, realtime 1g, gateway 1g, fake-pg 512m\n'
     if [[ -n ${SCOUTER_AGENT_DIR:-} ]]; then
       sha256sum "$SCOUTER_AGENT_DIR/scouter.agent.jar"
       for name in core gateway realtime fake-pg; do
@@ -336,22 +340,27 @@ start_apps() {
   [[ $SCENARIO != hot-seats && $SCENARIO != seat-conflict-refund ]] || batch=(TICKETING_REALTIME_QUEUE_ADMISSION_BATCH_SIZE=1000)
   if $OBSERVABILITY; then obs=(TRACING_EXPORT_ENABLED=true TRACING_SAMPLING_PROBABILITY=0.1); fi
   start fake-pg "$dir" "-Xms512m -Xmx512m" fake-pg/build/libs/fake-pg.jar \
-    FAKE_PG_WEBHOOK_URL=http://localhost:18080/api/v1/payments/webhooks/fake-pg \
+    FAKE_PG_WEBHOOK_URL=http://localhost:18085/api/v1/payments/webhooks/fake-pg \
     FAKE_PG_BEHAVIOR_FAILURE_RATE="$failure" FAKE_PG_BEHAVIOR_DUPLICATE_RATE="$duplicate" "${obs[@]}"
   start core "$dir" "-Xms2g -Xmx2g" core/build/libs/core.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" COUPON_LIMITED_CLAIM_STRATEGY="$COUPON_STRATEGY" "${obs[@]}"
   start realtime "$dir" "-Xms1g -Xmx1g" realtime/build/libs/realtime.jar "${batch[@]}" "${obs[@]}"
   local gw_env=()
   if $NO_RATE_LIMIT; then gw_env=(TICKETING_GATEWAY_RATE_LIMIT_ENABLED=false); fi
   start gateway "$dir" "-Xms1g -Xmx1g" gateway/build/libs/gateway.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" "${gw_env[@]}" "${obs[@]}"
+  # payment는 PIDS 뒤쪽(인덱스 4)에 둔다. 기존 인덱스(fake-pg 0, core 1, realtime 2, gateway 3)를 유지한다
+  start payment "$dir" "-Xms1g -Xmx1g" payment/build/libs/payment.jar STARTUP_WARMUP_ENABLED="$INTERNAL_WARMUP" "${obs[@]}"
   health fake-pg 18090 "${PIDS[0]}" "$dir" || return 1
   health core 18080 "${PIDS[1]}" "$dir" || return 1
   health realtime 18081 "${PIDS[2]}" "$dir" || return 1
   health gateway 18000 "${PIDS[3]}" "$dir" || return 1
+  health payment 18085 "${PIDS[4]}" "$dir" || return 1
   if $INTERNAL_WARMUP; then
     printf '\n내부 예열 결과(기동 로그, timeout 시 취소 시점 호출 수):\n' >> "$dir/env.txt"
     rg 'startup-warmup outcome=' "$dir/core.log" "$dir/gateway.log" >> "$dir/env.txt"
+    rg 'payment-warmup outcome=' "$dir/payment.log" >> "$dir/env.txt" # payment는 로그 접두어가 payment-warmup이다
     if ! rg -q 'startup-warmup outcome=completed ' "$dir/core.log" ||
-      ! rg -q 'startup-warmup outcome=completed ' "$dir/gateway.log"; then
+      ! rg -q 'startup-warmup outcome=completed ' "$dir/gateway.log" ||
+      ! rg -q 'payment-warmup outcome=completed ' "$dir/payment.log"; then
       echo "내부 예열 미완료로 본 측정을 시작하지 않습니다: $dir/env.txt" >&2
       return 1
     fi
@@ -863,7 +872,7 @@ AOT_PHASE=use
 prepare_aot() {
   mkdir -p "$AOT_DIR"
   local name
-  for name in core gateway realtime; do
+  for name in core gateway realtime payment; do
     java -Djarmode=tools -jar "$name/build/libs/$name.jar" extract --destination "$AOT_DIR/$name" > "$AOT_DIR/extract-$name.log" 2>&1 \
       || { echo "$name jar 풀기 실패: $AOT_DIR/extract-$name.log" >&2; return 1; }
     [[ -f $AOT_DIR/$name/$name.jar ]] || { echo "$name 풀린 jar를 찾지 못했습니다: $AOT_DIR/$name" >&2; return 1; }
@@ -881,7 +890,7 @@ prepare_aot() {
       "${vus_env[@]}" taskset -c "$K6_CPUS" "$OUT/k6" run --summary-export "$dir/k6-summary-$round.json" "loadtest/scenarios/$SCENARIO.ts" > "$dir/k6-$round.log" 2>&1 || true
   done
   cleanup # SIGTERM으로 정상 종료해야 캐시가 써진다. wait가 캐시 생성이 끝날 때까지 기다린다
-  for name in core gateway realtime; do
+  for name in core gateway realtime payment; do
     [[ -s $AOT_DIR/$name.aot ]] || { echo "AOT 캐시가 만들어지지 않았습니다: $AOT_DIR/$name.aot (로그: $dir/$name.log)" >&2; return 1; }
   done
   AOT_PHASE=use

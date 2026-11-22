@@ -29,6 +29,8 @@ MEMBERS_FILE=build/loadtest/members.json SCHEDULE_FILE=<schedule.json> VUS=1000 
 
 ## run.sh로 실행 (메모리 비교)
 
+run.sh가 fake-pg·core·realtime·Gateway와 payment(18085) 앱을 띄운다. fake-pg 웹훅은 payment 앱을 직접 호출하고 결제 원장은 `payment_db`에 쌓인다. Gatling 자체는 Gateway(18000)만 호출하므로 시뮬레이션 코드는 그대로다.
+
 ```bash
 ./scripts/loadtest/run.sh --scenario queue-surge --tool gatling --gatling-heap 2g   # 기본 힙 2g
 ./scripts/loadtest/run.sh --scenario hot-seats --tool gatling --gatling-report    # HTML 리포트 생성

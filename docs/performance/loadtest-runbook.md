@@ -12,12 +12,13 @@
 
 1. Docker를 실행하고 `docker info`가 성공하는지 확인한다. Java 25, `curl`, `jq`, `taskset`, `python3`, `openssl`, `rg`와 Docker Compose가 필요하다. `./gradlew`를 실행할 수 있어야 한다.
 2. 루트의 `.env`를 준비한다. 없으면 `.env.example`을 복사하고 로컬 PostgreSQL 접속 정보와 JWT 비밀 값을 설정한다. 이미 실행 중인 PostgreSQL의 계정·암호와 일치해야 한다. `.env` 내용은 공유하지 않는다.
-3. 다른 Gradle 검사, E2E, 부하 테스트를 종료한다. 다른 측정과 동시에 실행하지 않는다. 로컬 앱·서비스가 TCP 포트 18000, 18080, 18081, 18090을 사용하지 않아야 한다.
+3. 다른 Gradle 검사, E2E, 부하 테스트를 종료한다. 다른 측정과 동시에 실행하지 않는다. 로컬 앱·서비스가 TCP 포트 18000, 18080, 18081, 18085, 18090을 사용하지 않아야 한다. 프로세스는 fake-pg, core, realtime, Gateway와 payment(18085, 힙 1g)다. fake-pg 웹훅은 payment 앱을 직접 호출한다.
+4. `.env`에 `TICKETING_PAYMENT_POSTGRES_DB/USER/PASSWORD`가 있어야 한다. 스크립트가 compose 기동 뒤 `scripts/db/ensure-payment-db.sh`로 `payment_db`를 멱등하게 준비한다. payment에는 전용 Scouter 설정이 없어 에이전트를 붙이지 않는다. `--internal-warmup`은 payment의 `payment-warmup outcome=completed`도 확인한다.
 
 ```bash
 docker info >/dev/null && echo 'Docker 준비됨'
 git status --short
-ss -ltnp | rg ':(18000|18080|18081|18090)\b' || true
+ss -ltnp | rg ':(18000|18080|18081|18085|18090)\b' || true
 ```
 
 포트 확인에서 줄이 출력되면 점유한 프로세스나 컨테이너를 확인하고 중지한다. 예를 들어 `scripts/dev/run.sh --fake-pg`로 띄운 fake-pg가 18090을 점유하면 그 스크립트를 종료한다(Ctrl+C). 다른 사람이 사용 중인 서비스라면 먼저 사용 여부를 확인한다. runner는 테스트용 fake-pg 앱을 직접 띄운다.
@@ -90,7 +91,7 @@ jar를 풀고 학습 기동(hot-seats 부하 N회)으로 캐시를 만든 뒤, �
 
 - 규모는 100쌍(회원 200명)으로 고정한다(`env.txt`의 `conflict-scale`, `conflict-manifest.json`). 시드(`seed.sh`)가 3석 묶음마다 A는 앞 2석, B는 뒤 2석(가운데 1석 겹침)을 정한다.
 - 첫 단계(k6 `PHASE=first`, 100 VU): A 회원이 대기열 → 입장 → PENDING 예매를 만든다. runner가 그 예매의 **겹치는 좌석 선점 키 하나**만 지운다(키 값이 해당 예매의 `hold_token`일 때만, `conflict-injection.json`). 이후 둘째 단계(`PHASE=second`, 200 VU): B 회원이 대기열 → 입장 → 겹치는 좌석을 예매하고, 시작 시각에 A·B가 동시에 결제를 요청한다(같은 멱등 키로 한 번 더 보낸다). 서버 지표·`k6-summary.json`·`resources.csv`는 둘째 단계 구간만이고 첫 단계는 `k6-first.log`·`k6-first-summary.json`이다. 어느 예매가 이길지는 고정하지 않는다.
-- `verify-compensation.sh`가 booking·payment를 각 스키마에서 따로 조회해 예매 ID(주문 ID)로 대조하고 PG는 `GET /v1/transactions`로 확인한다. 쌍마다 확정 1·`SEAT_ALREADY_SOLD` 취소 1·패자 `sold_seat` 0·승자 SOLD 유지·패자 전용 좌석 AVAILABLE·패자 결제 `REFUNDED`(PG `REFUNDED`와 금액 일치)·승자 PG 환불 없음을 본다. 환불은 `COMPENSATION_TIMEOUT`초(기본 120)까지 기다리며 미완료는 실패다. 원장은 `ledger-*.json`, 결과는 `compensation.json`에 남는다. 실제 전달 건수는 `fake-pg.log`에서 센다(`pgApprovedDeliveries`·`pgDuplicateApprovedDeliveries` 등).
+- `verify-compensation.sh`가 booking은 core DB, payment는 `payment_db`(컨테이너 환경의 `TICKETING_PAYMENT_POSTGRES_USER`/`DB`, 비밀번호는 환경 변수로만 전달)에서 따로 조회해 예매 ID(주문 ID)로 대조하고 PG는 `GET /v1/transactions`로 확인한다. 쌍마다 확정 1·`SEAT_ALREADY_SOLD` 취소 1·패자 `sold_seat` 0·승자 SOLD 유지·패자 전용 좌석 AVAILABLE·패자 결제 `REFUNDED`(PG `REFUNDED`와 금액 일치)·승자 PG 환불 없음을 본다. 환불은 `COMPENSATION_TIMEOUT`초(기본 120)까지 기다리며 미완료는 실패다. 원장은 `ledger-*.json`, 결과는 `compensation.json`에 남는다. 실제 전달 건수는 `fake-pg.log`에서 센다(`pgApprovedDeliveries`·`pgDuplicateApprovedDeliveries` 등).
 
 ### 워밍업 실행 (`--warmup`)
 

@@ -13,6 +13,18 @@ SPEC.loader.exec_module(PROBE)
 
 
 class TcpProbeTest(unittest.TestCase):
+    def test_리슨_포트에_payment_앱이_포함된다(self):
+        self.assertEqual(PROBE.LISTEN_PORTS['payment'], 18085)
+        listening = [(PROBE.LISTEN, 18085, 0, 0, 3), (PROBE.LISTEN, 18080, 0, 0, 1)]
+        original = PROBE.sockets
+        PROBE.sockets = lambda: listening
+        try:
+            found = PROBE.listen_state()
+        finally:
+            PROBE.sockets = original
+        self.assertEqual(found['payment']['recvQ'], 3)
+        self.assertEqual(found['core']['recvQ'], 1)
+
     def test_실제_예매_시각과_1초_분포를_추출한다(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

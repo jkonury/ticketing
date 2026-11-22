@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 사용: verify-compensation.sh <scheduleId> <manifest.json> <출력 디렉터리> [fake-pg.log 경로]
 # seat-conflict-refund 시나리오의 기대 결과(그룹마다 확정 1·SEAT_ALREADY_SOLD 취소 1·패자 sold_seat 0·패자 REFUNDED)를 검증한다.
-# booking·payment는 각 스키마에서 따로 조회해 주문 ID로 jq에서 대조하고, PG는 거래 조회 API로 확인한다. 스키마를 넘는 조인은 하지 않는다.
+# booking은 core DB, payment는 payment_db에서 따로 조회해 주문 ID로 jq에서 대조하고, PG는 거래 조회 API로 확인한다. 스키마를 넘는 조인은 하지 않는다.
 # 비동기 환불은 COMPENSATION_TIMEOUT초(기본 120)까지 기다린다. 미완료는 실패로 남기며 원장·Redis 상태는 항상 출력 디렉터리에 보존한다.
 set -euo pipefail
 
@@ -26,6 +26,11 @@ psql_q() {
 ORDER_IDS=$(jq -r '[.pairs[] | .bookingA, .bookingB] | join(",")' "$MANIFEST")
 PAIRS=$(jq -r '.pairs | length' "$MANIFEST")
 
+# payment 원장은 별도 DB(payment_db)에 있다. 계정·DB 이름은 컨테이너 환경에서 읽고 비밀번호는 환경 변수로만 전달한다(명령행 인자 금지)
+psql_payment() {
+  docker compose exec -T postgres sh -c 'PGPASSWORD="$TICKETING_PAYMENT_POSTGRES_PASSWORD" psql -U "$TICKETING_PAYMENT_POSTGRES_USER" -d "$TICKETING_PAYMENT_POSTGRES_DB" -v ON_ERROR_STOP=1 -qAt -c "$1"' sh "$1"
+}
+
 dump_ledgers() {
   # booking 스키마 원장
   psql_q "SELECT coalesce(jsonb_agg(r), '[]'::jsonb) FROM (
@@ -33,8 +38,8 @@ dump_ledgers() {
       (SELECT count(*) FROM booking.sold_seat s WHERE s.booking_id = b.id) AS sold,
       (SELECT jsonb_agg(bs.seat_id ORDER BY bs.seat_id) FROM booking.booking_seat bs WHERE bs.booking_id = b.id) AS seats
     FROM booking.booking b WHERE b.schedule_id = $SCHEDULE_ID) r" > "$OUTDIR/ledger-booking.json"
-  # payment 스키마 원장(주문 ID는 예매 ID)
-  psql_q "SELECT coalesce(jsonb_agg(r), '[]'::jsonb) FROM (
+  # payment_db 원장(주문 ID는 예매 ID)
+  psql_payment "SELECT coalesce(jsonb_agg(r), '[]'::jsonb) FROM (
     SELECT p.order_id AS \"orderId\", p.status, p.amount::bigint AS amount, p.pg_transaction_id AS \"txnId\",
       p.refund_requested_at IS NOT NULL AS \"refundRequested\", p.refunded_at IS NOT NULL AS refunded,
       (SELECT count(*) FROM payment.webhook_event w WHERE w.transaction_id = p.pg_transaction_id) AS \"webhookEvents\"

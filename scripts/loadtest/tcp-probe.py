@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 
-LISTEN_PORTS = {'gateway': 18000, 'core': 18080, 'realtime': 18081, 'fake-pg': 18090}
+LISTEN_PORTS = {'gateway': 18000, 'core': 18080, 'realtime': 18081, 'fake-pg': 18090, 'payment': 18085}
 # 호스트 전역 카운터(/proc/net/netstat TcpExt, /proc/net/snmp Tcp)에서 남길 항목
 TCPEXT_KEYS = ('ListenOverflows', 'ListenDrops', 'TCPTimeouts', 'TCPSynRetrans', 'TCPLostRetransmit',
                'TCPFastRetrans', 'TCPSlowStartRetrans', 'TCPReqQFullDrop', 'TCPReqQFullDoCookies', 'TCPAbortOnData',
