@@ -125,7 +125,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 체크리스트
 
 - [x] **3-1 Kafka 공용 설정 common 추출**
-- [ ] **3-2 payment 앱 뼈대** — Gradle 앱, `payment_db`·전용 계정(신규·기존 볼륨 모두), 자체 Flyway(payment 스키마·`event_publication`), jOOQ 생성, Testcontainers
+- [x] **3-2 payment 앱 뼈대** — Gradle 앱, `payment_db`·전용 계정(신규·기존 볼륨 모두), 자체 Flyway(payment 스키마·`event_publication`), jOOQ 생성, Testcontainers
 - [ ] **3-3 payment 코드 이전** — core의 payment 코드·테스트를 payment 앱으로 복사하고 웹훅, Kafka 리스너, JWT, 자체 예열을 적용한다. 이 작업에서는 core의 payment 코드도 유지한다
 - [ ] **3-4 payment-batch** — 결제 대사 Job을 payment-batch로 이전하고 배치 메타데이터를 구성한다
 - [ ] **3-5 core에서 payment 제거** — core·core-batch에서 payment 코드를 제거하고 core 테스트에 Kafka 결제 대역을 적용한다

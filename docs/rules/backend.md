@@ -10,6 +10,7 @@ Kotlin, Spring Boot 4.x, Java 25 기반이다. 설계 근거는 [아키텍처](.
 |---|---|
 | `core/` | [core 작성 지침](backend-core.md) |
 | `core-batch/` | [core-batch 작성 지침](backend-core-batch.md) |
+| `payment/` | [payment 작성 지침](backend-payment.md) |
 | `realtime/` | [realtime 작성 지침](backend-realtime.md) |
 | `gateway/` | [gateway 작성 지침](backend-gateway.md) |
 | `fake-pg/` | [fake-pg 작성 지침](backend-fake-pg.md) |
