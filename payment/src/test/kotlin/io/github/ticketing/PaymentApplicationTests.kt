@@ -1,17 +1,20 @@
 package io.github.ticketing
 
+import io.github.ticketing.payment.adapter.provided.warmup.PaymentWarmupRunner
 import org.assertj.core.api.Assertions.assertThat
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
-import org.springframework.context.annotation.Import
 import org.springframework.kafka.core.KafkaAdmin
 import org.springframework.kafka.listener.DefaultErrorHandler
 
-@SpringBootTest
-@Import(TestcontainersConfiguration::class)
-class PaymentApplicationTests(private val dsl: DSLContext, private val context: ApplicationContext, private val kafkaAdmin: KafkaAdmin) {
+class PaymentApplicationTests(private val dsl: DSLContext, private val context: ApplicationContext, private val kafkaAdmin: KafkaAdmin) :
+    IntegrationTestSupport() {
+
+    @Test
+    fun `예열 설정이 꺼져 있으면 러너 빈이 없다`() {
+        assertThat(context.getBeansOfType(PaymentWarmupRunner::class.java)).isEmpty()
+    }
 
     @Test
     fun `Flyway가 결제 테이블과 이벤트 발행 레지스트리를 생성한다`() {

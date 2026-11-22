@@ -80,11 +80,19 @@ server:
 ticketing:
   kafka:
     topic-prefix: ticketing
+  startup-warmup:
+    enabled: ${STARTUP_WARMUP_ENABLED:false}
+    max-duration: ${STARTUP_WARMUP_MAX_DURATION:30s}
+    adapter-iterations: ${STARTUP_WARMUP_ADAPTER_ITERATIONS:200}
   jwt:
     secret: ${TICKETING_JWT_SECRET}
   payment:
     fake-pg:
+      base-url: http://localhost:18090
+      connect-timeout: 3s
+      read-timeout: 3s
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}
+      webhook-timestamp-tolerance: 5m
 logging:
   level:
     org.jooq.Constants: off

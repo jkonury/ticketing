@@ -6,3 +6,6 @@
 - 전용 계정이 결제 DB에 접속할 때 `search_path`는 `public`이다. 앱 연결은 Hikari의 기본 스키마도 `public`으로 지정한다.
 - 앱의 Flyway가 `payment` 스키마와 `public.event_publication`을 관리한다. jOOQ는 같은 마이그레이션을 임시 PostgreSQL에 적용해 `payment` 스키마의 코드를 `build/` 아래의 `ticketing.jooq.payment` 패키지에 생성한다.
 - 통합 테스트는 JVM 단위로 PostgreSQL·Kafka Testcontainers를 공유하고, 컨텍스트마다 DB와 Kafka 토픽 접두사를 분리한다. [백엔드 테스트 지침](backend-testing.md#testcontainers-재사용)
+- 결제 조회는 core와 같은 공유 비밀로 HS256 JWT를 검증하고 `role` 클레임의 USER 권한을 요구한다. fake-pg 웹훅은 JWT 없이 받고 요청 서명을 검증한다.
+- 예열을 켜면 `ApplicationRunner`가 readiness 전에 제한 시간 동안 결제와 웹훅 경로를 롤백 트랜잭션으로 실행하고 PG 거래를 읽는다. 예열이 실패해도 앱은 기동한다.
+- 결제·환불 요청의 Kafka 리스너 그룹은 `ticketing-payment`를 유지해 전환 시 core가 커밋한 오프셋을 이어받는다.
