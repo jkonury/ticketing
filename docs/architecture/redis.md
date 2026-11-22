@@ -36,7 +36,7 @@ realtime 소유 키는 `{scheduleId}` 해시 태그로 같은 슬롯에 둔다(`
 | `queue:active` | Set | 대기자가 있는 회차 ID |
 | `queue:admission:<token>` | Hash, TTL | `memberId`, `scheduleId`; Gateway 검증 계약은 [ADR 0020](../adr/0020-gateway-verification-contracts.md) 참조 |
 
-회차별 Lua 처리는 같은 `{scheduleId}` 해시 태그를 가진 키만 대상으로 한다. `queue:admission:<token>`은 해시 태그가 없으므로 Lua 밖에서 기록한다.
+회차별 Lua 처리는 같은 `{scheduleId}` 해시 태그를 가진 키만 대상으로 한다. `queue:admission:<token>`은 해시 태그가 없으므로 회차 Lua 밖에서 단일 키 스크립트(`write-admission-token.lua`)로 HSET·PEXPIRE를 원자적으로 기록한다.
 
 ### 좌석 선점 키 형식 (코어 `booking`, realtime이 읽음)
 

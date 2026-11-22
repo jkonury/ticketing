@@ -64,11 +64,11 @@ class AdmissionService(
                         val memberId = pair[0].toString()
                         val tokenKey = "queue:admission:${pair[1]}"
                         runCatching {
-                            redis.opsForHash<String, String>().putAll(
-                                tokenKey,
-                                mapOf("memberId" to memberId, "scheduleId" to scheduleId.toString()),
-                            ).awaitSingle()
-                            redis.expire(tokenKey, properties.admissionTokenTtl).awaitSingle()
+                            redis.execute(
+                                writeAdmissionTokenScript,
+                                listOf(tokenKey),
+                                listOf(memberId, scheduleId.toString(), properties.admissionTokenTtl.toMillis().toString()),
+                            ).next().awaitSingle()
                             meters.counter("queue.admission", "result", "gateway_ready").increment()
                         }.onFailure {
                             meters.counter("queue.admission", "result", "gateway_write_failed").increment()
@@ -110,6 +110,7 @@ class AdmissionService(
     companion object {
         private const val TOKEN_BYTES = 32
         private val logger = LoggerFactory.getLogger(AdmissionService::class.java)
+        internal val writeAdmissionTokenScript = DefaultRedisScript(loadQueueScript("write-admission-token.lua"), Long::class.java)
         private val admitScript = DefaultRedisScript(
             ClassPathResource("redis/queue/admit.lua").inputStream.use { String(it.readBytes(), Charsets.UTF_8) },
             List::class.java,

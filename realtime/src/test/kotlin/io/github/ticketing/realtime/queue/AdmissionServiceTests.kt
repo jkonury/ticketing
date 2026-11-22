@@ -20,6 +20,7 @@ class AdmissionServiceTests(
     private val service: AdmissionService,
     private val clock: MutableClock,
     private val meters: MeterRegistry,
+    private val properties: QueueProperties,
 ) : RealtimeIntegrationTestSupport(client, redis) {
     @Test
     fun `대기열에 없으면 입장 기록을 읽어 입장 토큰을 반환한다`() = runTest {
@@ -41,6 +42,17 @@ class AdmissionServiceTests(
 
         val token = redis.opsForValue().get(QueueKeys.admitted(schedule, 1)).awaitSingle()
         assertThat(result).isInstanceOfSatisfying(QueueStatus.Admitted::class.java) { assertThat(it.admissionToken).isEqualTo(token) }
+    }
+
+    @Test
+    fun `입장 토큰 스크립트는 해시와 TTL을 함께 기록한다`() = runTest {
+        val tokenKey = QueueKeys.admission("script-token")
+
+        redis.execute(AdmissionService.writeAdmissionTokenScript, listOf(tokenKey), listOf("7", "99", "60000")).next().awaitSingle()
+
+        assertThat(redis.opsForHash<String, String>().entries(tokenKey).collectMap({ it.key }, { it.value }).awaitSingle())
+            .containsEntry("memberId", "7").containsEntry("scheduleId", "99")
+        assertThat(redis.getExpire(tokenKey).awaitSingle()).isPositive().isLessThanOrEqualTo(Duration.ofMillis(60000))
     }
 
     @Test
@@ -96,7 +108,7 @@ class AdmissionServiceTests(
             val tokenKey = QueueKeys.admission(token)
             assertThat(redis.opsForHash<String, String>().entries(tokenKey).collectMap({ it.key }, { it.value }).awaitSingle())
                 .containsEntry("memberId", member.toString()).containsEntry("scheduleId", schedule.toString())
-            assertThat(redis.getExpire(tokenKey).awaitSingle()).isPositive()
+            assertThat(redis.getExpire(tokenKey).awaitSingle()).isPositive().isLessThanOrEqualTo(properties.admissionTokenTtl)
         }
         (3L..5L).forEach { member ->
             clientFor(member).get().uri(path(schedule) + "/me").exchange().expectStatus().isOk.expectBody()
