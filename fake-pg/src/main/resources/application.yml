@@ -38,13 +38,16 @@ server:
 
 fake-pg:
   webhook:
-    url: ${FAKE_PG_WEBHOOK_URL:http://localhost:18080/api/v1/payments/webhooks/fake-pg}
+    url: ${FAKE_PG_WEBHOOK_URL:http://localhost:18085/api/v1/payments/webhooks/fake-pg}
     # 기본값을 두지 않는다. 환경 변수로 반드시 주입한다
     secret: ${FAKE_PG_WEBHOOK_SECRET}
     delay: 500ms
     duplicate-count: 2
     max-attempts: 3
     retry-delay: 1s
+  # 승인 보류 제어 API(/v1/test/approval-holds). E2E만 켠다
+  test-controls:
+    enabled: false
   behavior:
     failure-rate: 0.0
     timeout-rate: 0.0

@@ -2,6 +2,7 @@ package io.github.ticketing.fakepg.payment.service
 
 import io.github.ticketing.fakepg.payment.config.FakePgProperties
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Duration
@@ -13,6 +14,7 @@ class PaymentService(
     private val store: TransactionStore,
     private val scenarioResolver: ScenarioResolver,
     private val webhookSender: WebhookSender,
+    private val holds: ObjectProvider<ApprovalHolds>,
     private val properties: FakePgProperties,
     private val clock: Clock,
 ) {
@@ -49,13 +51,21 @@ class PaymentService(
         return result
     }
 
+    /** 보류된 승인을 풀어 승인과 웹훅을 지금 보낸다. 보류된 거래가 없으면 false. */
+    fun releaseHeldApproval(orderId: String): Boolean {
+        val tx = holds.ifAvailable?.release(orderId) ?: return false
+        log.info("보류된 승인을 푼다 transactionId={} orderId={}", tx.transactionId, orderId)
+        scheduleApproval(tx, Duration.ZERO, copies = 1)
+        return true
+    }
+
     fun findTransactions(date: LocalDate): List<Transaction> = store.findByRequestedDate(date)
 
     // 거래 상태는 웹훅이 나가는 시점에 확정한다. 지연 시나리오에서는 그동안 PENDING으로 남는다.
     private fun schedulePaymentResult(tx: Transaction) {
         val webhook = properties.webhook
         when (tx.scenario) {
-            Scenario.SUCCESS -> scheduleApproval(tx, webhook.delay, copies = 1)
+            Scenario.SUCCESS -> if (holds.ifAvailable?.holdIfRegistered(tx) != true) scheduleApproval(tx, webhook.delay, copies = 1)
 
             Scenario.FAIL -> scheduleFailure(tx, webhook.delay)
 

@@ -68,6 +68,7 @@ class RateLimitFilter(
     init {
         mapOf(
             "core-api" to properties.default,
+            "payment-api" to properties.default,
             "realtime-queues" to properties.default,
             "core-bookings-create" to properties.bookingCreate,
             "core-coupon-claims" to properties.couponClaim,

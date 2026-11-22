@@ -1,6 +1,7 @@
 package io.github.ticketing.e2e
 
 import io.github.ticketing.e2e.support.BatchSupport
+import io.github.ticketing.e2e.support.BatchTarget
 import io.github.ticketing.e2e.support.E2eClient
 import io.github.ticketing.e2e.support.Member
 import io.github.ticketing.e2e.support.Schedule
@@ -13,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * M6 분리 전후 비교용 Batch 기준선. core-batch를 별도 프로세스로 실행해 E2E로 만든 데이터의 결과를 고정한다.
+ * M6 분리 전후 비교용 Batch 기준선. core-batch(정산·미결제 정리)와 payment-batch(결제 대사)를 별도 프로세스로 실행해 E2E로 만든 데이터의 결과를 고정한다.
  * 같은 DB에 이전 실행 데이터가 남으므로 이 테스트가 만든 회차·예매로만 검증한다.
  */
 class BatchBaselineE2eTests {
@@ -47,7 +48,7 @@ class BatchBaselineE2eTests {
         client.payAndAwaitConfirmed(refundBuyer, refunded)
         client.cancelBooking(refundBuyer, refunded)
         client.poll { client.bookingDetail(refundBuyer, refunded)["status"].asString() == "CANCELLED" }
-        client.poll { BatchSupport.psql("SELECT status FROM payment.payment WHERE order_id = $refunded") == listOf("REFUNDED") }
+        client.poll { BatchSupport.paymentPsql("SELECT status FROM payment.payment WHERE order_id = $refunded") == listOf("REFUNDED") }
         client.poll {
             // 정산 복사본(이벤트 비동기 수신)이 판매 3건·환불 1건을 모두 받을 때까지 기다린다
             BatchSupport.psql("SELECT count(*) FROM settlement.booking_sale WHERE schedule_id = ${schedule.id}") == listOf("3") &&
@@ -88,20 +89,20 @@ class BatchBaselineE2eTests {
         val sales = createSales()
         val orders = listOf(sales.plain, sales.discounted, sales.refunded).joinToString(",")
 
-        val run = BatchSupport.runJob("paymentReconciliationJob", "targetDate=$today")
+        val run = BatchSupport.runJob("paymentReconciliationJob", "targetDate=$today", target = BatchTarget.PAYMENT)
 
         assertEquals(0, run.exitCode, run.log.path)
         assertEquals("COMPLETED", run.status, run.log.path)
         // PG(fake-pg)는 실행마다 비워지므로 우리 주문 3건이 스냅샷에 있어야 대사가 실제로 비교된 것이다
         assertEquals(
             listOf("3"),
-            BatchSupport.psql(
+            BatchSupport.paymentPsql(
                 "SELECT count(*) FROM payment.pg_transaction_snapshot WHERE target_date = '$today' AND order_id IN ($orders)",
             ),
         )
         assertEquals(
             emptyList(),
-            BatchSupport.psql(
+            BatchSupport.paymentPsql(
                 "SELECT order_id, mismatch_type FROM payment.reconciliation_mismatch WHERE target_date = '$today' AND order_id IN ($orders)",
             ),
         )

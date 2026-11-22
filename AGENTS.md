@@ -63,6 +63,7 @@ docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 �
 ./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.<Simulation>  # Gatling 부하 시나리오 (loadtest/gatling/README.md)
 ./gradlew build                      # 전체 빌드 + 테스트
 ./gradlew :core:bootRun
+./gradlew :payment:bootRun          # 결제 앱(18085). fake-pg 웹훅이 직접 호출. scripts/dev/run.sh --payment
 ./gradlew :realtime:bootRun
 ./gradlew :gateway:bootRun           # BFF·클라이언트는 Gateway(18000)를 거쳐 호출
 # 최초 1회: web 환경 변수 파일 생성

@@ -189,7 +189,7 @@ class E2eClient(private val gatewayUrl: String) {
         return booking.body["bookingId"].asLong()
     }
 
-    suspend fun payAndAwaitConfirmed(member: Member, bookingId: Long) {
+    suspend fun requestPayment(member: Member, bookingId: Long) {
         val payment = request(
             "POST",
             "/api/v1/bookings/$bookingId/payments",
@@ -197,6 +197,10 @@ class E2eClient(private val gatewayUrl: String) {
             headers = mapOf("Idempotency-Key" to UUID.randomUUID().toString()),
         )
         check(payment.status == 202) { "결제 요청 실패: ${payment.status}" }
+    }
+
+    suspend fun payAndAwaitConfirmed(member: Member, bookingId: Long) {
+        requestPayment(member, bookingId)
         poll { bookingDetail(member, bookingId)["status"].asString() == "CONFIRMED" }
     }
 

@@ -10,6 +10,7 @@ scrape_configs:
           - host.docker.internal:18000
           - host.docker.internal:18080
           - host.docker.internal:18081
+          - host.docker.internal:18085
           - host.docker.internal:18090
   - job_name: redis
     static_configs:

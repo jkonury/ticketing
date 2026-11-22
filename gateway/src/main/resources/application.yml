@@ -84,6 +84,7 @@ ticketing:
       allowed-origins: http://localhost:13000
     core-uri: ${CORE_URI:http://localhost:18080}
     realtime-uri: ${REALTIME_URI:http://localhost:18081}
+    payment-uri: ${PAYMENT_URI:http://localhost:18085}
     # core 호스트에만 거는 연결 상한: core Tomcat accept 큐(100)를 넘는 동시 연결 시도를 막고, 초과분은 Gateway에서 대기시킨다(대기 수 무제한)
     core-pool:
       max-connections: ${GATEWAY_CORE_POOL_MAX_CONNECTIONS:100}

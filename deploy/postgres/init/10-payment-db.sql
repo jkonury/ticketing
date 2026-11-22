@@ -3,6 +3,11 @@
 \set payment_password ''
 \getenv payment_password TICKETING_PAYMENT_POSTGRES_PASSWORD
 
+-- 비밀번호 리터럴이 들어간 문이 실패해도 서버 로그(log_min_error_statement 기본 ERROR)에 문장이 남지 않게 한다. 세션 한정 설정이라 되돌릴 필요가 없다
+SET log_min_error_statement = panic;
+SET log_statement = none;
+SET log_min_duration_statement = -1;
+
 -- 기존 .env로 새 볼륨을 초기화할 때는 결제 DB 준비를 나중에 할 수 있다.
 SELECT :'payment_password' <> '' AS payment_configured \gset
 \if :payment_configured

@@ -20,7 +20,13 @@ for command in docker curl java; do
   command -v "$command" >/dev/null || { printf '필요한 도구가 없습니다: %s\n' "$command" >&2; exit 1; }
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
-ports=(18000 18080 18081 18090 "$REALTIME_B_PORT")
+# payment 앱·payment-batch·E2E 웹훅 재전송에 필요한 키. 값은 출력하지 않는다
+missing=$(set -a; source .env; set +a
+  for key in TICKETING_PAYMENT_POSTGRES_DB TICKETING_PAYMENT_POSTGRES_USER TICKETING_PAYMENT_POSTGRES_PASSWORD TICKETING_JWT_SECRET FAKE_PG_WEBHOOK_SECRET; do
+    [[ -n ${!key:-} ]] || printf '%s ' "$key"
+  done)
+[[ -z $missing ]] || { printf '.env에 결제 앱 설정이 없습니다: %s(.env.example 참고)\n' "$missing" >&2; exit 1; }
+ports=(18000 18080 18081 18085 18090 "$REALTIME_B_PORT")
 if $WEB; then ports+=(13000); fi
 if command -v ss >/dev/null; then
   for port in "${ports[@]}"; do
@@ -53,12 +59,14 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
-if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar :core-batch:bootJar > "$LOG_DIR/build.log" 2>&1; then
+if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:bootJar :payment:bootJar :core-batch:bootJar :payment-batch:bootJar > "$LOG_DIR/build.log" 2>&1; then
   echo "빌드 실패: $LOG_DIR/build.log" >&2
   tail -n 30 "$LOG_DIR/build.log" >&2
   exit 1
 fi
 docker compose up -d --wait postgres redis kafka > "$LOG_DIR/compose.log" 2>&1 || { echo "Compose 기동 실패: $LOG_DIR/compose.log" >&2; tail -n 30 "$LOG_DIR/compose.log" >&2; exit 1; }
+# 기존 볼륨에는 payment_db가 없을 수 있으므로 매 실행마다 멱등하게 준비한다
+./scripts/db/ensure-payment-db.sh > "$LOG_DIR/ensure-payment-db.log" 2>&1 || { echo "payment_db 준비 실패: $LOG_DIR/ensure-payment-db.log" >&2; tail -n 30 "$LOG_DIR/ensure-payment-db.log" >&2; exit 1; }
 start() {
   local name=$1 jar=$2
   shift 2
@@ -66,16 +74,19 @@ start() {
   PIDS+=("$!")
 }
 # fake-pg는 .env의 웹훅 비밀(FAKE_PG_WEBHOOK_SECRET)이 필요하다. 다른 앱은 자체적으로 .env를 읽는다.
-(set -a; source .env; set +a; exec java -jar fake-pg/build/libs/fake-pg.jar) > "$LOG_DIR/fake-pg.log" 2>&1 &
+# 웹훅은 payment 앱(18085)을 직접 호출한다(기본 URL). 승인 보류 제어는 E2E에서만 켜고, 실행 환경 설정과 무관하게 실패·타임아웃·중복 확률을 0으로 고정한다
+(set -a; source .env; set +a; exec java -jar fake-pg/build/libs/fake-pg.jar --fake-pg.test-controls.enabled=true \
+  --fake-pg.behavior.failure-rate=0 --fake-pg.behavior.timeout-rate=0 --fake-pg.behavior.duplicate-rate=0) > "$LOG_DIR/fake-pg.log" 2>&1 &
 PIDS+=("$!")
 start core core/build/libs/core.jar
+start payment payment/build/libs/payment.jar
 start realtime-a realtime/build/libs/realtime.jar
 start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_PORT"
 TICKETING_INGRESS_PROOF= start gateway gateway/build/libs/gateway.jar
 health() {
   local name=$1 port=$2 pid=$3 deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   local health_path=/actuator/health
-  [[ $name != core && $name != gateway ]] || health_path=/actuator/health/readiness
+  [[ $name != core && $name != payment && $name != gateway ]] || health_path=/actuator/health/readiness
   until curl -fsS "http://localhost:$port$health_path" 2>/dev/null | rg -q '"status"\s*:\s*"UP"'; do
     if ((SECONDS >= deadline)) || ! kill -0 "$pid" 2>/dev/null; then
       printf '%s 기동 실패. 로그: %s/%s.log\n' "$name" "$LOG_DIR" "$name" >&2
@@ -87,9 +98,10 @@ health() {
 }
 health fake-pg 18090 "${PIDS[0]}"
 health core 18080 "${PIDS[1]}"
-health realtime-a 18081 "${PIDS[2]}"
-health realtime-b "$REALTIME_B_PORT" "${PIDS[3]}"
-health gateway 18000 "${PIDS[4]}"
+health payment 18085 "${PIDS[2]}"
+health realtime-a 18081 "${PIDS[3]}"
+health realtime-b "$REALTIME_B_PORT" "${PIDS[4]}"
+health gateway 18000 "${PIDS[5]}"
 # 관리자 seed: ADMIN은 가입으로 얻을 수 없으므로(ADR 0034) 가입한 회원을 DB에서 승격한다. 앱 코드에는 E2E 전용 경로를 두지 않는다.
 E2E_ADMIN_EMAIL="e2e-admin-$(date +%s)-$RANDOM$RANDOM@example.com"
 E2E_ADMIN_PASSWORD=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
@@ -112,7 +124,7 @@ if $WEB; then
   WEB_PGID=$!
   deadline=$((SECONDS + ${E2E_HEALTH_TIMEOUT:-180}))
   until curl -s -o /dev/null http://localhost:13000; do
-    if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[5]}" 2>/dev/null; then
+    if ((SECONDS >= deadline)) || ! kill -0 "${PIDS[6]}" 2>/dev/null; then
       echo "web 기동 실패: $LOG_DIR/web.log" >&2
       exit 1
     fi
@@ -131,10 +143,15 @@ if $WEB; then
 fi
 args=()
 if [[ -n $TEST_PATTERN ]]; then args=(--tests "$TEST_PATTERN"); fi
-# Batch E2E는 core-batch를 별도 프로세스로 실행하고 psql(읽기·시각 조정)로 검증한다
+# Batch E2E는 core-batch·payment-batch를 별도 프로세스로 실행하고 psql(읽기·시각 조정)로 검증한다. 결제 데이터는 payment_db에 있다
 db_user=$(set -a; source .env; set +a; printf '%s' "$TICKETING_POSTGRES_USER")
 db_name=$(set -a; source .env; set +a; printf '%s' "$TICKETING_POSTGRES_DB")
-if ./gradlew -De2e.projectDir="$ROOT" -De2e.coreBatchJar="$ROOT/core-batch/build/libs/core-batch.jar" -De2e.dbUser="$db_user" -De2e.dbName="$db_name" -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" -De2e.adminEmail="$E2E_ADMIN_EMAIL" -De2e.adminPassword="$E2E_ADMIN_PASSWORD" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
+payment_db_user=$(set -a; source .env; set +a; printf '%s' "$TICKETING_PAYMENT_POSTGRES_USER")
+payment_db_name=$(set -a; source .env; set +a; printf '%s' "$TICKETING_PAYMENT_POSTGRES_DB")
+# 웹훅 재전송 E2E가 payment 앱에 서명된 요청을 보내기 위한 비밀. 명령행에 노출하지 않도록 환경 변수로 넘긴다
+E2E_WEBHOOK_SECRET=$(set -a; source .env; set +a; printf '%s' "$FAKE_PG_WEBHOOK_SECRET")
+export E2E_WEBHOOK_SECRET
+if ./gradlew -De2e.projectDir="$ROOT" -De2e.coreBatchJar="$ROOT/core-batch/build/libs/core-batch.jar" -De2e.paymentBatchJar="$ROOT/payment-batch/build/libs/payment-batch.jar" -De2e.dbUser="$db_user" -De2e.dbName="$db_name" -De2e.paymentDbUser="$payment_db_user" -De2e.paymentDbName="$payment_db_name" -De2e.paymentUrl="http://localhost:18085" -De2e.realtimeBUrl="http://localhost:$REALTIME_B_PORT" -De2e.adminEmail="$E2E_ADMIN_EMAIL" -De2e.adminPassword="$E2E_ADMIN_PASSWORD" :e2e:e2eTest "${args[@]}" > "$LOG_DIR/test.log" 2>&1; then
   echo 'E2E 테스트 통과'
 else
   shopt -s nullglob

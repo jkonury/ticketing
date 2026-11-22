@@ -72,10 +72,12 @@
 
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
 
-- 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)가 필요하다. 결제 결과는 payment 앱이 발행하므로 `scripts/e2e`는 payment 앱을 띄우도록 바뀌기(M6 3-6) 전까지 결제 흐름이 동작하지 않는다.
+- 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)와 payment 앱(18085)이 필요하다. 결제 결과는 payment 앱이 발행한다.
 - E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`. core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
-  - 사전 조건: `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18090 포트. `--web`은 Playwright web 앱을 13000 포트에 추가하므로 그 포트도 비어 있어야 한다.
-  - `core-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)는 별도 프로세스로 실행한다.
+  - 사전 조건: `.env`(payment DB·`TICKETING_JWT_SECRET`·`FAKE_PG_WEBHOOK_SECRET` 포함. 없으면 스크립트가 키 이름을 알리고 실패한다), 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18085·18090 포트. `--web`은 Playwright web 앱을 13000 포트에 추가하므로 그 포트도 비어 있어야 한다.
+  - 프로세스는 fake-pg, core, payment, realtime-a/b, Gateway다. 매 실행마다 `./scripts/db/ensure-payment-db.sh`로 `payment_db`를 준비한다. fake-pg 웹훅은 payment 앱을 직접 호출한다.
+  - `core-batch`·`payment-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)는 별도 프로세스로 실행한다. 정산·미결제 정리는 core-batch와 코어 DB, 결제 대사는 payment-batch와 `payment_db`(`BatchSupport`의 `BatchTarget`)를 쓴다.
+  - 결제 경로 E2E(`PaymentFlowE2eTests`)는 같은 승인 웹훅 재전송의 멱등, 만료 후 승인 → 환불·좌석 반환(fake-pg 승인 보류로 "만료 시각 커밋 → 승인" 순서를 보장), Gateway의 웹훅 404를 검증한다. 웹훅 재전송은 `E2E_WEBHOOK_SECRET`(스크립트가 `.env`의 `FAKE_PG_WEBHOOK_SECRET`을 환경 변수로 전달)으로 서명해 payment 앱에 직접 보낸다.
   - 스크립트가 실행마다 관리자(ADMIN) 계정을 가입시킨 뒤 DB에서 승격하고, `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다. 앱 코드에는 E2E 전용 경로가 없다.
   - 로그는 `build/e2e/logs/`에 저장한다.
 - 부하 테스트: `scripts/loadtest/run.sh`(k6)와 Gatling(`loadtest/gatling/README.md`). 결과는 `build/loadtest/runs/`에 저장한다. 절차는 [부하 테스트 런북](../performance/loadtest-runbook.md)을 따른다.
