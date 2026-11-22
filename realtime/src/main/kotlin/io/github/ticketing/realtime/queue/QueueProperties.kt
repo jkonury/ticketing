@@ -10,6 +10,7 @@ private const val DEFAULT_TOKEN_TTL_MINUTES = 10L
 private const val DEFAULT_PRESENCE_GRACE_SECONDS = 30L
 private const val DEFAULT_HEARTBEAT_SECONDS = 15L
 private const val DEFAULT_PREPARATION_GRACE_SECONDS = 5L
+private const val DEFAULT_SEAT_STREAM_BUFFER = 1024
 
 @ConfigurationProperties("ticketing.realtime.queue")
 data class QueueProperties(
@@ -20,7 +21,12 @@ data class QueueProperties(
     val presenceGrace: Duration = Duration.ofSeconds(DEFAULT_PRESENCE_GRACE_SECONDS),
     val positionPollInterval: Duration = Duration.ofSeconds(1),
     val heartbeatInterval: Duration = Duration.ofSeconds(DEFAULT_HEARTBEAT_SECONDS),
-)
+    val seatStreamBuffer: Int = DEFAULT_SEAT_STREAM_BUFFER,
+) {
+    init {
+        require(seatStreamBuffer > 0) { "ticketing.realtime.queue.seat-stream-buffer는 양수여야 한다: $seatStreamBuffer" }
+    }
+}
 
 @Configuration
 @EnableConfigurationProperties(QueueProperties::class)

@@ -24,12 +24,13 @@ realtime 규칙 ([ADR 0021](../adr/0021-realtime-queue-and-sse-contracts.md)):
 
 - 대기열 API는 `POST /api/v1/queues/{scheduleId}/entries`(등록), `GET /api/v1/queues/{scheduleId}/entries/me`(상태 조회), `DELETE /api/v1/queues/{scheduleId}/entries/me`(이탈)다. 상태는 `WAITING` 또는 `ADMITTED`다.
 - 대기열 응답 필드는 `status`와 상태별 `position`(WAITING), `admissionToken`·`expiresAt`(ADMITTED)다.
-- 설정 접두사는 `ticketing.realtime.queue.*`이며 기본값은 `admission-interval=PT1S`, `admission-batch-size=50`, `admission-token-ttl=PT10M`, `presence-grace=PT30S`, `position-poll-interval=PT1S`, `heartbeat-interval=PT15S`다. `admission-enabled`는 기본 활성화다.
+- 설정 접두사는 `ticketing.realtime.queue.*`이며 기본값은 `admission-interval=PT1S`, `admission-batch-size=50`, `admission-token-ttl=PT10M`, `presence-grace=PT30S`, `position-poll-interval=PT1S`, `heartbeat-interval=PT15S`, `seat-stream-buffer=1024`다. `admission-enabled`는 기본 활성화다.
 - 입장 스케줄러는 기본 1초 주기로 회차별 최대 50명을 입장시키며, 입장 토큰 TTL 기본값은 10분이다.
 - SSE heartbeat와 대기 상태 조회는 마지막 신호를 기록한다. 기본 30초 유예를 넘긴 대기자는 입장 직전에 제거한다.
 - 순번 SSE 경로는 `GET /api/v1/streams/queues/{scheduleId}`이며 `position`(본문 `position`), `admitted`(본문 `admissionToken`, `expiresAt`), `removed` 이벤트를 보낸다. 좌석 SSE 경로는 `GET /api/v1/streams/schedules/{scheduleId}/seats`이며 `snapshot`(본문 `seats`), `seat`(본문 `seatIds`, `status`, `holdExpiresAt`, `at`) 이벤트를 보낸다. 두 스트림 모두 15초마다 heartbeat 주석을 보낸다.
 - 좌석 SSE의 `Last-Event-ID`가 Stream에 남아 있으면 이후 변경을 재생하고, 형식이 잘못됐거나 Stream에서 잘려 나간 ID면 스냅샷부터 보낸다. 헤더가 없으면 `lastEventId` 쿼리를 쓴다(브라우저 재연결용, [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)).
 - 인증된 회원 ID가 없거나 숫자가 아니면 401 `UNAUTHORIZED`, 코어가 만든 회차 좌석 스냅샷 키가 없으면 404 `SCHEDULE_NOT_FOUND`, 회원의 대기열 항목이 없으면 404 `QUEUE_ENTRY_NOT_FOUND`로 응답한다.
+- 좌석 SSE 연결별 버퍼는 `seat-stream-buffer`(기본 1024)로 제한한다. 버퍼 상한을 넘으면 그 연결만 정상 종료하고 `seat.stream.overflow` 카운터를 올리며, 클라이언트는 재접속한다(`Last-Event-ID` 재생 또는 스냅샷 재수신).
 - 좌석 SSE는 인스턴스마다 회차별 공유 리더가 비블로킹 `XREAD`를 주기적으로 실행한다. 파싱할 수 없는 레코드는 경고 로그와 `seat.events.invalid` 카운터를 남기고 건너뛴다.
 
 코어가 Gateway를 우회해 직접 노출되지 않도록 하는 네트워크 구성은 M6(k8s)에서 적용한다 ([ADR 0008](../adr/0008-queue-in-realtime-app.md)).

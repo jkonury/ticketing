@@ -3,15 +3,21 @@ package io.github.ticketing.realtime.seat
 import io.github.ticketing.realtime.queue.QueueProperties
 import io.github.ticketing.realtime.support.RealtimeException
 import io.github.ticketing.realtime.support.memberId
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactor.awaitSingle
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Range
 import org.springframework.data.redis.connection.Limit
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
@@ -32,6 +38,7 @@ class SeatStatusStreamController(
     private val hub: SeatEventHub,
     private val clock: Clock,
     private val properties: QueueProperties,
+    private val meters: MeterRegistry,
 ) {
     @GetMapping("/api/v1/streams/schedules/{scheduleId}/seats", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     suspend fun stream(
@@ -44,36 +51,49 @@ class SeatStatusStreamController(
         if (!redis.hasKey(snapshotKey(scheduleId)).awaitSingle()) {
             throw RealtimeException(HttpStatus.NOT_FOUND, "SCHEDULE_NOT_FOUND")
         }
-        return channelFlow {
-            val buffered = Channel<SeatEvent>(Channel.UNLIMITED)
-            val ready = CompletableDeferred<Unit>()
-            val subscription = launch { hub.events(scheduleId, ready).collect { buffered.send(it) } }
-            try {
-                ready.await()
-                val heartbeat = launch {
-                    while (true) {
-                        delay(properties.heartbeatInterval.toMillis())
-                        send(ServerSentEvent.builder<Any>().comment("heartbeat").build())
+        return withoutOverflowError(
+            channelFlow {
+                val buffered = Channel<SeatEvent>(properties.seatStreamBuffer)
+                val ready = CompletableDeferred<Unit>()
+                val subscription = launch {
+                    var overflowed = false
+                    hub.events(scheduleId, ready).collectIntoBuffer(buffered) {
+                        overflowed = true
+                        meters.counter("seat.stream.overflow").increment()
+                        logger.info("좌석 SSE 버퍼 상한을 넘어 연결을 종료: scheduleId={}, buffer={}", scheduleId, properties.seatStreamBuffer)
                     }
+                    // 수신이 멈춘 연결은 버퍼를 비울 수 없으므로 producer scope를 실패시켜 초기 전송·send 대기까지 즉시 중단한다
+                    if (overflowed) throw SeatStreamOverflowException()
                 }
                 try {
-                    var lastSent = initial(scheduleId, lastEventId?.takeIf { it.isNotBlank() } ?: lastEventIdQuery) { send(it) }
-                    for (event in buffered) {
-                        val id = requireNotNull(StreamId.parse(event.id))
-                        if (id > lastSent) {
-                            send(event.asSse())
-                            lastSent = id
+                    ready.await()
+                    val heartbeat = launch {
+                        while (true) {
+                            delay(properties.heartbeatInterval.toMillis())
+                            send(ServerSentEvent.builder<Any>().comment("heartbeat").build())
                         }
                     }
+                    try {
+                        var lastSent = initial(scheduleId, lastEventId?.takeIf { it.isNotBlank() } ?: lastEventIdQuery) { send(it) }
+                        for (event in buffered) {
+                            val id = requireNotNull(StreamId.parse(event.id))
+                            if (id > lastSent) {
+                                send(event.asSse())
+                                lastSent = id
+                            }
+                        }
+                    } finally {
+                        heartbeat.cancelAndJoin()
+                    }
                 } finally {
-                    heartbeat.cancelAndJoin()
+                    subscription.cancelAndJoin()
+                    buffered.close()
                 }
-            } finally {
-                subscription.cancelAndJoin()
-                buffered.close()
-            }
-        }
+            },
+        )
     }
+
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     private suspend fun initial(scheduleId: Long, requested: String?, send: suspend (ServerSentEvent<Any>) -> Unit): StreamId {
         val key = streamKey(scheduleId)
@@ -125,6 +145,33 @@ class SeatStatusStreamController(
             else -> SeatSnapshot(id.toLong(), value)
         }
     }
+}
+
+/**
+ * hub 이벤트를 연결별 버퍼에 넣는다. 공유 SharedFlow 수집이 느린 연결 때문에 멈추면 같은 회차의 다른 구독자까지 막히므로
+ * suspend하는 send 대신 trySend를 쓴다. 가득 차면 그 연결의 버퍼만 닫아 스트림을 정상 종료하고,
+ * 클라이언트는 재접속한다(Last-Event-ID 재생 또는 스냅샷 재수신).
+ */
+// 초과로 끊긴 연결은 오류 응답 대신 정상 종료해 연결마다 오류 로그가 남지 않게 한다
+private fun <T> withoutOverflowError(source: Flow<T>): Flow<T> = flow {
+    try {
+        emitAll(source)
+    } catch (_: SeatStreamOverflowException) {
+        // 초과는 subscription에서 이미 카운터와 로그로 기록했다
+    }
+}
+
+internal class SeatStreamOverflowException : RuntimeException("좌석 SSE 버퍼 상한 초과", null, false, false)
+
+internal suspend fun Flow<SeatEvent>.collectIntoBuffer(buffer: Channel<SeatEvent>, onOverflow: () -> Unit) {
+    takeWhile { event ->
+        val accepted = buffer.trySend(event).isSuccess
+        if (!accepted) {
+            onOverflow()
+            buffer.close()
+        }
+        accepted
+    }.collect()
 }
 
 private fun snapshotKey(scheduleId: Long) = "booking:seats:{$scheduleId}"
