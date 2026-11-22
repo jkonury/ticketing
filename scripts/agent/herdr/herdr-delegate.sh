@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # 작업자에게 지시서 경로만 담은 짧은 프롬프트를 보낸다. 완료 대기는 herdr-wait.sh가 맡는다.
 #
-# 사용법: herdr-delegate.sh [--task <task-dir>] [--effort medium|high] <agent> <brief.md> [<report.md>]
+# 사용법: herdr-delegate.sh [--task <task-dir>] [--effort medium|high] [--ignore-limit] <agent> <brief.md> [<report.md>]
 #   task-dir은 실행 디렉터리 바로 아래의 task 디렉터리다.
 #   --task를 주면 task에서 처음 위임받는 에이전트를 새 세션으로 다시 시작한다(--effort 기본 medium).
+#   main(self)이나 대상의 5시간 한도 사용률이 기준(HERDR_LIMIT_MAX, 기본 85%) 이상이면 위임하지 않고 종료 코드 7로 끝낸다.
+#   --ignore-limit은 사용자가 계속하라고 지시한 경우에만 쓴다.
 #   report 경로를 생략하면 brief와 같은 디렉터리의 report.md(review는 review.md)를 쓴다.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 usage() {
-  die "사용법: herdr-delegate.sh [--task <task-dir>] [--effort medium|high] <agent> <brief.md> [<report.md>]"
+  die "사용법: herdr-delegate.sh [--task <task-dir>] [--effort medium|high] [--ignore-limit] <agent> <brief.md> [<report.md>]"
 }
 
 # 상태 파일을 임시 파일로 쓴 뒤 교체한다. jq 인자는 그대로 전달한다(필터와 입력 파일 포함).
@@ -60,6 +62,7 @@ fresh_session() { # <task-dir> <agent> <effort>
 
 task_dir=""
 effort=medium
+ignore_limit=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --task)
@@ -71,6 +74,7 @@ while [ $# -gt 0 ]; do
       case "${2:-}" in medium|high) effort="$2" ;; *) usage ;; esac
       shift 2
       ;;
+    --ignore-limit) ignore_limit=1; shift ;;
     --) shift; break ;;
     -*) usage ;;
     *) break ;;
@@ -89,6 +93,15 @@ case "$status" in
   idle|done) ;;
   *) die "에이전트 $agent 상태가 $status 이다. 입력 가능한 상태(idle/done)가 아니다." ;;
 esac
+
+if [ "$ignore_limit" = 0 ]; then
+  limit_rc=0
+  "$(dirname "${BASH_SOURCE[0]}")/herdr-limit.sh" self "$agent" || limit_rc=$?
+  if [ "$limit_rc" = 6 ]; then
+    echo "limit: 5h 한도 $(limit_max)% 이상이라 위임하지 않는다. progress.md와 인계 문서를 갱신하고 중단한다."
+    exit 7
+  fi
+fi
 
 report="${3:-}"
 if [ -z "$report" ]; then

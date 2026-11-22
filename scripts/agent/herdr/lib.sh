@@ -108,3 +108,24 @@ agent_context_pct() { # <agent|pane|self> [probe]
   [ -n "$pct" ] || return 1
   echo "$pct"
 }
+
+# 상태줄에서 5시간 사용 한도의 사용률(정수 %)을 읽는다. 읽지 못하면 종료 코드 1.
+# Claude statusline은 "5h <막대> N%"(사용률), Codex 하단은 "5h N% left"(남은 비율)다.
+# Claude는 응답을 한 번 받기 전까지 상태줄에 한도가 없을 수 있다. 같은 계정의 Claude pane끼리 한도를 공유한다.
+agent_limit_5h_pct() { # <agent|pane|self>
+  local target="$1" screen pct left
+  [ "$target" = self ] && target="${HERDR_PANE_ID:?HERDR_PANE_ID가 없다}"
+  screen="$(herdr agent read "$target" --source visible --lines 20 2>/dev/null)" || return 1
+  pct="$(printf '%s\n' "$screen" | sed -nE 's/.*5h [█░]+ ([0-9]+)%.*/\1/p' | tail -n 1)"
+  if [ -z "$pct" ]; then
+    left="$(printf '%s\n' "$screen" | sed -nE 's/.*5h ([0-9]+)% left.*/\1/p' | tail -n 1)"
+    [ -n "$left" ] && pct=$((100 - left))
+  fi
+  [ -n "$pct" ] || return 1
+  echo "$pct"
+}
+
+# 5시간 한도 중단 기준(%). HERDR_LIMIT_MAX로 바꿀 수 있다.
+limit_max() {
+  echo "${HERDR_LIMIT_MAX:-85}"
+}

@@ -91,9 +91,10 @@ herdr agent list                           # impl·review가 idle인지 확인
 | 스크립트 | 용도 |
 |---|---|
 | `herdr-up.sh [--impl-kind K] [--review-kind K] [--impl-model M] [--review-model M] [--impl-name N] [--review-name N] [--impl-args "…"] [--review-args "…"]` | pane 생성과 에이전트 시작. args를 생략하면 1절 기본값 |
-| `herdr-delegate.sh [--task <task-dir>] [--effort medium\|high] <agent> <brief.md> [<report.md>]` | 경로를 담은 짧은 프롬프트 전송. `--task`는 실행의 Git 상태를 확인하고, task에서 처음 위임받는 에이전트를 새 세션으로 다시 시작한다. 위치 인자만 주면 독립 위임으로 동작하고 재시작하지 않는다 |
+| `herdr-delegate.sh [--task <task-dir>] [--effort medium\|high] [--ignore-limit] <agent> <brief.md> [<report.md>]` | 경로를 담은 짧은 프롬프트 전송. `--task`는 실행의 Git 상태를 확인하고, task에서 처음 위임받는 에이전트를 새 세션으로 다시 시작한다. 위치 인자만 주면 독립 위임으로 동작하고 재시작하지 않는다. main이나 대상의 5시간 한도가 기준 이상이면 보내지 않고 종료 코드 7로 끝난다 |
 | `herdr-wait.sh <agent> [--timeout ms]` | 실행 종료 대기 (백그라운드 실행) |
 | `herdr-context.sh <agent\|pane\|self> [--max pct]` | 상태줄에서 컨텍스트 사용률 읽기. 읽지 못하면 종료 코드 5, `--max` 이상이면 6 |
+| `herdr-limit.sh [--max pct] [<agent\|pane\|self>...]` | 상태줄에서 5시간 사용 한도 읽기(기본 `self impl review`, 기준 85%). 모두 읽지 못하면 5, 하나라도 기준 이상이면 6 |
 | `herdr-relay.sh --resume <progress.md> [--mode compact\|clear] [--max pct] [--log file]` | main 자가 압축. 백그라운드로 실행하고 턴을 끝내면 idle 후 `/compact`와 재개 프롬프트를 보낸다 |
 | `herdr-down.sh` | 내가 만든 pane 정리 |
 
@@ -108,7 +109,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 ### 실행 순서
 
 1. 다음 task를 정하고(로드맵 항목이면 다음 미완료 항목) 지시서를 쓴다(5절). `task_dir=build/orchestration/<run-id>/<task-id>`로 두고, 그 안의 `base.txt`에 기준 `HEAD`, 시작 시 `git status --porcelain=v1 -uall` 출력, 허용 경로 목록을 기록한다.
-2. main의 컨텍스트 사용률을 확인하고 아래 「컨텍스트와 토큰」 절차를 적용한 뒤 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task는 `--effort high`를 붙인다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
+2. main의 컨텍스트 사용률을 확인하고 아래 「컨텍스트와 토큰」 절차를 적용한 뒤 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task(설계 판단·동시성·데이터 이전)만 `--effort high`를 붙이고, 복사·배선·문서처럼 기계적인 task는 기본 `medium`으로 둔다. 위임이 종료 코드 7로 끝나면 「5시간 한도」 절차로 중단한다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
 3. `herdr-wait.sh impl`을 메인 클라이언트의 백그라운드 명령으로 실행하고, 결과가 도착하면 이어간다. 완료 판정은 6절을 따른다. 구현이 끝나면 `herdr-context.sh impl`로 컨텍스트를 점검한다(4절 「컨텍스트와 토큰」).
 4. 변경 범위가 지시서 안인지 확인한다. `git diff`는 신규 파일과 staged 변경을 놓치므로 다음을 함께 본다. 범위 밖이면 impl에 되돌리도록 지시한다.
    ```bash
@@ -117,13 +118,13 @@ herdr agent list                           # impl·review가 idle인지 확인
    git ls-files --others --exclude-standard
    ```
 5. 리뷰 지시서를 쓰고 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" review "$task_dir/review-brief.md"`로 맡긴다. `herdr-wait.sh review`를 백그라운드로 실행하고, 리뷰가 끝나면 컨텍스트를 점검한다.
-6. `review.md`에 차단 항목이 있으면 수정 지시서(`fix-N/brief.md`)를 만들어 2번으로 돌아간다. `--task`에는 계속 원래 `task_dir`를 전달한다. 수정이 끝나면 컨텍스트를 점검하고 다시 리뷰한다.
+6. `review.md`는 통째로 읽지 않는다. `sed -n '/## 차단 사항/,/## 비차단/p'`와 마지막 줄만 보고, 수정 지시서에 필요한 항목만 해당 절을 더 읽는다. 차단 항목이 있으면 수정 지시서(`fix-N/brief.md`)를 만들어 2번으로 돌아간다. `--task`에는 계속 원래 `task_dir`를 전달한다. 수정이 끝나면 컨텍스트를 점검하고 다시 리뷰한다.
    - **초기 구현 1회 + 후속 수정 최대 2회**다. 후속 수정에는 리뷰 차단 사항과 main 재검증 실패가 모두 포함된다.
    - 2회를 넘으면 자동으로 더 시도하지 않고 남은 문제를 사용자에게 보고한다.
 7. 리뷰 차단이 해소되면 main이 검증할 변경을 확정한다. 완료 기준을 충족한 로드맵 항목은 해당 체크박스를 갱신하고 그 변경도 검토한다. 커밋 제외 task가 아니면 리뷰를 마친 경로만 명시해 스테이징한다. `git diff --cached`로 기준 `HEAD` 대비 변경이 리뷰에서 확인한 내용과 일치하는지 확인하고 `git write-tree`로 인덱스 트리 ID를 기록한다. `git diff --quiet --ignore-submodules=none`이 통과하고 `git ls-files --others --exclude-standard` 출력이 비어 있어야 검증을 시작한다.
 8. main은 리뷰된 변경에서 7절의 최종 AC를 순차 실행한다. impl의 관련 회귀 검사 결과는 보고서에서 확인한다. Docker 미기동·포트 충돌·Testcontainers 실패 같은 환경 문제는 수정 횟수에 세지 않는다. 검사가 끝날 때마다 결과와 로그를 보관한다(7절). 최종 AC의 성공·실패가 결정되면 커밋이나 수정 위임 전에 main의 컨텍스트를 점검한다. 필수 검사 실패나 리뷰 차단이 남아 있는 동안에는 해당 task에 머문다.
 9. 최종 AC 통과 후 커밋 제외 task가 아니면 `HEAD`가 시작값인지, `git write-tree` 값이 검증 전과 같은지, unstaged·untracked 변경이 없는지 다시 확인한다. 내용이 바뀌면 영향을 받는 리뷰와 검증을 다시 진행한다. 커밋 훅이 통과한 뒤 커밋의 트리(`git rev-parse 'HEAD^{tree}'`)가 검증한 트리와 같은지, 작업 트리가 깨끗한지 확인한다. 훅이 실패하거나 검증과 커밋 내용이 다르면 해당 task에서 멈춘다. 커밋 메시지는 `AGENTS.md` 7절 형식을 따르고 scope는 그 task의 모듈이다. 커밋 제외 task는 검증 결과와 미커밋 상태를 보고한다.
-10. task를 마무리하면 사용자의 최신 지시에서 마지막으로 허용한 task를 확인한다. 마지막 task이거나 커밋 제외 task이면 결과를 보고하고 종료한다. 허용된 다음 task가 있으면 단계의 완료 기준과 main의 컨텍스트 사용률을 확인한 뒤 1번으로 돌아간다.
+10. task를 마무리하면 사용자의 최신 지시에서 마지막으로 허용한 task를 확인한다. 마지막 task이거나 커밋 제외 task이면 결과를 보고하고 종료한다. 허용된 다음 task가 있으면 단계의 완료 기준, main의 컨텍스트 사용률, `herdr-limit.sh`의 5시간 한도를 확인한 뒤 1번으로 돌아간다. 릴레이로 재개한 뒤에도 커밋마다 같은 점검을 이어 간다.
 
 ### 위임 전 Git 검사
 
@@ -172,6 +173,27 @@ main은 여러 task를 한 턴에서 이어 가므로 턴 종료 후 자동 압�
 
 - 사용률 기록은 릴레이의 `context.log`(단계별 사용률)에 남는다. 클라이언트가 상태줄에 입력·출력 토큰을 표시하면 함께 기록한다.
 - 자동 압축 설정은 Claude Code 30%와 현재 Codex 설정을 유지한다. 자동 압축은 안전망일 뿐 위 점검을 대신하지 않는다.
+
+#### main의 읽기 범위
+
+main 컨텍스트는 task를 거치며 누적되므로 탐색은 impl에 맡긴다.
+
+- 지침·계획 문서는 처음 한 번 필요한 절만 `rg -n`과 `sed -n`으로 읽는다. 같은 문서를 task마다 다시 읽지 않는다.
+- 지시서를 쓰려고 코드를 직접 읽지 않는다. `rg -l`·`wc -l` 수준으로 위치만 확인하고, 지시서에는 목표·변경 허용 범위·AC와 "확인할 경로"를 적는다. 사용처 조사, diff 검토는 impl·review의 일이다.
+- 보고서·리뷰는 마지막 줄과 판단에 필요한 절만 읽고, 이미 읽은 파일은 바뀌지 않았으면 다시 읽지 않는다.
+
+### 5시간 한도
+
+Claude·Codex 모두 5시간 사용 한도가 있고, 중간에 한도에 걸리면 task가 반쯤 끝난 채 멈춘다. 그래서 **85%에서 새 위임을 멈추고 인계한다.** 기준은 `HERDR_LIMIT_MAX`로 바꿀 수 있다.
+
+```bash
+./scripts/agent/herdr/herdr-limit.sh                 # self impl review. 85% 이상이면 종료 코드 6
+```
+
+- `herdr-delegate.sh`가 위임 직전에 main(self)과 대상의 한도를 확인하고, 기준 이상이면 보내지 않고 종료 코드 7로 끝난다. 사용자가 계속하라고 지시한 경우에만 `--ignore-limit`을 쓴다.
+- main은 커밋 직후와 다음 task 시작 전에도 `herdr-limit.sh`를 실행한다.
+- 종료 코드 6·7이면 새 위임을 하지 않는다. 진행 중인 impl·review는 끝날 때까지 기다리고(중간에 끊으면 결과를 잃는다) 결과를 `progress.md`의 다음 행동에 반영한다. 그런 다음 [인계 템플릿](../templates/session-handoff.md)으로 `.handoff/`에 인계 문서를 쓰고, 한도와 재개 방법을 보고한 뒤 턴을 끝낸다. 릴레이는 실행하지 않는다.
+- 상태줄에서 읽지 못한 대상은 `unknown`으로 출력한다. Claude는 재시작 뒤 첫 응답 전까지 한도가 표시되지 않으며, 같은 계정의 Claude pane끼리 한도를 공유하므로 다른 Claude pane 값으로 판단한다. 모두 `unknown`(종료 코드 5)이면 task마다 다시 확인하고 보고에 적는다.
 
 [Claude Code 명령](https://code.claude.com/docs/en/commands) · [Codex CLI 명령](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 
