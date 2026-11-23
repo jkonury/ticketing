@@ -12,6 +12,7 @@ source "$ROOT/scripts/loadtest/lib/gatling.sh"
 source "$ROOT/scripts/loadtest/lib/infra.sh"
 source "$ROOT/scripts/loadtest/lib/warmup.sh"
 source "$ROOT/scripts/loadtest/lib/scenario-conflict.sh"
+source "$ROOT/scripts/loadtest/lib/metrics.sh"
 
 SCENARIO=
 RUNS=1
@@ -122,30 +123,8 @@ fi
 "$ROOT/scripts/db/ensure-payment-db.sh" > "$RUN_ROOT/ensure-payment-db.log" 2>&1 \
   || { echo "payment_db 준비 실패: $RUN_ROOT/ensure-payment-db.log" >&2; tail -n 30 "$RUN_ROOT/ensure-payment-db.log" >&2; exit 1; }
 
-# dump_codelist <디렉터리> <pre|burst>: core·gateway의 컴파일된 메서드 목록(진단 전용, 실패해도 실행에 영향 없음)
-dump_codelist() {
-  local dir=$1 tag=$2 name pid
-  for name in core gateway; do
-    pid=${PIDS[$([[ $name == core ]] && echo 1 || echo 3)]}
-    date +%s.%N > "$dir/codelist-$name-$tag.time"
-    jcmd "$pid" Compiler.codelist > "$dir/codelist-$name-$tag.txt" 2>"$dir/codelist-$name-$tag.err" || true
-  done
-}
-
-# collect_metrics <출력 파일>: 앱 지표(누적 카운터)를 직접 읽는다. 관측 스택이 있으면 Prometheus 마지막 scrape 시각도 남긴다
-collect_metrics() {
-  local prom=()
-  if $OBSERVABILITY; then prom=(--prometheus http://localhost:19090); fi
-  python3 "$ROOT/scripts/loadtest/metrics-delta.py" collect "$1" "${prom[@]}" "${METRIC_TARGETS[@]}"
-}
-
 # 보상 시나리오(seat-conflict-refund)의 규모. loadtest/lib/conflict.ts의 PAIR_COUNT, seed.sh의 conflictPairs와 같아야 한다
 CONFLICT_PAIRS=100
-
-publish_dashboard() {
-  [[ $TOOL == gatling ]] || return 0
-  python3 "$ROOT/scripts/loadtest/dashboard-metrics.py" publish "$@"
-}
 
 SUMMARY=()
 run_once() {
