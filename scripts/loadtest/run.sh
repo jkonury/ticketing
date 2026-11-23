@@ -13,6 +13,7 @@ source "$ROOT/scripts/loadtest/lib/infra.sh"
 source "$ROOT/scripts/loadtest/lib/warmup.sh"
 source "$ROOT/scripts/loadtest/lib/scenario-conflict.sh"
 source "$ROOT/scripts/loadtest/lib/metrics.sh"
+source "$ROOT/scripts/loadtest/lib/scenario-checks.sh"
 source "$ROOT/scripts/loadtest/lib/run-once.sh"
 
 SCENARIO=
