@@ -10,6 +10,7 @@
 # Output on failure: failed tests (from JUnit XML), compile errors, and each
 # Gradle "What went wrong" section, truncated.
 # The full Gradle log stays in build/check-summary/gradle-out.txt.
+# Gradle 실행은 build/.agent-gradle.lock으로 직렬화한다(gradle-lock.sh, flock 없으면 경고 후 락 없이 실행).
 # Exit code: 0 if all tasks passed, 1 otherwise, 2 on invalid arguments.
 
 set -uo pipefail
@@ -21,6 +22,8 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT" || exit 2
+# shellcheck source=gradle-lock.sh
+source "$SCRIPT_DIR/gradle-lock.sh"
 
 [ "$#" -eq 0 ] && set -- check
 
@@ -43,7 +46,8 @@ trap 'rm -f "$MARKER_FILE"' EXIT
 
 sleep 1 # 초 단위 파일 시각에서도 이번 실행 결과를 구분한다.
 
-./gradlew "$@" -q --continue --console=plain > "$LOG_FILE" 2>&1
+gradle_lock_prepare
+${GRADLE_PREFIX[@]+"${GRADLE_PREFIX[@]}"} ./gradlew "$@" -q --continue --console=plain > "$LOG_FILE" 2>&1
 if [ "$?" -eq 0 ]; then
   echo "All checks passed: $*"
   exit 0

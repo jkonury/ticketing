@@ -6,6 +6,7 @@
 #   scripts/agent/test/run-tests.sh :core:test --tests "*BookingConcurrencyTest"
 #   scripts/agent/test/run-tests.sh :core:test --tests "*A" --tests "*B"
 # --tests는 모듈 경로와 함께 쓴다. 모든 모듈에 적용하면 일치하는 테스트가 없는 모듈이 실패한다.
+# Gradle 실행은 build/.agent-gradle.lock으로 직렬화한다(gradle-lock.sh, flock 없으면 경고 후 락 없이 실행).
 # 종료 코드: 0 전부 통과, 1 실패 있음, 2 실행 오류(결과 파일 없음)
 
 set -uo pipefail
@@ -17,6 +18,8 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT" || exit 2
+# shellcheck source=gradle-lock.sh
+source "$SCRIPT_DIR/gradle-lock.sh"
 
 # 인자가 없거나 옵션부터 시작하면 test 태스크를 앞에 붙인다.
 if [ "$#" -eq 0 ] || [[ "$1" == -* ]]; then
@@ -33,7 +36,8 @@ trap 'rm -f "$MARKER_FILE"' EXIT
 
 sleep 1 # 초 단위 파일 시각에서도 이번 실행 결과를 구분한다.
 
-./gradlew "$@" --continue --console=plain > "$LOG_FILE" 2>&1
+gradle_lock_prepare
+${GRADLE_PREFIX[@]+"${GRADLE_PREFIX[@]}"} ./gradlew "$@" --continue --console=plain > "$LOG_FILE" 2>&1
 TEST_EXIT=$?
 
 if [ "$TEST_EXIT" -eq 0 ]; then
