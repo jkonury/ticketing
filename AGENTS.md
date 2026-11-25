@@ -16,7 +16,7 @@
 - [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
 - 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
 - [서브에이전트 위임 지침](docs/rules/subagent-delegation.md): 구현 계획을 서브에이전트 task로 나눠 위임할 때 읽는다.
-- herdr(터미널 워크스페이스) 명령 정리와 구현자·리뷰어 위임 절차·스크립트는 `delegate` 스킬(`.agents/skills/delegate/`의 `references/`, `scripts/`)에 있다. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 `references/herdr.md`를 먼저 읽는다. 위임은 사용자가 명시적으로 지시할 때만 쓰며, 이 저장소의 값(task 단위, 최종 검증, 리뷰 불변 조건)은 [서브에이전트 위임 지침](docs/rules/subagent-delegation.md#이-저장소의-위임-값)에 있다
+- herdr 위임은 사용자가 명시적으로 지시할 때만 `delegate` 스킬(`.agents/skills/delegate/SKILL.md`)을 따른다. 이 저장소의 위임 값은 [서브에이전트 위임 지침](docs/rules/subagent-delegation.md#이-저장소의-위임-값)에 있다.
 
 ## 2. 저장소 구조
 
@@ -47,7 +47,7 @@
 - 항목을 끝내면 `docs/roadmap.md`의 체크박스를 갱신한다.
 - 구현 중 설계와 다르게 가야 할 이유가 생기면 **먼저 사용자에게 알리고**, 합의되면 `docs/architecture.md`를 같이 고친다. 문서와 코드가 어긋난 채로 두지 않는다.
 - `docs/roadmap.md`의 "단계와 무관한 후속 항목"(의도적으로 미룬 것)은 요청 없이 앞당겨 구현하지 않는다.
-- 세션을 넘길 때는 `handoff` 스킬의 인계 템플릿(`.agents/skills/handoff/references/template.md`) 형식으로 `.handoff/`(git 제외)에 인계 문서를 쓴다.
+- 세션을 넘길 때는 `handoff` 스킬로 `.handoff/`(git 제외)에 인계 문서를 쓴다.
 - 라이브러리 버전과 API는 기억에 의존하지 말고 공식 문서로 확인한다. 특히 Spring Boot 4.x, Spring Modulith, Spring Cloud Gateway, jOOQ, Next.js.
 
 ## 4. 반드시 지킬 설계 규칙
@@ -86,12 +86,12 @@ cd web && pnpm install && pnpm dev
 - 사전 조건: Docker가 떠 있어야 한다(jOOQ 코드 생성과 Testcontainers가 사용한다). 에이전트 스크립트는 `fd`, `rg`를 쓴다.
 - test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
-- Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 하고, `--no-verify`로 우회하지 않는다.
+- Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 한다(`--no-verify`는 훅이 차단한다).
 - web 변경 후 `./scripts/agent/test/web-check.sh`(빌드 확인은 `--build`)를 통과시킨다.
 - 문서를 옮기거나 제목·링크를 바꾸면 `./scripts/agent/docs/check-docs.sh [경로...]`를 실행한다.
 - `.githooks/pre-commit`이 스테이지된 Kotlin·web 변경에 대해 같은 품질 검사를 커밋 시점에 실행한다. 클론 후 `./scripts/setup-hooks.sh`를 한 번 실행한다.
-- 같은 작업 디렉터리의 Gradle test·check·성능 측정은 순차 실행한다. 동시에 실행하면 결과 파일이 충돌한다.
-- 모듈 의존을 바꾸면 Modulith 구조 검증을 돌리고 `./gradlew :core:modulithDocs`로 다이어그램을 다시 생성한다. [core 작성 지침](docs/rules/backend-core.md)
+- 요약 스크립트(`run-tests.sh`, `check-summary.sh`)는 `build/.agent-gradle.lock`으로 직렬화된다. 직접 `./gradlew`·E2E·부하 스크립트는 같은 작업 디렉터리의 다른 Gradle 실행과 동시에 돌리지 않는다. 동시에 실행하면 결과 파일이 충돌한다.
+- 모듈 의존을 바꾸면 [core 작성 지침](docs/rules/backend-core.md#코어-모듈-구조-modulith)의 Modulith 검증·다이어그램 갱신을 따른다.
 - 실패하면 실패한 그대로 보고한다(실패한 테스트 이름과 메시지 일부). 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
 - E2E(`scripts/e2e/run.sh`)·부하 테스트·CI는 `build`·`check`에 포함되지 않는다. core·payment·gateway·realtime·fake-pg 흐름을 바꾼 작업에서는 E2E를 실행한다. 사전 조건, 포트, 옵션은 [E2E·부하·CI 실행](docs/rules/backend-testing.md#e2e부하ci-실행)을 따른다.
 
@@ -115,7 +115,7 @@ cd web && pnpm install && pnpm dev
 ## 9. 모델 분담
 
 - rg 한 번으로 끝나는 탐색은 메인에서 직접 처리하고, 여러 디렉터리·모듈·호출 관계를 조사해야 할 때만 위임한다.
-- 파일 탐색과 검색은 Explore, 테스트와 빌드 실행은 runner에 맡긴다. 결과는 결론과 `경로:줄번호`만 받는다.
+- 파일 탐색과 검색은 Explore에 맡긴다. 요약 스크립트가 있는 검사(6절)는 메인이 직접 실행하고, 출력이 긴 그 밖의 명령(E2E 등)은 runner에 맡긴다. 결과는 결론과 `경로:줄번호`만 받는다.
 - 빠짐없이 찾아야 하는 탐색(리팩터링 전 전체 사용처 등)은 검색 결과 원문을 함께 받거나 메인에서 직접 확인한다.
 - 서브에이전트 보고 가운데 결정의 근거로 쓰는 사실은 해당 파일을 직접 열어 한 번 확인한다.
 - 구현 task를 나눠 위임하는 방법은 [서브에이전트 위임 지침](docs/rules/subagent-delegation.md)을 따른다.
