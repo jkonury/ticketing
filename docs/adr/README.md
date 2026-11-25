@@ -60,3 +60,4 @@
 | [0044](0044-sales-close-and-payment-retry.md) | 회차 시작 시 판매 마감과 결제 재시도 | 합의 |
 | [0045](0045-coupon-reservation-attempts.md) | 쿠폰 예약 시도 식별과 재전달 | 합의 |
 | [0046](0046-attested-client-ip.md) | 비회원 요청의 클라이언트 IP 신뢰 경계 | 수락 |
+| [0047](0047-openapi-codegen-for-bff-boundary.md) | HTTP API 계약을 OpenAPI 스펙으로 추출하고 BFF 경계 zod 스키마를 생성 | 제안 |
