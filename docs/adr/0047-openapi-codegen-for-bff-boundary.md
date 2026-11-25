@@ -24,7 +24,7 @@ web BFF는 Gateway를 거쳐 core·payment·realtime의 HTTP API를 호출하고
 2. springdoc는 스펙만 만드는 starter(`springdoc-openapi-starter-webmvc-api`, realtime은 `-webflux-api`)를 쓰고 UI는 넣지 않는다. 버전은 프로젝트의 Spring Boot 버전 라인을 지원하는 springdoc 릴리스를 공식 릴리스 노트로 확인해 정한다. `/v3/api-docs`는 테스트와 로컬 프로필에서만 켜고, Gateway 라우트로 외부에 노출하지 않는다.
 3. 스펙 추출은 앱을 따로 기동하는 Gradle 플러그인(`generateOpenApiDocs`) 대신, 각 앱의 기존 Spring 통합 테스트 컨텍스트에서 `/v3/api-docs`를 호출해 얻는다. 결과는 키를 정렬한 JSON으로 `docs/api/openapi/<앱>.json`에 커밋한다.
 4. 스펙 추출 테스트는 커밋된 스펙과 다르면 실패한다. 갱신은 명시적인 갱신 옵션으로만 한다. 이벤트 계약의 골든 파일과 같은 방식이다.
-5. web은 커밋된 스펙에서 BFF 경계용 zod 스키마와 타입을 생성해 `web/src/server/api/generated/`에 커밋한다. 생성은 `pnpm` 스크립트 하나로 실행하고, 생성물은 손으로 고치지 않는다.
+5. web은 커밋된 스펙에서 BFF 경계용 zod 스키마와 타입을 생성해 `web/src/server/api/` 아래 `generated` 디렉터리에 커밋한다. 생성은 `pnpm` 스크립트 하나로 실행하고, 생성물은 손으로 고치지 않는다.
 6. 생성 zod는 `web/src/server/api/`의 응답·요청 검증에만 쓴다. 조합 결과와 화면용 타입은 지금처럼 기능 디렉터리에서 직접 정의한다([프론트엔드 지침](../rules/frontend.md)의 조합 규칙 유지).
 7. 생성기는 구현 첫 단계의 스파이크로 정한다. 후보는 `@hey-api/openapi-ts`(zod 플러그인)를 먼저, 그다음 `orval`이다. 채택 조건은 세 가지다. web이 쓰는 zod 메이저 버전으로 출력할 것, Kotlin non-null 필드가 `required`로, nullable 필드가 nullable로 표현될 것, 설정 파일 기반 CLI로 같은 입력에서 같은 출력을 낼 것. 두 후보가 모두 조건을 못 맞추면 타입만 생성(`openapi-typescript`)하고 기존 수기 zod에 타입 일치 검사를 붙이는 방식으로 줄인다. 스파이크 결과와 선택은 이 ADR의 변경 이력에 적는다.
 8. drift 차단은 두 곳에서 한다. 백엔드는 결정 4의 테스트가 `build`에서 실패한다. web은 CI가 생성 스크립트를 다시 실행한 뒤 `git diff --exit-code`로 생성물 차이를 검사한다. 로컬에서는 `scripts/agent/test/verify-changed.sh`가 같은 검사를 고른다.
