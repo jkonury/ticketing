@@ -22,133 +22,29 @@
 
 ## 1. 차단 항목
 
-### 설계 규칙 (`AGENTS.md` 4절)
-- 코어 모듈이 다른 모듈의 내부 클래스를 직접 참조하지 않는가. 모듈 간 호출이 Modulith 이벤트로만 이뤄지는가.
-- 모듈별 스키마를 넘는 외래 키·조인이 마이그레이션이나 jOOQ 쿼리에 없는가. `settlement`가 다른 모듈 스키마를 읽지 않는가.
-- `realtime`과 `gateway`에 JPA, JDBC, jOOQ 의존이나 PostgreSQL 접근이 생기지 않았는가.
-- 코어에 대기열 지식이 들어오지 않았는가. 입장 토큰 검증이 Gateway에 남아 있는가.
-- 좌석 확정이 Redis 선점만 믿지 않고 DB `(회차, 좌석)` 유니크 제약을 최종 방어선으로 두는가. 위반이 "이미 판매됨"으로 변환되고 500으로 새지 않는가.
-- 결제 요청과 웹훅 처리가 멱등 키로 중복을 걸러내는가.
+작성 지침의 다음 절을 어긴 변경이다. 규칙 본문은 각 절을 따른다.
 
-### 동시성과 정합성
-- Redis 좌석 선점이 Lua 스크립트로 원자적인가. 여러 명령으로 나눠 보내지 않는가.
-- 선점 해제가 소유자 비교 후 삭제인가.
-- DB 커밋 실패 시 Redis 선점을 되돌리는 경로와, TTL 누락을 Batch가 보정하는 경로가 고려됐는가.
-- 트랜잭션 안에서 PG·HTTP 같은 외부 호출을 하지 않는가.
-- 이벤트 리스너가 멱등한가. 같은 이벤트가 다시 와도 결과가 같은가.
-- 같은 트랜잭션에서 JPA와 jOOQ를 섞을 때 flush 순서 문제(jOOQ가 flush 안 된 JPA 변경에 의존)가 없는가.
-
-### 보안
-- 인가를 URL 패턴·메서드 보안으로 서버에서 강제하는가. BFF·Gateway 통과를 신뢰하지 않는가.
-- 리소스 소유자 확인(내 예매인가)이 헥사고날 모듈의 `application.service`나 계층형 모듈의 `service`에 있는가.
-- 비밀번호, 토큰, 결제 정보가 로그·응답·예외 메시지에 남지 않는가.
-- PG 웹훅 서명을 검증하는가. `payment`의 웹훅은 JWT 없이 받으므로 서명 검증과 멱등 처리가 유지되는가.
-- `payment`의 결제 조회가 JWT를 검증하고 `role` 클레임의 USER 권한을 요구하는가. ([payment 작성 지침](backend-payment.md))
-- 비밀 값이 저장소에 들어가지 않았는가.
-
-### 스키마
-- 적용된 Flyway 마이그레이션 파일을 수정하지 않고 새 파일로 추가했는가. `ddl-auto`가 `validate`인가.
-- 테이블이 해당 모듈의 스키마에 만들어졌는가.
-- jOOQ 생성 코드를 수정하거나 커밋하지 않았는가.
-
-### Virtual Thread와 WebFlux 경계
-- `realtime`, `gateway`에 블로킹 호출(`runBlocking`, `Thread.sleep`, 블로킹 Redis/HTTP 클라이언트)이 없는가.
-- `GlobalScope`를 쓰지 않고 `CancellationException`을 삼키지 않는가.
-- `realtime`이 인스턴스 메모리에만 있는 상태에 의존하지 않는가.
+- [AGENTS.md 4절](../../AGENTS.md#4-반드시-지킬-설계-규칙) 전체. 체크 키워드: 모듈 간 직접 참조, 스키마 넘는 FK·조인, `realtime` PostgreSQL 접근, 코어의 대기열 지식, `(회차, 좌석)` 유니크가 최종 방어선(위반이 500으로 새지 않는가), 결제·웹훅 멱등
+- [core 영속성](backend-core.md#영속성)·[트랜잭션](backend-core.md#트랜잭션)·[보안](backend-core.md#보안)의 스키마·마이그레이션·트랜잭션·인가 규칙. 체크 키워드: 트랜잭션 안 외부 호출, JPA·jOOQ flush 순서, 이벤트 리스너 멱등, 적용된 Flyway 파일 수정, jOOQ 생성 코드 커밋, 로그·응답의 비밀 노출
+- [booking 규칙](backend-core.md#booking). 체크 키워드: Redis 선점 Lua 원자성, 소유자 비교 후 해제, DB 커밋 실패 시 선점 되돌림과 TTL 누락의 Batch 보정
+- [payment 작성 지침](backend-payment.md): 웹훅 서명 검증·멱등, 결제 조회의 JWT·`role` 검증
+- [realtime](backend-realtime.md)·[gateway](backend-gateway.md) 작성 지침과 [WebFlux 공통 지침](backend.md#webflux)의 블로킹 금지·인스턴스 메모리 의존 금지 규칙
+- 리뷰 고유: API 계약(요청·응답, 오류 `code`)을 바꿨다면 BFF·Gateway·[integrations.md](../architecture/integrations.md)와 일치하고 호환 깨짐이 합의됐는가
 
 ## 2. 주의 항목
 
-### 모듈·헥사고날 구조
+작성 지침의 나머지 규칙 이탈이다.
 
-[core 작성 지침](backend-core.md#코어-모듈-구조-modulith) · [contract 작성 지침](backend-contract.md)
-
-- 모듈 공개 범위가 이벤트 클래스와 최소 API 타입뿐인가. 나머지가 하위 패키지에 있는가.
-- 이벤트가 불변이고 과거형 이름이며 ID와 필요한 값만 담는가. 엔티티를 싣지 않았는가.
-- 헥사고날 모듈에서 `adapter → application → domain` 방향이 지켜지는가. `domain`에 Spring, JPA, jOOQ import가 없는가.
-- 컨트롤러가 `port.provided`만 호출하고 도메인 타입을 응답으로 그대로 내보내지 않는가.
-- 비즈니스 규칙이 `domain`에 있고 서비스는 흐름 조율만 하는가.
-- 모듈 의존을 바꿨다면 Modulith 검증 테스트를 돌렸고 `./gradlew :core:modulithDocs`로 다이어그램을 갱신해 함께 변경했는가.
-
-### 영속성
-
-[core 영속성 지침](backend-core.md#영속성)
-
-- 조회가 jOOQ이고 조회 전용 DTO로 직접 매핑되는가. 조회용 쿼리를 JPA 연관 탐색으로 만들지 않았는가.
-- JPA를 `JpaRepository`로만 쓰는가. `EntityManager` 직접 주입, `createNativeQuery`, `nativeQuery = true`, `JdbcTemplate` 문자열 쿼리가 없는가.
-- 연관관계가 같은 애그리거트 안에서만, `LAZY`로 쓰이는가. 다른 애그리거트·모듈은 ID로 참조하는가.
-- 금액이 `BigDecimal`/`numeric`, 시각이 `Instant`/`timestamptz`이고 현재 시각을 주입된 `Clock`에서 얻는가.
-- 유스케이스의 트랜잭션 경계가 헥사고날 모듈의 `application.service`나 계층형 모듈의 `service`에 있고 조회는 `readOnly = true`인가.
-
-### Kotlin과 엔티티
-
-[공통 Kotlin 지침](backend.md#kotlin) · [core JPA 엔티티 지침](backend-core.md#jpa-엔티티)
-
-- `!!`가 없는가. ID가 `@JvmInline value class`로 감싸져 있는가. 상태 분기에 `else` 없는 `when`을 쓰는가.
-- JPA 엔티티가 `data class`가 아니고 `equals`/`hashCode`가 규칙대로인가. 영속 속성이 `var`(도메인 패키지는 `protected set`)인가.
-- 엔티티가 내부 컬렉션을 그대로 반환하지 않는가.
-- 요청 DTO의 검증 애노테이션에 `@field:`가 붙었는가.
-- 불변식 실패 종류가 맞는가(`require`/`check`/`DomainException`). `IllegalStateException`·`IllegalArgumentException`이 API 경계까지 올라가 500이 되지 않는가.
-
-### API
-
-[core API 지침](backend-core.md#api) · [API 규약](../architecture/api-conventions.md)
-
-- 경로가 `/api/v1/...` 복수형 명사인가.
-- 오류가 `ProblemDetail`이고 도메인 오류에 안정적인 `code`가 있는가. 예외 변환이 `@RestControllerAdvice` 한 곳에서 이뤄지는가.
-- 입력 검증은 경계에서 Bean Validation, 도메인 불변식은 도메인에서 하는가.
-- 목록 조회가 커서 기반인가. 재시도될 수 있는 쓰기 API가 `Idempotency-Key`를 받는가.
-- API 계약(요청·응답, 오류 `code`)을 바꿨다면 BFF·Gateway·`docs/architecture/integrations.md`와 맞는가. 호환을 깨는 변경이 합의됐는가.
-
-### realtime과 Gateway
-
-[realtime 작성 지침](backend-realtime.md) · [gateway 작성 지침](backend-gateway.md)
-
-- `realtime`은 코루틴으로, Gateway 필터는 Reactor 계약에 맞춰 작성했는가.
-- SSE에 heartbeat가 있는가. 좌석 SSE는 Stream ID로 재연결하고 순번 SSE는 현재 상태를 보내는가.
-- 연결 종료 시 구독·리더 참조를 해제하고, 대기자는 마지막 신호와 유예 시간을 기준으로 정리하는가.
-- Gateway 필터의 변경이 검증·rate limit·라우팅 책임에 해당하는가. 입장 토큰 검증 실패가 대기열 복귀용 오류 코드를 주는가.
-
-### Batch
-
-[Batch Job 지침](backend-core.md#batch-job) · [core-batch 작성 지침](backend-core-batch.md) · [payment-batch 작성 지침](backend-payment-batch.md)
-
-- Job별 파라미터와 쓰기 방식이 재시작·재실행의 정합성을 보장하는가.
-- 대량 읽기에서 jOOQ reader와 chunk 처리로 메모리 사용량을 제한하는가.
-- Job이 소유 모듈에 있는가([ADR 0019](../adr/0019-batch-jobs-in-owning-modules.md)).
-- payment-batch Job이 payment 앱의 `adapter/provided/batch`에 있고 `@Profile("batch")`가 붙었는가. 웹 전용 빈(예열 러너·작업, 보안 필터 체인)에 `@ConditionalOnWebApplication`이 붙었는가.
-
-### payment
-
-[payment 작성 지침](backend-payment.md)
-
-- 결제·환불 요청 Kafka 리스너의 그룹이 `ticketing-payment`로 유지되는가. 바뀌면 core가 커밋한 오프셋을 잃는다.
-
-### Virtual Thread
-
-[Virtual Thread 공통 지침](backend.md#virtual-thread)
-
-- 블로킹 I/O를 감싸는 `synchronized` 대신 `ReentrantLock`인가. `ThreadLocal`에 큰 객체가 없는가. 스레드 풀로 동시성을 제한하지 않는가.
-
-### 로깅
-- SLF4J 파라미터 방식인가. 예외를 로그만 남기고 삼키지 않는가. 상태 전이·결제 결과 로그에 `bookingId`, `paymentId`가 있는가.
-
-### 테스트
-
-[백엔드 테스트 지침](backend-testing.md)
-
-- 변경한 동작에 맞는 테스트가 있는가: 도메인 상태 전이의 허용·금지 경로, 유스케이스(fake 포트), 어댑터(Testcontainers), 모듈(`Scenario`/`PublishedEvents`).
-- 경쟁이 있는 변경에는 실제 병렬 실행으로 대상 불변식을 단언하는 테스트가 있는가. 좌석 확정 경쟁에서는 "성공 1건, DB 확정 1건"을 확인하는가.
-- 이름이 한국어 백틱 문장이고, 시간은 `Clock` 고정, 코루틴은 `runTest`인가. `Thread.sleep`으로 기다리지 않는가.
-- AssertJ로 통일했고, 도메인 상태를 리플렉션·랜덤 생성으로 주입하지 않았는가.
-- 코어 통합 테스트가 `IntegrationTestSupport`를 재사용하고 컨텍스트·컨테이너를 불필요하게 늘리지 않는가(클래스별 `@Import`, 프로필, `@MockitoBean`, `@DirtiesContext`, 새 컨테이너).
-- 테스트를 지우거나 `@Disabled`로 통과시키지 않았는가.
+- 구조: [core 모듈 구조](backend-core.md#코어-모듈-구조-modulith), [헥사고날](backend-core.md#헥사고날-booking-settlement-coupon), [contract](backend-contract.md). 모듈 의존을 바꿨다면 Modulith 검증과 `modulithDocs` 갱신
+- 코드 규칙: [Kotlin](backend.md#kotlin), [JPA 엔티티](backend-core.md#jpa-엔티티), [영속성](backend-core.md#영속성), [API](backend-core.md#api)와 [API 규약](../architecture/api-conventions.md)
+- 실행 경계: [Virtual Thread](backend.md#virtual-thread), [realtime](backend-realtime.md), [gateway](backend-gateway.md), [로깅](backend.md#로깅)
+- 배치·결제: [Batch Job](backend-core.md#batch-job)([ADR 0019](../adr/0019-batch-jobs-in-owning-modules.md)), [core-batch](backend-core-batch.md), [payment-batch](backend-payment-batch.md), [payment](backend-payment.md)
+- 테스트: [백엔드 테스트 지침](backend-testing.md) 전체
+- 리뷰 고유: 변경한 동작에 맞는 테스트가 있는가(경쟁이 있는 변경은 실제 병렬 실행으로 불변식 단언). 테스트를 지우거나 `@Disabled`로 통과시키지 않았는가
 
 ## 3. 제안 항목
 
-- **가독성**: 약어 변수명, given/when/then 빈 줄, 논리 단위 빈 줄, 한 줄 다중 문장, 엔티티 애노테이션 줄 배치.
-- **중복**: 두 클래스 이상이 쓰는 객체 생성 코드는 `XxxFixture`로 모았는가.
-- **주석**: "왜"가 코드에 드러나지 않을 때만 있는가.
-- **빌드**: 의존성 버전이 `gradle/libs.versions.toml`에만 있고 공통 설정이 convention plugin에 있는가. `@Suppress`나 `detekt-baseline.xml` 항목을 합의 없이 추가하지 않았는가.
+[백엔드 공통 지침의 가독성](backend.md#가독성), 중복(`XxxFixture`), "왜"만 적는 주석, [빌드 지침](backend.md#빌드)(`@Suppress`·baseline 무합의 추가 금지)에 해당하는 사항이다.
 
 ## 4. 문서 정합
 
