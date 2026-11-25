@@ -180,6 +180,14 @@ MERGE_HINT = 'PR merge changes shared history; confirm with the user before runn
 MAIN_HINT = 'This pushes to main; confirm the user intends to push to main.'
 # 이 접두사가 붙은 사유는 차단 대신 사용자 확인(ask)으로 처리한다.
 ASK_PREFIX = 'ask:'
+SECRET_HINT = ('Reading local secret files (.env, .env.local, application-local.*) is blocked; '
+               'ask the user for the key names or values you need')
+# .env.example처럼 저장소에 커밋하는 견본은 제외한다.
+SECRET_FILE_RE = re.compile(r'(?:^|/)(?:\.env(?:\.(?!example$)[^/]+)?|application-local\.(?:ya?ml|properties))$')
+# 파일 내용을 출력하거나 다른 곳으로 옮기는 명령. 스크립트가 내부에서 여는 경우는 잡지 못한다.
+SECRET_READERS = {'cat', 'head', 'tail', 'less', 'more', 'bat', 'batcat', 'sed', 'awk', 'gawk', 'grep',
+                  'egrep', 'fgrep', 'rg', 'strings', 'xxd', 'od', 'hexdump', 'base64', 'nl', 'tac', 'jq',
+                  'yq', 'diff', 'cut', 'sort', 'uniq', 'source', '.', 'scp', 'rsync'}
 
 
 def is_command_position(words: Sequence[str], index: int, boundaries: Collection[str]) -> bool:
@@ -379,11 +387,24 @@ def docker_operation(name: str, args: Sequence[str]) -> tuple[str, str, list[str
     return (action, rest[index], rest[index + 1:]) if index < len(rest) else (action, '', [])
 
 
+def reads_secret(name: str, args: Sequence[str]) -> bool:
+    if any(op == '<' and SECRET_FILE_RE.search(target) for op, target in zip(args, args[1:])):
+        return True
+    operands = [a for a in strip_redirections(args) if not a.startswith('-')]
+    if name == 'cp':
+        operands = operands[:-1]  # 마지막 인자는 복사 대상이다(.env.example → .env.local 허용)
+    elif name not in SECRET_READERS:
+        return False
+    return any(SECRET_FILE_RE.search(a) for a in operands)
+
+
 def inspect(command: str, cwd: Path) -> tuple[str | None, list[str]]:
     notices = []
     for name, args in invocations(command):
         if name == 'sudo':
             return SUDO_HINT, notices
+        if reads_secret(name, args):
+            return SECRET_HINT, notices
         if name == 'git':
             denied = git_reason(args, cwd)
             if denied:
