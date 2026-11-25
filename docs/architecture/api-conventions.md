@@ -25,6 +25,16 @@
 | `POST /api/v1/coupons/*/claims` | 코어 | 전용 rate limit 버킷(`coupon-claim`, 보충 1·버스트 3. 회원당 1회 시나리오라 429는 검증하지 못한 임시값 확정, [coupon-drop.md](../performance/m5.5/coupon-drop.md)) |
 | `/api/v1/**` 그 외 | 코어 | rate limit |
 
+`payment-api` 라우트는 `core-api`보다 먼저 매칭하며, 대상 주소는 `ticketing.gateway.payment-uri`(환경 변수 `PAYMENT_URI`, 기본 `http://localhost:18085`)다. 필터는 `core-api`와 같이 rate limit(`default`)만 건다. JWT는 payment 앱이 검증한다.
+
+#### 경로 검증
+
+웹 필터 `RequestPathGuardFilter`가 라우트 선택과 JWT 검증보다 먼저 요청 경로를 판정한다.
+
+- 웹훅 차단: 정규화한 경로(퍼센트 디코딩, 대소문자 무시, 후행 슬래시 하나 무시)가 `/api/v1/payments/webhooks` 하위이면 404 `NOT_FOUND`로 막는다.
+- 모호한 경로 거부: 중복 슬래시, 인코딩된 `/`·`\`, `.`·`..` 세그먼트, 경로 매개변수 `;`는 모든 경로에서 400 `INVALID_PATH`로 거부한다. 후행 슬래시 하나는 허용한다.
+- 거부 이유: Gateway는 라우트 선택 뒤 전달 URL을 다시 만들며 중복 슬래시를 지운다. 거부하지 않으면 하위 앱이 원래 경로를 보지 못한 채 차단 판정과 전달 경로가 어긋난다.
+
 ## 2. 기본 규칙
 
 - 경로는 `/api/v1/` 아래에 둔다. 호환되지 않는 변경은 `v2`로 올린다.

@@ -35,7 +35,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   실제 payment 앱과 같은 그룹을 쓰면 메시지를 나눠 가지므로 그룹은 인스턴스마다 새로 만든다.
  * - 주문별로 미리 지정한 결과를 결과 토픽에 `orderId` 키, 타입 헤더 없는 JSON으로 발행한다([respondToPayment], [respondToRefund]).
  *   지정하지 않은 주문에는 응답하지 않는다. 응답이 늦게 오는 상황은 테스트가 원하는 시점에 [publishSucceeded] 등을 직접 호출해 만든다.
- * - [publishSucceeded] 등은 같은 결과를 여러 번 호출해 중복 발행할 수 있다(소비자 멱등 검증).
+ * - [publishSucceeded]·[publishFailed]·[publishRefunded]는 같은 결과를 여러 번 호출하거나 응답 지정의 `times`를 늘려 중복 발행할 수 있다(booking 소비자 멱등 검증).
+ * - 요청 도착은 [awaitPaymentRequested]·[awaitRefundRequested]로 기다리고, booking 소비자가 중복까지 처리했는지는
+ *   [awaitResultsConsumedByBooking]으로 확인한다(`ticketing-booking` 그룹의 커밋된 오프셋, DLT 비어 있음).
+ * - `CommonTestConfiguration`의 공용 빈이며 `SharedTestBeansResetter`가 매 테스트 전에 [reset]한다. 결제 결과 이벤트를
+ *   `ApplicationEventPublisher`로 직접 발행하지 않는다(core는 결과를 외부화하지 않아 Kafka로 나가지 않는다).
  *
  * 컨텍스트마다 토픽 접두어가 달라 대역도 컨텍스트마다 자기 토픽만 본다. 테스트 사이 상태는 [reset]으로 비운다.
  */

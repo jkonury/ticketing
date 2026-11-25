@@ -65,3 +65,13 @@ SSE 티켓 발급은 408·429·5xx와 네트워크 오류를 자동 재시도하
 - 서명: `X-FakePg-Timestamp`(epoch 초), `X-FakePg-Signature`(hex HMAC-SHA256, 입력은 timestamp·점·원문 바이트). payment 앱과 PG가 환경 변수 `FAKE_PG_WEBHOOK_SECRET`을 공유한다. 원문으로 검증한 뒤 파싱하며 시각 허용 오차 기본값은 5분이다.
 - 어댑터 기본 주소는 `http://localhost:18090`, 연결·읽기 타임아웃은 각각 3초다. 유효한 202는 Accepted, 4xx는 Rejected, 타임아웃·연결 실패·5xx·잘못된 접수 응답은 Unknown으로 분류한다. 재처리는 [6.4절](./flows.md#64-결제-이벤트-기반) 정책을 따른다.
 - SUCCESS·FAIL·TIMEOUT·DELAYED·DUPLICATE_WEBHOOK 시나리오는 PG 설정으로 제어한다. TIMEOUT은 HTTP 응답만 늦어도 승인이 진행될 수 있다. fake-pg 자체의 메모리 거래 저장소는 재시작하면 초기화된다.
+
+#### 승인 보류 테스트 제어
+
+시나리오를 지정할 수 없는 호출자(payment 앱) 뒤에서 "다른 상태를 만든 뒤 승인이 도착한다"는 순서를 고정 지연 없이 만들기 위한 주문 단위 승인 보류 API다.
+
+- 제어 API(`/v1/test/approval-holds`)는 `fake-pg.test-controls.enabled=true`일 때만 등록되며 기본은 `false`다. `scripts/e2e/run.sh`만 이 속성을 켠다(dev·부하 실행에서는 경로가 404다).
+- `POST /v1/test/approval-holds/{orderId}`: 결제 요청 전에 등록한다. 새 등록은 201, 이미 등록·보류 중이면 현재 상태를 200으로 돌려주고, 등록이 1,000개에 이르면 429다. 등록하면 그 주문의 첫 승인(SUCCESS)이 보류된다.
+- `GET /v1/test/approval-holds/{orderId}`: `WAITING`(등록만)·`HELD`(거래 보류됨)를 알려준다. 등록이 없으면 404다.
+- `POST /v1/test/approval-holds/{orderId}/release`: 보류된 거래의 승인과 웹훅을 즉시 한 번 보낸다(202). 보류된 거래가 없으면 409다.
+- 주문마다 상태 하나를 락 안에서 전이하므로 보류 중 재등록이나 같은 주문의 다른 멱등 키 거래가 기존 보류를 덮어쓰지 않고, 해제하면 등록도 남지 않는다. 환불 웹훅에는 영향이 없다.
