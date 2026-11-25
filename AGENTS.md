@@ -7,6 +7,7 @@
 - `docs/architecture.md`: 아키텍처 문서. 구조·규칙에 대한 결정의 근거
 - `docs/roadmap.md`: 단계별 구현 체크리스트와 완료 기준
 - `docs/adr/`: 결정별로 검토한 대안과 선택 이유. 설계를 바꾸는 결정은 새 ADR로 남긴다
+- `docs/workflow/roadmap.md`: AI 개발 워크플로(W 트랙) 로드맵. M 트랙과 병행한다([ADR 0047](docs/adr/0047-ai-dev-workflow-pipeline.md))
 
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
@@ -33,10 +34,12 @@
 | `contract/` | 프로세스 간 이벤트 계약 |
 | `web/` | Next.js BFF + 화면 |
 | `docs/` | 설계서, 로드맵, 측정 결과 |
+| `harness/` | AI 개발 워크플로 실행 코드(훅 어댑터, 검증 게이트, 파이프라인 상태). 범용 부분만 둔다 |
+| `.agents/skills/` | Claude Code·Codex 공용 스킬 원본. `.claude/skills`는 이 디렉터리를 가리키는 심볼릭 링크 |
 
 ## 3. 작업 방식
 
-- 작업 시작 전 `docs/roadmap.md`에서 현재 단계와 다음 미완료 항목을 확인한다.
+- 작업 시작 전 `docs/roadmap.md`에서 현재 단계와 다음 미완료 항목을 확인한다. 워크플로 작업은 `docs/workflow/roadmap.md`(W 트랙)를 본다. 두 트랙은 병행하며 각 트랙 안에서만 단계 순서를 지킨다.
 - 한 단계의 **완료 기준**을 만족하기 전에는 다음 단계 항목을 시작하지 않는다.
 - 항목을 끝내면 `docs/roadmap.md`의 체크박스를 갱신한다.
 - 구현 중 설계와 다르게 가야 할 이유가 생기면 **먼저 사용자에게 알리고**, 합의되면 `docs/architecture.md`를 같이 고친다. 문서와 코드가 어긋난 채로 두지 않는다.
@@ -93,7 +96,7 @@ cd web && pnpm install && pnpm dev
 
 - 대화, 문서, 커밋 메시지는 한국어. 코드 식별자는 영어.
 - 주석은 "왜"가 코드에서 드러나지 않을 때만 쓴다.
-- 커밋은 사용자가 요청할 때만 한다. 단, herdr 워크플로 위임 지시는 main 세션의 task별 커밋 요청으로 본다([herdr-workflow.md](docs/rules/herdr-workflow.md#2-실행-범위)). 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
+- 커밋은 사용자가 요청할 때만 한다. 단, herdr 워크플로 위임 지시는 main 세션의 task별 커밋 요청으로 본다([herdr-workflow.md](docs/rules/herdr-workflow.md#2-실행-범위)). `docs/workflow/plans/`의 계획을 사용자가 승인(`status: approved`)하면 그 계획의 task별 로컬 커밋 요청으로 본다(푸시는 제외). 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
 - 커밋 메시지 형식: `<type>(<scope>): <요약>`. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`. scope는 모듈명(`booking`, `gateway`, `web` 등).
 - 비밀 값은 저장소에 넣지 않는다. 로컬 설정은 `.env`(git 제외)와 `application-local.yml`을 쓴다.
 
