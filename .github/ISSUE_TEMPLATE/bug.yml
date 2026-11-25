@@ -1,0 +1,46 @@
+name: 버그
+description: 동작이 설계·기대와 다르다
+title: "fix(<모듈>): "
+labels: [bug]
+body:
+  - type: dropdown
+    id: modules
+    attributes:
+      label: 영향 모듈
+      multiple: true
+      options: [core, core-batch, payment, payment-batch, realtime, gateway, fake-pg, common, contract, web, loadtest, docs, agent]
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 현상
+      description: 실제로 일어난 일. 오류 메시지는 원문 일부를 그대로 붙인다
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 결과
+      description: 근거가 되는 문서가 있으면 링크한다(architecture, ADR, rules)
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 절차
+      description: 명령이나 테스트로 적는다. 예) ./scripts/e2e/run.sh --tests "*PaymentFlowE2eTests"
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: 커밋
+      placeholder: git rev-parse --short HEAD
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그
+      description: 필요한 구간만. 비밀 값·토큰은 지운다
+      render: text
