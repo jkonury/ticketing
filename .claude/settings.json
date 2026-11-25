@@ -4,6 +4,16 @@
     "commit": "",
     "pr": ""
   },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/application-local.yml)",
+      "Read(./**/application-local.yaml)",
+      "Read(./**/application-local.properties)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

@@ -15,6 +15,7 @@
 - [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
 - 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
 - [서브에이전트 위임 지침](docs/rules/subagent-delegation.md): 구현 계획을 서브에이전트 task로 나눠 위임할 때 읽는다.
+- 반복 작업 절차는 skill로 둔다. 원본은 `.agents/skills/<이름>/SKILL.md`(Codex가 읽음)이고 `.claude/skills/<이름>`은 그 symlink다. 추가·수정 후 `./scripts/agent/skills/check-skills.sh`를 실행한다. skill에는 순서만 쓰고 규범은 `docs/rules`를 링크한다.
 - `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
 - `docs/rules/herdr-workflow.md`: 메인 세션이 구현자·리뷰어 에이전트에게 위임하는 오케스트레이션 절차와 `scripts/agent/herdr/` 스크립트. 사용자가 위임을 명시적으로 지시할 때만 쓰며, 그때 먼저 읽는다
 
@@ -78,6 +79,7 @@ cd web && pnpm install && pnpm dev
 **Claude Code와 Codex 모두** 저장소 루트에서 다음 스크립트를 실행한다. 실패를 받으면 작업 중인 에이전트가 직접 고친다.
 
 - 사전 조건: Docker가 떠 있어야 한다(jOOQ 코드 생성과 Testcontainers가 사용한다). 에이전트 스크립트는 `fd`, `rg`를 쓴다.
+- 변경 범위 검사: `./scripts/agent/test/verify-changed.sh [--dry-run] [기준 ref | A..B]`. 변경 경로에 맞는 아래 검사를 골라 실행하고 E2E·`modulithDocs` 필요 여부를 알린다. 작업을 마치기 전에 실행한다.
 - test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 하고, `--no-verify`로 우회하지 않는다.
