@@ -1,6 +1,6 @@
 # Stop 검증 게이트(harness/hooks/stop_gate.py)의 이 저장소용 경로 규칙.
 # 형식은 harness/lib/gate.py 머리말을 본다. 파일마다 위에서부터 처음 맞는 규칙 하나만 적용한다.
-# task AC가 있으면 이 규칙 대신 AC를 실행한다. E2E는 게이트에서 돌리지 않는다(ADR 0047 결정 6).
+# task AC가 있으면 이 규칙 대신 AC를 실행한다. E2E는 게이트에서 돌리지 않는다(ADR 0048 결정 6).
 
 [modules]
 "common" = ":common"

@@ -1,4 +1,4 @@
-# ADR 0047: Claude Code·Codex 공용 반자율 개발 파이프라인
+# ADR 0048: Claude Code·Codex 공용 반자율 개발 파이프라인
 
 - 상태: 합의
 - 작성일: 2026-11-25

@@ -44,5 +44,5 @@ docs/prompt.md
 ### session handoff
 .handoff
 
-### AI 워크플로 지표·파이프라인 상태 (ADR 0047) ###
+### AI 워크플로 지표·파이프라인 상태 (ADR 0048) ###
 .metrics/
