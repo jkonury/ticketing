@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0047](../adr/0047-ai-dev-workflow-pipeline.md)
 - 작성일: 2026-11-25
-- 상태: W0 완료. 다음은 W1
+- 상태: W0·W1 완료. 다음은 W2
 
 Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)의 M6와 병행하고, M6 task를 파이프라인의 시범 대상으로 쓴다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다.
 
@@ -29,11 +29,11 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 
 ## W1. 스킬 단일 원본
 
-- [ ] `.claude/skills/{delegate,handoff}`를 `.agents/skills/`로 옮기고 `.claude/skills`를 `../.agents/skills`를 가리키는 심볼릭 링크로 바꾼다
-- [ ] 스킬별 `agents/openai.yaml`에 `allow_implicit_invocation: false`
-- [ ] Codex가 Claude 전용 frontmatter(`disable-model-invocation`)를 허용하는지 확인
+- [x] `.claude/skills/{delegate,handoff}`를 `.agents/skills/`로 옮기고 `.claude/skills`를 `../.agents/skills`를 가리키는 심볼릭 링크로 바꾼다
+- [x] 스킬별 `agents/openai.yaml`에 `allow_implicit_invocation: false`
+- [x] Codex가 Claude 전용 frontmatter(`disable-model-invocation`)를 허용하는지 확인: 무시하고 로드한다(codex-cli 0.171.0)
 
-**완료 기준**: Claude Code(`/<skill>`)와 Codex(`$<skill>`)에서 같은 스킬을 명시적으로 호출해 본문이 로드된다.
+**완료 기준**: Claude Code(`/<skill>`)와 Codex(`$<skill>`)에서 같은 스킬을 명시적으로 호출해 본문이 로드된다. (2026-11-25 임시 스킬로 두 도구 모두 확인)
 
 ## W2. 훅 어댑터와 Stop 게이트
 
