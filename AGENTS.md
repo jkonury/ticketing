@@ -95,6 +95,7 @@ cd web && pnpm install && pnpm dev
 
 - 대화, 문서, 커밋 메시지는 한국어. 코드 식별자는 영어.
 - 주석은 "왜"가 코드에서 드러나지 않을 때만 쓴다.
+- 파일 수정은 `Edit`(여러 곳이면 `replace_all`)을 쓴다. `python3 - <<EOF`로 읽어서 `replace` 후 다시 쓰는 방식은 diff와 실패 확인이 어려우므로, 수십 개 파일의 기계적 치환처럼 `Edit`로 불가능한 경우에만 쓴다.
 - 커밋은 사용자가 요청할 때만 한다. 단, herdr 워크플로 위임 지시는 main 세션의 task별 커밋 요청으로 본다([delegate 워크플로](.agents/skills/delegate/references/workflow.md#2-실행-범위)). `docs/workflow/plans/`의 계획을 사용자가 승인(`status: approved`)하면 그 계획의 task별 로컬 커밋 요청으로 본다(푸시는 제외). 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
 - 커밋 메시지 형식: `<type>(<scope>): <요약>`. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`. scope는 모듈명(`booking`, `gateway`, `web` 등).
 - 비밀 값은 저장소에 넣지 않는다. 로컬 설정은 `.env`(git 제외)와 `application-local.yml`을 쓴다.
