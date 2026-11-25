@@ -11,7 +11,7 @@
 
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
-- [백엔드 공통 지침](docs/rules/backend.md): 공통 작성 규칙과 `core`, `core-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`별 지침. 변경 경로에 해당하는 지침도 읽는다.
+- [백엔드 공통 지침](docs/rules/backend.md): 공통 작성 규칙과 `core`, `core-batch`, `payment`, `payment-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`별 지침. 변경 경로에 해당하는 지침도 읽는다.
 - [백엔드 테스트 지침](docs/rules/backend-testing.md): 백엔드 테스트·픽스처·E2E·부하 테스트·CI를 다룰 때 읽는다.
 - [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
 - 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
@@ -32,6 +32,10 @@
 | `common/` | JVM 앱에서 사용하는 공통 코드 |
 | `contract/` | 프로세스 간 이벤트 계약 |
 | `web/` | Next.js BFF + 화면 |
+| `e2e/` | 전체 스택 E2E 테스트(`scripts/e2e/run.sh`가 실행) |
+| `loadtest/` | 부하 시나리오(k6 `scenarios/`, Gatling `gatling/`) |
+| `build-logic/` | Gradle convention plugin(Kotlin 품질, JPA 규약 등) |
+| `scripts/` | 개발 실행(`dev`), E2E, 부하, DB, 에이전트 검사(`agent`) 스크립트 |
 | `docs/` | 설계서, 로드맵, 측정 결과 |
 | `harness/` | AI 개발 워크플로 실행 코드(훅 어댑터, 검증 게이트, 파이프라인 상태). 범용 부분만 둔다 |
 | `.agents/skills/` | Claude Code·Codex 공용 스킬 원본. `.claude/skills`는 이 디렉터리를 가리키는 심볼릭 링크 |
@@ -89,7 +93,7 @@ cd web && pnpm install && pnpm dev
 - 같은 작업 디렉터리의 Gradle test·check·성능 측정은 순차 실행한다. 동시에 실행하면 결과 파일이 충돌한다.
 - 모듈 의존을 바꾸면 Modulith 구조 검증을 돌리고 `./gradlew :core:modulithDocs`로 다이어그램을 다시 생성한다. [core 작성 지침](docs/rules/backend-core.md)
 - 실패하면 실패한 그대로 보고한다(실패한 테스트 이름과 메시지 일부). 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
-- E2E(`scripts/e2e/run.sh`)·부하 테스트·CI는 `build`·`check`에 포함되지 않는다. core·gateway·realtime 흐름을 바꾼 작업에서는 E2E를 실행한다. 사전 조건, 포트, 옵션은 [E2E·부하·CI 실행](docs/rules/backend-testing.md#e2e부하ci-실행)을 따른다.
+- E2E(`scripts/e2e/run.sh`)·부하 테스트·CI는 `build`·`check`에 포함되지 않는다. core·payment·gateway·realtime·fake-pg 흐름을 바꾼 작업에서는 E2E를 실행한다. 사전 조건, 포트, 옵션은 [E2E·부하·CI 실행](docs/rules/backend-testing.md#e2e부하ci-실행)을 따른다.
 
 ## 7. 공통 규칙
 

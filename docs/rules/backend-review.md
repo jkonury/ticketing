@@ -1,4 +1,4 @@
-# Backend 리뷰 지침 (core, core-batch, realtime, gateway, fake-pg, common, contract)
+# Backend 리뷰 지침 (core, core-batch, payment, payment-batch, realtime, gateway, fake-pg, common, contract)
 
 백엔드 변경(diff, PR)을 리뷰할 때 쓰는 확인 순서와 판정 기준이다. [백엔드 공통 지침](backend.md)에서 변경 모듈의 작성 지침을 찾고, 테스트는 [백엔드 테스트 지침](backend-testing.md)을 적용한다. 설계 규칙은 [AGENTS.md 4절](../../AGENTS.md#4-반드시-지킬-설계-규칙)을 따른다. web 변경은 [frontend-review.md](frontend-review.md)를 따른다.
 
@@ -42,7 +42,8 @@
 - 인가를 URL 패턴·메서드 보안으로 서버에서 강제하는가. BFF·Gateway 통과를 신뢰하지 않는가.
 - 리소스 소유자 확인(내 예매인가)이 헥사고날 모듈의 `application.service`나 계층형 모듈의 `service`에 있는가.
 - 비밀번호, 토큰, 결제 정보가 로그·응답·예외 메시지에 남지 않는가.
-- PG 웹훅 서명을 검증하는가.
+- PG 웹훅 서명을 검증하는가. `payment`의 웹훅은 JWT 없이 받으므로 서명 검증과 멱등 처리가 유지되는가.
+- `payment`의 결제 조회가 JWT를 검증하고 `role` 클레임의 USER 권한을 요구하는가. ([payment 작성 지침](backend-payment.md))
 - 비밀 값이 저장소에 들어가지 않았는가.
 
 ### 스키마
@@ -109,11 +110,18 @@
 
 ### Batch
 
-[Batch Job 지침](backend-core.md#batch-job) · [core-batch 작성 지침](backend-core-batch.md)
+[Batch Job 지침](backend-core.md#batch-job) · [core-batch 작성 지침](backend-core-batch.md) · [payment-batch 작성 지침](backend-payment-batch.md)
 
 - Job별 파라미터와 쓰기 방식이 재시작·재실행의 정합성을 보장하는가.
 - 대량 읽기에서 jOOQ reader와 chunk 처리로 메모리 사용량을 제한하는가.
 - Job이 소유 모듈에 있는가([ADR 0019](../adr/0019-batch-jobs-in-owning-modules.md)).
+- payment-batch Job이 payment 앱의 `adapter/provided/batch`에 있고 `@Profile("batch")`가 붙었는가. 웹 전용 빈(예열 러너·작업, 보안 필터 체인)에 `@ConditionalOnWebApplication`이 붙었는가.
+
+### payment
+
+[payment 작성 지침](backend-payment.md)
+
+- 결제·환불 요청 Kafka 리스너의 그룹이 `ticketing-payment`로 유지되는가. 바뀌면 core가 커밋한 오프셋을 잃는다.
 
 ### Virtual Thread
 
@@ -154,7 +162,7 @@
 - `./scripts/agent/test/run-tests.sh`가 통과했는가(필터는 사용자가 지정한 경우만).
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과했는가.
 - 모듈 의존을 바꿨다면 Modulith 구조 검증을 돌렸는가.
-- core·gateway·realtime 흐름을 바꿨다면 `./scripts/e2e/run.sh`를 실행했는가.
+- core·payment·gateway·realtime·fake-pg 흐름을 바꿨다면 `./scripts/e2e/run.sh`를 실행했는가.
 - 성능에 민감한 변경(좌석 선점, 대기열, 부하 경로)이면 `scripts/loadtest/run.sh` 결과를 확인했는가. 다른 Gradle 작업과 동시에 돌리지 않았는가.
 - 문서를 옮기거나 제목·링크를 바꿨다면 `./scripts/agent/docs/check-docs.sh`를 통과했는가.
 
@@ -179,3 +187,5 @@
 ```
 
 지적이 없는 등급은 "없음"으로 적는다. 확인하지 못한 항목은 통과로 쓰지 않고 "확인 안 함"으로 적는다.
+
+delegate 스킬로 위임한 리뷰는 [delegate 워크플로 §5](../../.agents/skills/delegate/references/workflow.md#5-지시서-템플릿)의 출력 형식으로 쓰고, 이 문서의 등급은 차단 → 차단 사항, 주의·제안 → 비차단 사항으로 옮긴다.

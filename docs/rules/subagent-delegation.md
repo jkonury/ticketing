@@ -8,9 +8,9 @@ in-process 서브에이전트(Claude Code Agent 도구, Codex 서브에이전트
 
 1. **Scope 최소화**: task 하나는 가능한 한 모듈 하나만 다루고, 그 안에서도 크면 레이어별로 나눈다. 여러 모듈을 함께 바꿔야 빌드가 성립하는 경우만 예외로 하고 지시서에 이유를 적는다.
 2. **자기완결성**: 서브에이전트는 메인 대화의 문맥을 모른 채 시작한다. 필요한 정보는 지시서에 담는다. 문서 전문을 읽히지 말고, 그 task에 필요한 제약(디렉터리 구조, 기술 스택 등)만 지시서에 옮겨 적는다. 메인 대화에서 이미 확인한 경로·결론도 지시서에 적는다. 이유: 서브에이전트가 같은 탐색을 다시 하면 비용이 두 번 든다.
-3. **최소 참조**: 이번 task가 의존하는, 이전 task가 만든 파일 경로만 적는다. 문서는 꼭 필요할 때 `docs/X.md § 섹션명` 단위로 지정한다. 루트의 `CLAUDE.md`·`AGENTS.md`(와 그 `@import` 대상)는 서브에이전트가 저장소 루트에서 시작할 때 자동으로 로드되므로 "읽어야 할 파일"에 넣지 않는다. 이유: 같은 내용을 한 번 더 읽으면 매 턴 중복 토큰이 된다. 단, task가 그 파일을 **수정**해야 하면 작업 절에 대상으로 적는다.
+3. **최소 참조**: 이번 task가 의존하는, 이전 task가 만든 파일 경로만 적는다. 문서는 꼭 필요할 때 `docs/X.md § 섹션명` 단위로 지정한다. 루트의 `CLAUDE.md`·`AGENTS.md`(와 그 `@import` 대상)는 서브에이전트가 저장소 루트에서 시작할 때 자동으로 로드되므로 "읽어야 할 파일"에 넣지 않는다. 이유: 같은 내용을 한 번 더 읽으면 매 턴 중복 토큰이 된다. 단, task가 그 파일을 **수정**해야 하면 작업 절에 대상으로 적는다. 예외: `.claude/agents/Explore.md`, `runner.md`는 `omitClaudeMd: true`라 지침을 로드하지 않으므로 필요한 규칙을 지시서에 적는다.
 4. **시그니처 수준 지시**: 함수·클래스 인터페이스만 제시하고 구현은 서브에이전트에게 맡긴다. 단, 핵심 규칙(멱등성, 보안, 데이터 무결성)은 명시한다.
-5. **AC는 실행 가능한 커맨드로**: 프로젝트의 실제 검증 커맨드(`./gradlew test`, `pnpm test` 등)를 넣는다. 서브에이전트는 완료 전에 AC를 직접 실행하고, 메인 에이전트도 보고를 받은 뒤 AC를 다시 실행한다. 실패하면 새 서브에이전트를 띄우지 않고 같은 서브에이전트에 이어서 지시한다(Claude Code는 `SendMessage`로 이어서 지시하고, Codex는 같은 스레드에 후속 지시를 보낸다). 이때 실패 출력만 전달한다. AC 출력은 재지시 문맥으로 쓰이므로 출력이 적은 옵션을 쓴다(`pytest -q --tb=short`, `npm test --silent` 등).
+5. **AC는 실행 가능한 커맨드로**: 프로젝트의 실제 검증 커맨드(`./scripts/agent/test/run-tests.sh`, `./scripts/agent/test/check-summary.sh`, `./scripts/agent/test/web-check.sh` 등)를 넣는다. 서브에이전트는 완료 전에 AC를 직접 실행하고, 메인 에이전트도 보고를 받은 뒤 AC를 다시 실행한다. 실패하면 새 서브에이전트를 띄우지 않고 같은 서브에이전트에 이어서 지시한다(Claude Code는 `SendMessage`로 이어서 지시하고, Codex는 같은 스레드에 후속 지시를 보낸다). 이때 실패 출력만 전달한다. AC 출력은 재지시 문맥으로 쓰이므로 출력이 적은 요약 스크립트를 쓴다(15번 원칙).
 6. **주의사항은 구체적으로**: "조심해라" 대신 "X를 하지 마라. 이유: Y" 형식으로 쓴다.
 7. **네이밍**: task name은 kebab-case slug로 쓴다(`project-setup`, `api-layer`, `auth-flow`). Claude Code에서는 `name`으로 지정해 `SendMessage`로 다시 부를 수 있게 한다.
 8. **모델·추론 강도 선택**: 단순한 task(설정, 보일러플레이트, 문서 동기화, 매핑표대로의 이동)는 가벼운 모델과 낮은 추론 강도를 지정해 비용을 줄인다. Claude Code는 `model: "sonnet"`/`"haiku"`와 `effort: "low"`/`"medium"`을 쓰고, Codex는 서브에이전트 설정의 `model`과 `model_reasoning_effort`를 쓴다. 설계 판단이 많은 task(경계 재구성, 메시징·멱등성, 빌드 구조 변경)에만 `"high"`를 쓴다. herdr 서브 세션의 모델·추론 강도 기본값은 [delegate 워크플로](../../.agents/skills/delegate/references/workflow.md#에이전트-종류) 1절을 따른다.
@@ -32,6 +32,10 @@ in-process 서브에이전트(Claude Code Agent 도구, Codex 서브에이전트
 
 task 하나는 모듈 하나만 수정한다. 모듈은 `core`의 Modulith 모듈 하나, 또는 `core-batch`·`payment`·`payment-batch`·`realtime`·`gateway`·`fake-pg`·`common`·`contract`·`web` 중 하나다. 여러 모듈을 함께 바꿔야 빌드가 성립하는 경우(계약 변경 등)만 예외로 하고 지시서에 이유를 적는다.
 
+### 테스트 필터
+
+서브에이전트 task의 AC에는 `run-tests.sh`의 `--tests` 필터를 써도 된다(사용자 합의). `AGENTS.md` 6절의 "필터는 사용자가 지정한 경우에만"은 이 합의로 task AC에 한해 완화된다. main의 최종 검증은 필터 없이 실행한다.
+
 ### 변경 유형별 최종 검증
 
 일반 `check`에는 E2E·부하 테스트가 포함되지 않는다.
@@ -40,7 +44,7 @@ task 하나는 모듈 하나만 수정한다. 모듈은 `core`의 Modulith 모�
 |---|---|
 | Kotlin 일반 변경 | `./scripts/agent/test/run-tests.sh`(필터 없이) + `./scripts/agent/test/check-summary.sh` |
 | Modulith 모듈 경계·이벤트 변경 | 위 검사 + 구조 검증, 필요 시 `./gradlew :core:modulithDocs` |
-| core·gateway·realtime 핵심 흐름 변경 | 위 검사 + `./scripts/e2e/run.sh` |
+| core·payment·gateway·realtime·fake-pg 흐름 변경 | 위 검사 + `./scripts/e2e/run.sh` |
 | `web` 변경 | `./scripts/agent/test/web-check.sh`, 영향 시 `--web` E2E |
 | 성능 최적화 | 기능·정합성 검사 후 단독 부하 측정(`scripts/loadtest/run.sh`) |
 | 문서 변경 | `./scripts/agent/docs/check-docs.sh [경로...]` |

@@ -101,7 +101,7 @@
 ## 5. 검증 확인
 
 - `./scripts/agent/test/web-check.sh`가 통과했는가. 라우팅·빌드에 영향이 있으면 `--build`도 확인한다.
-- core·gateway·realtime 흐름이나 SSE·인증 경계를 바꿨다면 `./scripts/e2e/run.sh --web`을 실행했는가.
+- core·payment·gateway·realtime 연동이나 SSE·인증 경계를 바꿨다면 `./scripts/e2e/run.sh --web`을 실행했는가.
 - 문서를 옮기거나 제목·링크를 바꿨다면 `./scripts/agent/docs/check-docs.sh`를 통과했는가.
 
 ## 리뷰 결과 형식
@@ -125,3 +125,5 @@
 ```
 
 지적이 없는 등급은 "없음"으로 적는다. 확인하지 못한 항목은 통과로 쓰지 않고 "확인 안 함"으로 적는다.
+
+delegate 스킬로 위임한 리뷰는 [delegate 워크플로 §5](../../.agents/skills/delegate/references/workflow.md#5-지시서-템플릿)의 출력 형식으로 쓰고, 이 문서의 등급은 차단 → 차단 사항, 주의·제안 → 비차단 사항으로 옮긴다.

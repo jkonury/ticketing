@@ -31,7 +31,7 @@
 
 ## HTTP 테스트
 
-- MVC HTTP 테스트(`core`, `fake-pg`)는 `MockMvcTester`로 요청을 만들고 `assertThat(result).hasStatus(...)`·`bodyJson()`으로 검증한다. WebFlux HTTP 테스트(`realtime`, `gateway`)는 `WebTestClient`를 쓴다.
+- MVC HTTP 테스트(`core`, `payment`, `fake-pg`)는 `MockMvcTester`로 요청을 만들고 `assertThat(result).hasStatus(...)`·`bodyJson()`으로 검증한다. WebFlux HTTP 테스트(`realtime`, `gateway`)는 `WebTestClient`를 쓴다.
 - `realtime`과 `gateway`의 통합 테스트는 각각 `RealtimeIntegrationTestSupport`와 `GatewayIntegrationTestSupport`를 재사용한다.
 
 ## core 통합 테스트
@@ -48,6 +48,8 @@
 결제는 payment 앱이 맡으므로 core 테스트에서는 `KafkaPaymentStub`(`core/src/test/.../support/`)이 payment 앱 자리에 선다. `CommonTestConfiguration`의 공용 빈이며 `SharedTestBeansResetter`가 매 테스트 전에 초기화한다. 대역은 `PaymentRequested`·`RefundRequested` 토픽을 `ticketing-payment`와 다른 임의 그룹으로 소비해 `paymentRequests`·`refundRequests`에 기록하고(`awaitPaymentRequested`, `awaitRefundRequested`로 도착을 기다린다), 컨텍스트별 토픽 접두어를 따라 자기 컨텍스트의 토픽만 본다. 결과는 두 방식으로 발행한다. 요청 전에 `respondToPayment(orderId, Succeeded/Failed(times))`·`respondToRefund(orderId)`를 지정하면 요청이 도착할 때 응답하고(지정하지 않은 주문은 응답 없음), `publishSucceeded`·`publishFailed`·`publishRefunded`를 직접 호출하면 원하는 시점에 보낸다. 직접 호출을 반복하거나 `times`를 늘리면 같은 결과를 중복 발행해 booking의 멱등을 검증하고, 응답이 늦거나 없는 상황은 호출 시점으로 만든다. 결과는 `orderId` 키와 타입 헤더 없는 JSON으로 나가므로 실제 payment 앱과 같다. booking 소비자가 중복까지 처리했는지는 `awaitResultsConsumedByBooking`으로 확인한다(커밋된 오프셋과 DLT 비어 있음). 결제 결과 이벤트를 `ApplicationEventPublisher`로 직접 발행하지 않는다. core는 결과를 외부화하지 않으므로 Kafka로 나가지 않는다.
 
 ### Testcontainers 재사용
+
+`core`와 `payment`에 공통으로 적용한다. 두 모듈 모두 자기 `TestcontainersConfiguration`(test 소스, 패키지 `io.github.ticketing`)이 JVM 단위 싱글턴 컨테이너와 `DynamicPropertyRegistrar`를 제공한다. payment는 PostgreSQL·Kafka를 쓴다.
 
 - 코어 PostgreSQL·Redis·Kafka 컨테이너는 `TestcontainersConfiguration`에서 사용하는 JVM 단위 싱글턴을 공유한다. 테스트 클래스나 컨텍스트마다 컨테이너를 새로 만들지 않는다.
 - 공유 컨테이너의 수명은 Spring 빈·JUnit 테스트 클래스의 수명과 분리한다. `@Container`·`@Testcontainers`로 클래스 종료 시 정리하거나, Spring 컨테이너 빈의 종료 처리·`stop()`·`close()`로 공유 컨테이너를 중단하지 않는다. JVM 종료 후 정리는 Testcontainers의 Ryuk에 맡긴다.
@@ -73,7 +75,7 @@
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
 
 - 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)와 payment 앱(18085)이 필요하다. 결제 결과는 payment 앱이 발행한다.
-- E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`. core·gateway·realtime 흐름을 바꾼 작업에서 실행한다.
+- E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`. core·payment·gateway·realtime·fake-pg 흐름을 바꾼 작업에서 실행한다(결제 경로는 `PaymentFlowE2eTests`가 검증한다).
   - 사전 조건: `.env`(payment DB·`TICKETING_JWT_SECRET`·`FAKE_PG_WEBHOOK_SECRET` 포함. 없으면 스크립트가 키 이름을 알리고 실패한다), 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18085·18090 포트. `--web`은 Playwright web 앱을 13000 포트에 추가하므로 그 포트도 비어 있어야 한다.
   - 프로세스는 fake-pg, core, payment, realtime-a/b, Gateway다. 매 실행마다 `./scripts/db/ensure-payment-db.sh`로 `payment_db`를 준비한다. fake-pg 웹훅은 payment 앱을 직접 호출한다.
   - `core-batch`·`payment-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)는 별도 프로세스로 실행한다. 정산·미결제 정리는 core-batch와 코어 DB, 결제 대사는 payment-batch와 `payment_db`(`BatchSupport`의 `BatchTarget`)를 쓴다.

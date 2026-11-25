@@ -36,7 +36,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 
 - JPA 엔티티는 `data class`로 만들지 않는다. `equals`는 식별자 기준으로 정의한다. 프록시와 비교될 수 있으므로 `other is 엔티티클래스`로 비교하고 `id`는 getter로 읽는다. `hashCode`는 영속 전후에 유지되고 `equals`가 참인 프록시와 실제 엔티티에서 같아야 한다. 구현을 변경할 때 두 조건을 확인한다. 식별자로 계산하면 영속 전후에 해시가 바뀔 수 있으며, 클래스 기준 계산도 프록시와 같은 값을 내는지 확인해야 한다.
 - JPA 엔티티(`@Embeddable` 포함)의 영속 속성에는 `val`을 쓰지 않는다. `@Id`, `@EmbeddedId`, 컬렉션, `updatable = false` 컬럼을 포함해 생성자와 본문 모두 `var`로 선언한다. `val`은 영속성 provider가 reflection으로 바꿀 수 있어 실제로 불변이 아니고, final 필드와 setter가 없어 JPA Auditing 같은 기능이 어긋나며, Kotlin 데이터 흐름 분석이 틀려 런타임 오류가 날 수 있다 (IDE의 JPA 검사도 같은 이유로 경고한다). 변경하면 안 되는 컬럼은 `updatable = false`로 표현한다. 엔티티 외 도메인 모델의 `val` 원칙은 그대로다.
-- **setter 가시성.** `domain` 패키지에 둔 엔티티(계층형 모듈 `member`, `catalog`, `notification`)의 영속 속성은 `var` + `protected set`으로 선언해 외부 변경을 막는다. `private set`은 `allOpen`이 속성을 open으로 만들어 컴파일 오류가 나므로 쓰지 않는다. 헥사고날 모듈의 `*JpaEntity`는 같은 어댑터의 매퍼가 값을 채우므로 예외다. 대신 어댑터 밖으로 노출하지 않는다 (`internal` 또는 패키지 비공개 사용).
+- **setter 가시성.** `domain` 패키지에 둔 엔티티(JPA 엔티티를 가진 계층형 모듈 `member`, `catalog`. `audit`·`notification`에는 엔티티가 없다)의 영속 속성은 `var` + `protected set`으로 선언해 외부 변경을 막는다. `private set`은 `allOpen`이 속성을 open으로 만들어 컴파일 오류가 나므로 쓰지 않는다. 헥사고날 모듈의 `*JpaEntity`는 같은 어댑터의 매퍼가 값을 채우므로 예외다. 대신 어댑터 밖으로 노출하지 않는다 (`internal` 또는 패키지 비공개 사용).
 - **컬렉션 노출.** Kotlin `List`는 읽기 전용 뷰일 뿐이라 `as MutableList` 캐스팅으로 수정된다. 엔티티는 내부 컬렉션을 그대로 반환하지 않고 `Collections.unmodifiableList(...)` 또는 복사본(`toList()`)을 반환한다. 컬렉션 속성은 JPA 필드명을 유지한다.
 - JPA 엔티티는 애노테이션을 변수 선언과 같은 줄에 두지 않는다. 애노테이션을 한 줄씩 쓰고, 다음 줄에 `val`/`var` 선언을 둔다.
 
