@@ -16,8 +16,7 @@
 - [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
 - 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
 - [서브에이전트 위임 지침](docs/rules/subagent-delegation.md): 구현 계획을 서브에이전트 task로 나눠 위임할 때 읽는다.
-- `docs/rules/herdr.md`: herdr(터미널 워크스페이스) 명령 정리. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 이 문서를 먼저 읽는다
-- `docs/rules/herdr-workflow.md`: 메인 세션이 구현자·리뷰어 에이전트에게 위임하는 오케스트레이션 절차와 `scripts/agent/herdr/` 스크립트. 사용자가 위임을 명시적으로 지시할 때만 쓰며, 그때 먼저 읽는다
+- herdr(터미널 워크스페이스) 명령 정리와 구현자·리뷰어 위임 절차·스크립트는 `delegate` 스킬(`.agents/skills/delegate/`의 `references/`, `scripts/`)에 있다. 프롬프트에서 herdr 사용을 지시받으면 검색하지 말고 `references/herdr.md`를 먼저 읽는다. 위임은 사용자가 명시적으로 지시할 때만 쓰며, 이 저장소의 값(task 단위, 최종 검증, 리뷰 불변 조건)은 [서브에이전트 위임 지침](docs/rules/subagent-delegation.md#이-저장소의-위임-값)에 있다
 
 ## 2. 저장소 구조
 
@@ -44,7 +43,7 @@
 - 항목을 끝내면 `docs/roadmap.md`의 체크박스를 갱신한다.
 - 구현 중 설계와 다르게 가야 할 이유가 생기면 **먼저 사용자에게 알리고**, 합의되면 `docs/architecture.md`를 같이 고친다. 문서와 코드가 어긋난 채로 두지 않는다.
 - `docs/roadmap.md`의 "단계와 무관한 후속 항목"(의도적으로 미룬 것)은 요청 없이 앞당겨 구현하지 않는다.
-- 세션을 넘길 때는 [인계 템플릿](docs/templates/session-handoff.md) 형식으로 `.handoff/`(git 제외)에 인계 문서를 쓴다.
+- 세션을 넘길 때는 `handoff` 스킬의 인계 템플릿(`.agents/skills/handoff/references/template.md`) 형식으로 `.handoff/`(git 제외)에 인계 문서를 쓴다.
 - 라이브러리 버전과 API는 기억에 의존하지 말고 공식 문서로 확인한다. 특히 Spring Boot 4.x, Spring Modulith, Spring Cloud Gateway, jOOQ, Next.js.
 
 ## 4. 반드시 지킬 설계 규칙
@@ -96,7 +95,7 @@ cd web && pnpm install && pnpm dev
 
 - 대화, 문서, 커밋 메시지는 한국어. 코드 식별자는 영어.
 - 주석은 "왜"가 코드에서 드러나지 않을 때만 쓴다.
-- 커밋은 사용자가 요청할 때만 한다. 단, herdr 워크플로 위임 지시는 main 세션의 task별 커밋 요청으로 본다([herdr-workflow.md](docs/rules/herdr-workflow.md#2-실행-범위)). `docs/workflow/plans/`의 계획을 사용자가 승인(`status: approved`)하면 그 계획의 task별 로컬 커밋 요청으로 본다(푸시는 제외). 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
+- 커밋은 사용자가 요청할 때만 한다. 단, herdr 워크플로 위임 지시는 main 세션의 task별 커밋 요청으로 본다([delegate 워크플로](.agents/skills/delegate/references/workflow.md#2-실행-범위)). `docs/workflow/plans/`의 계획을 사용자가 승인(`status: approved`)하면 그 계획의 task별 로컬 커밋 요청으로 본다(푸시는 제외). 커밋 메시지에 도구 서명(attribution) 줄을 넣지 않는다.
 - 커밋 메시지 형식: `<type>(<scope>): <요약>`. type은 `feat`, `fix`, `refactor`, `test`, `docs`, `chore`. scope는 모듈명(`booking`, `gateway`, `web` 등).
 - 비밀 값은 저장소에 넣지 않는다. 로컬 설정은 `.env`(git 제외)와 `application-local.yml`을 쓴다.
 

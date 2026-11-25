@@ -32,6 +32,7 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 - [x] `.claude/skills/{delegate,handoff}`를 `.agents/skills/`로 옮기고 `.claude/skills`를 `../.agents/skills`를 가리키는 심볼릭 링크로 바꾼다
 - [x] 스킬별 `agents/openai.yaml`에 `allow_implicit_invocation: false`
 - [x] Codex가 Claude 전용 frontmatter(`disable-model-invocation`)를 허용하는지 확인: 무시하고 로드한다(codex-cli 0.171.0)
+- [x] 스킬 자기완결화: 스킬이 쓰는 문서·스크립트를 스킬 디렉터리(`references/`, `scripts/`)로 옮겨 전역 스킬 디렉터리로 옮겨도 동작하게 한다. 프로젝트 값은 프로젝트 지침([위임 값](../rules/subagent-delegation.md#이-저장소의-위임-값))에서 읽는다
 
 **완료 기준**: Claude Code(`/<skill>`)와 Codex(`$<skill>`)에서 같은 스킬을 명시적으로 호출해 본문이 로드된다. (2026-11-25 임시 스킬로 두 도구 모두 확인)
 

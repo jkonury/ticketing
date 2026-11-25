@@ -1,6 +1,6 @@
 # herdr 명령어 정리
 
-herdr(v0.9.5 기준)를 다루라는 지시를 받았을 때 매번 검색하지 않도록 정리한 참고 문서다. **명령 문법의 최종 기준은 설치된 바이너리**이므로 의심스러우면 `herdr --help`, `herdr <그룹>`(서브커맨드 없이)으로 확인한다. 원문은 `herdr --skill`로 출력할 수 있다. 메인 세션이 구현자·리뷰어 에이전트에게 작업을 맡기는 절차는 [herdr-workflow.md](herdr-workflow.md)를 따른다.
+herdr(v0.9.5 기준)를 다루라는 지시를 받았을 때 매번 검색하지 않도록 정리한 참고 문서다. **명령 문법의 최종 기준은 설치된 바이너리**이므로 의심스러우면 `herdr --help`, `herdr <그룹>`(서브커맨드 없이)으로 확인한다. 원문은 `herdr --skill`로 출력할 수 있다. 메인 세션이 구현자·리뷰어 에이전트에게 작업을 맡기는 절차는 [workflow.md](workflow.md)를 따른다.
 
 ## 1. 시작 전 확인
 
@@ -43,7 +43,7 @@ herdr agent explain <이름|pane>                    # 에이전트 감지 상�
 herdr api snapshot                                 # 라이브 세션 전체 스냅샷
 ```
 
-상태줄(컨텍스트 사용률 등)은 `herdr agent read <이름|pane> --source visible --lines 20`으로 읽는다. main 자신의 pane도 `$HERDR_PANE_ID`로 읽을 수 있다. 사용률 추출은 `scripts/agent/herdr/herdr-context.sh`를 쓴다.
+상태줄(컨텍스트 사용률 등)은 `herdr agent read <이름|pane> --source visible --lines 20`으로 읽는다. main 자신의 pane도 `$HERDR_PANE_ID`로 읽을 수 있다. 사용률 추출은 delegate 스킬의 `scripts/herdr-context.sh`를 쓴다.
 
 ## 4. 레이아웃(workspace / tab / pane)
 

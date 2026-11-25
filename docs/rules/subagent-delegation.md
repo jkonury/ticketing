@@ -1,6 +1,6 @@
 # 서브에이전트 작업 위임 지침 (Claude Code·Codex 공용)
 
-in-process 서브에이전트(Claude Code Agent 도구, Codex 서브에이전트)에 위임할 때의 원칙이다. herdr pane으로 구현자·리뷰어를 띄우는 절차는 [herdr 오케스트레이션 워크플로](herdr-workflow.md)를 따르며, 지시서 작성 원칙은 이 문서와 같다.
+in-process 서브에이전트(Claude Code Agent 도구, Codex 서브에이전트)에 위임할 때의 원칙이다. herdr pane으로 구현자·리뷰어를 띄우는 절차는 [delegate 스킬의 워크플로](../../.agents/skills/delegate/references/workflow.md)를 따르며, 지시서 작성 원칙은 이 문서와 같다.
 
 사용자가 구현 계획 작성을 지시하면 서브에이전트에 위임할 작업 단위(task)로 나눈 초안을 작성하고 피드백을 요청한다. 승인되면 메인 에이전트가 task마다 서브에이전트를 띄워 위임하고, 결과를 검증한 뒤 다음 task로 넘어간다.
 
@@ -13,7 +13,7 @@ in-process 서브에이전트(Claude Code Agent 도구, Codex 서브에이전트
 5. **AC는 실행 가능한 커맨드로**: 프로젝트의 실제 검증 커맨드(`./gradlew test`, `pnpm test` 등)를 넣는다. 서브에이전트는 완료 전에 AC를 직접 실행하고, 메인 에이전트도 보고를 받은 뒤 AC를 다시 실행한다. 실패하면 새 서브에이전트를 띄우지 않고 같은 서브에이전트에 이어서 지시한다(Claude Code는 `SendMessage`로 이어서 지시하고, Codex는 같은 스레드에 후속 지시를 보낸다). 이때 실패 출력만 전달한다. AC 출력은 재지시 문맥으로 쓰이므로 출력이 적은 옵션을 쓴다(`pytest -q --tb=short`, `npm test --silent` 등).
 6. **주의사항은 구체적으로**: "조심해라" 대신 "X를 하지 마라. 이유: Y" 형식으로 쓴다.
 7. **네이밍**: task name은 kebab-case slug로 쓴다(`project-setup`, `api-layer`, `auth-flow`). Claude Code에서는 `name`으로 지정해 `SendMessage`로 다시 부를 수 있게 한다.
-8. **모델·추론 강도 선택**: 단순한 task(설정, 보일러플레이트, 문서 동기화, 매핑표대로의 이동)는 가벼운 모델과 낮은 추론 강도를 지정해 비용을 줄인다. Claude Code는 `model: "sonnet"`/`"haiku"`와 `effort: "low"`/`"medium"`을 쓰고, Codex는 서브에이전트 설정의 `model`과 `model_reasoning_effort`를 쓴다. 설계 판단이 많은 task(경계 재구성, 메시징·멱등성, 빌드 구조 변경)에만 `"high"`를 쓴다. herdr 서브 세션의 모델·추론 강도 기본값은 [herdr 워크플로](herdr-workflow.md#에이전트-종류) 1절을 따른다.
+8. **모델·추론 강도 선택**: 단순한 task(설정, 보일러플레이트, 문서 동기화, 매핑표대로의 이동)는 가벼운 모델과 낮은 추론 강도를 지정해 비용을 줄인다. Claude Code는 `model: "sonnet"`/`"haiku"`와 `effort: "low"`/`"medium"`을 쓰고, Codex는 서브에이전트 설정의 `model`과 `model_reasoning_effort`를 쓴다. 설계 판단이 많은 task(경계 재구성, 메시징·멱등성, 빌드 구조 변경)에만 `"high"`를 쓴다. herdr 서브 세션의 모델·추론 강도 기본값은 [delegate 워크플로](../../.agents/skills/delegate/references/workflow.md#에이전트-종류) 1절을 따른다.
 9. **초소형 task는 합치기**: 서브에이전트는 띄울 때마다 기본 컨텍스트(시스템 프롬프트, 지침 파일, 약 7k 토큰)를 새로 캐시에 쓴다. 파일 1~2개짜리 작업은 같은 레이어의 인접 task에 합치고, AC를 여러 개 두어 검증 단위를 유지한다. 메인 에이전트가 직접 처리하는 편이 싼 수정은 위임하지 않는다.
 10. **반복 규칙은 복사하지 말고 참조**: 코딩·테스트 규칙처럼 `AGENTS.md`(또는 하위 디렉터리의 지침 파일)에 이미 있는 내용은 지시서에 요약해 옮기지 말고 "X를 따른다" 한 줄로 쓴다. 도구 제한은 에이전트 정의(Claude Code `.claude/agents/*.md`의 `tools`, Codex 서브에이전트의 sandbox·승인 설정)가 강제하므로 금지사항에 적지 않는다. 이유: 지시서는 매 턴 캐시에서 다시 읽히고, 사본은 원문과 어긋난다.
 11. **큰 문서는 줄 범위로 지정**: 수십 KB 문서를 가리킬 때는 `docs/X.md:120-180 § 섹션명`처럼 줄 범위를 적는다. 통째로 읽으면 약 2만 토큰이 컨텍스트에 남아 이후 모든 턴에 반복된다. 단, 앞선 task가 수정하는 문서는 줄 번호가 밀리므로 줄 범위 대신 `§ 섹션명`만 적고 `rg -n`으로 찾게 한다.
@@ -23,3 +23,30 @@ in-process 서브에이전트(Claude Code Agent 도구, Codex 서브에이전트
 15. **검증 출력은 요약 스크립트로**: 지시서의 검증 절차에는 실패만 출력하는 저장소 스크립트(예: `run-tests.sh`, `check-summary.sh`)를 적는다. 그런 스크립트가 없고 빌드 출력이 길면, 위임을 시작하기 전에 스크립트를 만들자고 사용자에게 제안한다. 이유: 긴 도구 출력은 그 서브에이전트의 이후 모든 호출에 문맥으로 다시 실린다.
 16. **구조 목표는 AC로 검사한다**: "X 참조가 없다", "디렉터리가 삭제됐다" 같은 목표는 `! rg -n '<패턴>' <경로>`, `test ! -e <경로>`처럼 셸 커맨드로 AC에 넣는다. 지시서를 쓴 뒤 현재 트리에서 실행해 실패하는지 확인한다. 작업 전부터 통과하는 AC는 아무것도 검증하지 않는다.
 17. **병렬 위임은 파일이 겹치지 않을 때만**: 서로 의존하지 않고 수정 파일이 겹치지 않는 task만 동시에 위임한다. 같은 작업 디렉터리에서 Gradle 빌드·테스트를 동시에 돌리면 결과 파일이 충돌한다. 그러므로 병렬 task는 worktree로 격리하거나(Claude Code `isolation: "worktree"`), 검증을 메인 에이전트가 순차로 실행한다. 순서 의존이 있는 task는 앞 task의 AC가 통과한 뒤에 위임한다.
+
+## 이 저장소의 위임 값
+
+`delegate` 스킬([워크플로](../../.agents/skills/delegate/references/workflow.md))과 in-process 위임이 프로젝트 지침에서 찾는 값이다.
+
+### task 단위
+
+task 하나는 모듈 하나만 수정한다. 모듈은 `core`의 Modulith 모듈 하나, 또는 `core-batch`·`payment`·`payment-batch`·`realtime`·`gateway`·`fake-pg`·`common`·`contract`·`web` 중 하나다. 여러 모듈을 함께 바꿔야 빌드가 성립하는 경우(계약 변경 등)만 예외로 하고 지시서에 이유를 적는다.
+
+### 변경 유형별 최종 검증
+
+일반 `check`에는 E2E·부하 테스트가 포함되지 않는다.
+
+| 변경 유형 | main 최종 검증 |
+|---|---|
+| Kotlin 일반 변경 | `./scripts/agent/test/run-tests.sh`(필터 없이) + `./scripts/agent/test/check-summary.sh` |
+| Modulith 모듈 경계·이벤트 변경 | 위 검사 + 구조 검증, 필요 시 `./gradlew :core:modulithDocs` |
+| core·gateway·realtime 핵심 흐름 변경 | 위 검사 + `./scripts/e2e/run.sh` |
+| `web` 변경 | `./scripts/agent/test/web-check.sh`, 영향 시 `--web` E2E |
+| 성능 최적화 | 기능·정합성 검사 후 단독 부하 측정(`scripts/loadtest/run.sh`) |
+| 문서 변경 | `./scripts/agent/docs/check-docs.sh [경로...]` |
+
+보관할 로그: `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`, E2E의 `build/e2e/logs`. 같은 작업 디렉터리에서 Gradle을 동시에 돌리지 않는다(`AGENTS.md` 6절).
+
+### 리뷰 기준과 불변 조건
+
+리뷰 기준 문서는 백엔드 [backend-review.md](backend-review.md), web [frontend-review.md](frontend-review.md)다. 리뷰어가 특히 확인할 불변 조건은 `(회차, 좌석)` 유니크 제약, Redis Lua 원자성, DB 커밋과 Redis 반영 시점, 이벤트·웹훅 멱등성이다.

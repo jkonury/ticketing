@@ -6,7 +6,7 @@
 - 결정 주체: 사용자 합의
 - 대체: 없음
 - 대체됨·일부 변경: 없음
-- 관련: [워크플로 로드맵](../workflow/roadmap.md), [서브에이전트 위임 지침](../rules/subagent-delegation.md), [herdr 워크플로](../rules/herdr-workflow.md)
+- 관련: [워크플로 로드맵](../workflow/roadmap.md), [서브에이전트 위임 지침](../rules/subagent-delegation.md), [delegate 워크플로](../../.agents/skills/delegate/references/workflow.md)
 
 ## 배경
 
@@ -78,3 +78,4 @@
 ## 변경 이력
 
 - 2026-11-25: 작성·합의
+- 2026-11-26: 링크 정정. herdr 워크플로 문서가 `delegate` 스킬 안으로 옮겨짐

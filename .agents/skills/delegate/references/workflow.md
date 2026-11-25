@@ -2,6 +2,14 @@
 
 메인 세션이 **오케스트레이터**가 되어 구현자(impl)와 리뷰어(review) 에이전트에게 작업을 맡기고, 완료되면 검토·재검증·커밋까지 이어가는 방식이다. herdr 명령 자체는 [herdr.md](herdr.md)를 따르고, 이 문서는 그 위의 절차와 역할만 다룬다. Claude Code와 Codex 어느 쪽이 메인이어도 같다.
 
+이 문서는 프로젝트에 묶이지 않는다. 아래 값은 대상 저장소의 프로젝트 지침(`AGENTS.md`·`CLAUDE.md`와 그 지침이 가리키는 문서)에서 찾는다. 지침에 없으면 사용자에게 묻는다.
+
+- task 단위(모듈 경계), 커밋 규칙, 빌드·테스트 동시 실행 제약
+- 변경 유형별 최종 검증 명령, 리뷰 기준 문서와 불변 조건
+- 지시서 작성 원칙(서브에이전트 위임 지침이 있으면 그 문서)
+
+`$SKILL_DIR`는 이 스킬의 디렉터리(`SKILL.md`가 있는 곳)다. 스크립트는 저장소 루트에서 `$SKILL_DIR/scripts/<이름>.sh`로 실행한다. 실행 상태는 `build/orchestration/`(`HERDR_STATE_DIR`로 변경)에 남는다.
+
 **사용자가 위임·오케스트레이션을 명시적으로 지시했을 때만 쓴다.** 지시가 없으면 이 워크플로를 시작하거나 에이전트 pane을 만들지 않고, 메인이 직접 작업한다. 한 번 지시받았다고 이후 작업에 자동으로 확장하지 않는다.
 
 ## 1. 역할
@@ -10,7 +18,7 @@
 |---|---|---|
 | main | 로드맵 확인, task 분해, 지시서 작성, 위임, diff 검토, AC 재검증, task별 커밋, 로드맵 체크, 사용자 보고 | 구현을 직접 하지 않는다 |
 | impl | 지시서대로 구현하고 AC를 실행해 보고서를 쓴다 | 커밋, 로드맵 체크, 지시서 밖 수정 |
-| review | 읽기 전용으로 diff와 인접 코드를 리뷰하고 결과 파일을 쓴다 | 코드 수정, 커밋, Gradle 실행(impl 작업 중) |
+| review | 읽기 전용으로 diff와 인접 코드를 리뷰하고 결과 파일을 쓴다 | 코드 수정, 커밋, 빌드·테스트 실행(impl 작업 중) |
 
 ### 에이전트 종류
 
@@ -32,7 +40,7 @@
 | codex | `gpt-6.2-sol` | `model_reasoning_effort=medium` |
 
 - 모델은 `herdr-up.sh --impl-model M`·`--review-model M`으로 지정한다. 모델만 바꾸고 추론 강도 등 나머지 기본 인자는 유지한다. 지정값은 `panes.json`에 기록되어 task별 새 세션 재시작에도 적용된다. 이미 살아 있는 에이전트를 재사용할 때는 다음 재시작부터 적용되며, 다시 지정하지 않으면 이전 기록을 유지한다. 인자 전체를 바꾸려면 `--impl-args`·`--review-args`를 쓴다(재시작 후에는 적용되지 않는다).
-- 설계 판단이 많은 task(모듈 경계 재구성, 메시징·멱등성, 동시성)만 `herdr-delegate.sh --effort high`로 올린다. 기준은 [서브에이전트 위임 지침](subagent-delegation.md) 8번과 같다.
+- 설계 판단이 많은 task(모듈 경계 재구성, 메시징·멱등성, 동시성)만 `herdr-delegate.sh --effort high`로 올린다. 프로젝트의 서브에이전트 위임 지침에 모델·추론 강도 기준이 있으면 그 기준을 따른다.
 - 추론 강도는 task 첫 위임에서 세션을 다시 시작할 때 적용된다(4절). 같은 task의 수정·재리뷰는 그 세션을 이어 쓴다.
 
 ## 2. 실행 범위
@@ -44,19 +52,19 @@
 | "이 작업을 리뷰해 줘" | 리뷰만 |
 | "이 작업을 herdr로 구현해 줘" | 구현·리뷰·재검증과 그 task의 커밋 |
 | "이 작업을 herdr로 구현하되 커밋하지 마" | 구현·리뷰·재검증까지(`no-commit`) |
-| "M6의 payment 분리를 끝까지 진행해 줘" | 해당 범위 안의 연속 task 실행과 task별 커밋 |
+| "로드맵의 X 항목을 끝까지 진행해 줘" | 해당 범위 안의 연속 task 실행과 task별 커밋 |
 
 - 시작할 때 main이 해석한 범위(단일/다중, 커밋 제외 task)를 사용자에게 한 줄로 알린다.
 - `multi-task`는 지시에 범위가 명시된 경우만 켠다. 그 범위를 넘는 task는 시작하지 않는다.
 - `no-commit` task가 있으면 그 task의 구현·리뷰·최종 검증까지 마치고 멈춘다. 다음 task의 Git 가드(4절)가 직전 task의 커밋을 요구하기 때문이다.
-- `AGENTS.md` 7절(커밋은 사용자가 요청할 때만)의 예외는 이 절의 위임 지시뿐이다.
+- 프로젝트 지침이 "커밋은 사용자가 요청할 때만"이라면, 그 예외는 이 절의 위임 지시뿐이다.
 
 ### 공용 실행 프롬프트
 
 Claude Code 또는 Codex 메인에 아래 입력을 채워 전달한다.
 
 ```text
-docs/rules/herdr-workflow.md에 따라 아래 범위를 herdr로 위임해 완료해 줘.
+delegate 스킬의 워크플로에 따라 아래 범위를 herdr로 위임해 완료해 줘.
 
 - 리뷰 파일 경로: <저장소 기준 경로>
 - 작업 항목과 실행 순서: <task별 항목을 순서대로, 각 task의 완료 기준 포함>
@@ -69,14 +77,14 @@ docs/rules/herdr-workflow.md에 따라 아래 범위를 herdr로 위임해 완�
 검사 결과와 해당 로그 경로를 남기고, 리뷰 차단이나 필수 검사·커밋 훅 실패는 해당 task에서 해결해.
 ```
 
-코어 리뷰 사례에서는 `#2 → #4 → #5 → #7 → #6`을 각각 검증·커밋하고, `#1·#3`은 예약 회차와 진행 중 제거 설계에 합의한 뒤 하나의 쿠폰 Saga task로 진행한다.
+예: 리뷰 결과 `#1~#7`을 처리할 때, 독립 항목은 순서대로 각각 검증·커밋하고, 설계 합의가 필요한 항목들은 합의한 뒤 하나의 task로 묶어 진행한다.
 
 ## 3. 준비
 
 ```bash
 test "${HERDR_ENV:-}" = 1                  # herdr 밖이면 중단하고 사용자에게 알린다
 git status --porcelain=v1 -uall            # 비어 있어야 자동 진행한다 (아래)
-./scripts/agent/herdr/herdr-up.sh          # 현재 탭 오른쪽에 impl, 그 아래에 review pane 생성 (멱등)
+$SKILL_DIR/scripts/herdr-up.sh          # 현재 탭 오른쪽에 impl, 그 아래에 review pane 생성 (멱등)
 herdr agent list                           # impl·review가 idle인지 확인
 ```
 
@@ -86,7 +94,7 @@ herdr agent list                           # impl·review가 idle인지 확인
 - 가드를 쓰는 실행은 깨끗한 작업 트리에서 시작한다. `build/`처럼 Git에서 제외한 생성물은 상태 검사에 포함되지 않는다. 사용자가 기존 변경을 둔 채 독립 위임을 진행하라고 하면 위치 인자 호출을 사용하고, 시작 변경 목록을 기록해 해당 경로를 위임 범위에서 제외한다.
 - 실행마다 `build/orchestration/<run-id>`를 만들고 그 바로 아래에 task 디렉터리를 둔다. 한 실행은 한 메인이 순차로 진행한다. 모든 구현·리뷰·수정 위임에 같은 실행 디렉터리의 `--task`를 사용한다.
 - `herdr-context.sh self`로 main의 사용률이 읽히는지 확인한다. Codex에서 `HERDR_PANE_ID`가 비어 있으면 4절의 pane ID 지정 예시로 조회한다. 그래도 `unknown`이면 4절 압축 절차를 task마다 수행한다.
-- 리뷰 기준 문서([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md))가 있고 읽히는지 확인한다.
+- 프로젝트 지침이 가리키는 리뷰 기준 문서가 있고 읽히는지 확인한다. 없으면 5절 리뷰 기준만 쓴다.
 
 | 스크립트 | 용도 |
 |---|---|
@@ -102,14 +110,14 @@ herdr agent list                           # impl·review가 idle인지 확인
 
 ### task 분해
 
-- 서브 세션 하나가 압축 없이 끝낼 수 있는 크기로 나눈다. 판단 기준은 [서브에이전트 위임 지침](subagent-delegation.md) 13번을 따른다.
-- task 하나는 가능한 한 **모듈 하나**만 수정한다. 모듈은 `core`의 Modulith 모듈 하나, 또는 `core-batch`·`realtime`·`gateway`·`fake-pg`·`common`·`contract`·`web` 중 하나다. 계약 변경처럼 여러 모듈을 함께 바꿔야 빌드가 성립하는 경우만 예외로 하고, 지시서의 변경 허용 범위에 이유를 적는다.
+- 서브 세션 하나가 압축 없이 끝낼 수 있는 크기로 나눈다. 프로젝트의 서브에이전트 위임 지침에 task 분할 기준이 있으면 따른다.
+- task 하나는 가능한 한 **모듈 하나**만 수정한다. 모듈 단위는 프로젝트 지침이 정한다. 계약 변경처럼 여러 모듈을 함께 바꿔야 빌드가 성립하는 경우만 예외로 하고, 지시서의 변경 허용 범위에 이유를 적는다.
 - 각 task는 그 자체로 빌드·테스트가 통과하는 커밋 하나가 되어야 한다. 앞 task가 끝난 과도기 상태도 이 조건을 지킨다.
 
 ### 실행 순서
 
 1. 다음 task를 정하고(로드맵 항목이면 다음 미완료 항목) 지시서를 쓴다(5절). `task_dir=build/orchestration/<run-id>/<task-id>`로 두고, 그 안의 `base.txt`에 기준 `HEAD`, 시작 시 `git status --porcelain=v1 -uall` 출력, 허용 경로 목록을 기록한다.
-2. main의 컨텍스트 사용률을 확인하고 아래 「컨텍스트와 토큰」 절차를 적용한 뒤 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task(설계 판단·동시성·데이터 이전)만 `--effort high`를 붙이고, 복사·배선·문서처럼 기계적인 task는 기본 `medium`으로 둔다. 위임이 종료 코드 7로 끝나면 「5시간 한도」 절차로 중단한다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
+2. main의 컨텍스트 사용률을 확인하고 아래 「컨텍스트와 토큰」 절차를 적용한 뒤 `$SKILL_DIR/scripts/herdr-delegate.sh --task "$task_dir" impl "$task_dir/brief.md"`로 구현을 맡긴다. 어려운 task(설계 판단·동시성·데이터 이전)만 `--effort high`를 붙이고, 복사·배선·문서처럼 기계적인 task는 기본 `medium`으로 둔다. 위임이 종료 코드 7로 끝나면 「5시간 한도」 절차로 중단한다. task의 첫 위임이면 impl이 새 세션으로 다시 시작된다.
 3. `herdr-wait.sh impl`을 메인 클라이언트의 백그라운드 명령으로 실행하고, 결과가 도착하면 이어간다. 완료 판정은 6절을 따른다. 구현이 끝나면 `herdr-context.sh impl`로 컨텍스트를 점검한다(4절 「컨텍스트와 토큰」).
 4. 변경 범위가 지시서 안인지 확인한다. `git diff`는 신규 파일과 staged 변경을 놓치므로 다음을 함께 본다. 범위 밖이면 impl에 되돌리도록 지시한다.
    ```bash
@@ -117,7 +125,7 @@ herdr agent list                           # impl·review가 idle인지 확인
    git diff HEAD --stat
    git ls-files --others --exclude-standard
    ```
-5. 리뷰 지시서를 쓰고 `./scripts/agent/herdr/herdr-delegate.sh --task "$task_dir" review "$task_dir/review-brief.md"`로 맡긴다. `herdr-wait.sh review`를 백그라운드로 실행하고, 리뷰가 끝나면 컨텍스트를 점검한다.
+5. 리뷰 지시서를 쓰고 `$SKILL_DIR/scripts/herdr-delegate.sh --task "$task_dir" review "$task_dir/review-brief.md"`로 맡긴다. `herdr-wait.sh review`를 백그라운드로 실행하고, 리뷰가 끝나면 컨텍스트를 점검한다.
 6. `review.md`는 통째로 읽지 않는다. `sed -n '/## 차단 사항/,/## 비차단/p'`와 마지막 줄만 보고, 수정 지시서에 필요한 항목만 해당 절을 더 읽는다. 차단 항목이 있으면 수정 지시서(`fix-N/brief.md`)를 만들어 2번으로 돌아간다. `--task`에는 계속 원래 `task_dir`를 전달한다. 수정이 끝나면 컨텍스트를 점검하고 다시 리뷰한다.
    - **초기 구현 1회 + 후속 수정 최대 2회**다. 후속 수정에는 리뷰 차단 사항과 main 재검증 실패가 모두 포함된다.
    - 2회를 넘으면 자동으로 더 시도하지 않고 남은 문제를 사용자에게 보고한다.
@@ -144,8 +152,8 @@ impl·review는 **task마다 새 세션**으로 시작한다. 이전 task의 탐
 Claude Code·Codex 모두 모델이 `/context`·`/status`를 직접 실행하거나 그 결과를 읽을 수 없다. 대신 herdr가 pane의 상태줄을 읽을 수 있으므로 **main도 자기 pane을 포함해 `herdr-context.sh`로 사용률을 확인**한다.
 
 ```bash
-./scripts/agent/herdr/herdr-context.sh self --max 25      # main. 25% 이상이면 종료 코드 6
-./scripts/agent/herdr/herdr-context.sh impl               # 서브 세션
+$SKILL_DIR/scripts/herdr-context.sh self --max 25      # main. 25% 이상이면 종료 코드 6
+$SKILL_DIR/scripts/herdr-context.sh impl               # 서브 세션
 ```
 
 `self`는 `HERDR_PANE_ID`를 사용한다. Codex의 명령 실행 환경에 이 변수가 없으면 `herdr agent list`에서 현재 main Codex의 `pane_id`를 확인한 뒤 명령에 직접 전달한다. 여러 후보가 있으면 작업 디렉터리와 상태를 확인한다. 이 환경에서 `herdr pane current --current`는 다른 pane을 반환할 수 있다.
@@ -153,7 +161,7 @@ Claude Code·Codex 모두 모델이 `/context`·`/status`를 직접 실행하거
 ```bash
 herdr agent list
 # w7:p1은 예시다. 확인한 main Codex의 pane_id로 바꾼다.
-HERDR_PANE_ID=w7:p1 ./scripts/agent/herdr/herdr-context.sh self --max 25
+HERDR_PANE_ID=w7:p1 $SKILL_DIR/scripts/herdr-context.sh self --max 25
 ```
 
 - 릴레이도 `HERDR_PANE_ID`를 사용한다. 변수가 비어 있으면 릴레이 실행 명령 앞에도 확인한 ID를 같은 방식으로 전달한다.
@@ -187,19 +195,19 @@ main 컨텍스트는 task를 거치며 누적되므로 탐색은 impl에 맡긴�
 Claude·Codex 모두 5시간 사용 한도가 있고, 중간에 한도에 걸리면 task가 반쯤 끝난 채 멈춘다. 그래서 **85%에서 새 위임을 멈추고 인계한다.** 기준은 `HERDR_LIMIT_MAX`로 바꿀 수 있다.
 
 ```bash
-./scripts/agent/herdr/herdr-limit.sh                 # self impl review. 85% 이상이면 종료 코드 6
+$SKILL_DIR/scripts/herdr-limit.sh                 # self impl review. 85% 이상이면 종료 코드 6
 ```
 
 - `herdr-delegate.sh`가 위임 직전에 main(self)과 대상의 한도를 확인하고, 기준 이상이면 보내지 않고 종료 코드 7로 끝난다. 사용자가 계속하라고 지시한 경우에만 `--ignore-limit`을 쓴다.
 - main은 커밋 직후와 다음 task 시작 전에도 `herdr-limit.sh`를 실행한다.
-- 종료 코드 6·7이면 새 위임을 하지 않는다. 진행 중인 impl·review는 끝날 때까지 기다리고(중간에 끊으면 결과를 잃는다) 결과를 `progress.md`의 다음 행동에 반영한다. 그런 다음 [인계 템플릿](../templates/session-handoff.md)으로 `.handoff/`에 인계 문서를 쓰고, 한도와 재개 방법을 보고한 뒤 턴을 끝낸다. 릴레이는 실행하지 않는다.
+- 종료 코드 6·7이면 새 위임을 하지 않는다. 진행 중인 impl·review는 끝날 때까지 기다리고(중간에 끊으면 결과를 잃는다) 결과를 `progress.md`의 다음 행동에 반영한다. 그런 다음 handoff 스킬 절차로 `.handoff/`에 인계 문서를 쓰고, 한도와 재개 방법을 보고한 뒤 턴을 끝낸다. 릴레이는 실행하지 않는다.
 - 상태줄에서 읽지 못한 대상은 `unknown`으로 출력한다. Claude는 재시작 뒤 첫 응답 전까지 한도가 표시되지 않으며, 같은 계정의 Claude pane끼리 한도를 공유하므로 다른 Claude pane 값으로 판단한다. 모두 `unknown`(종료 코드 5)이면 task마다 다시 확인하고 보고에 적는다.
 
 [Claude Code 명령](https://code.claude.com/docs/en/commands) · [Codex CLI 명령](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 
 ## 5. 지시서 템플릿
 
-경로는 `<task-dir>/brief.md`다. 본문은 파일에 두고 위임 메시지에는 지시서 경로를 전달한다. 지시서에 `herdr-delegate.sh`가 지울 보고서 경로를 적는다. 기본값은 지시서와 같은 디렉터리의 `report.md`이며, 에이전트 이름이 `review`이면 `review.md`다. 다른 경로를 쓰면 호출의 보고서 인자에도 같은 경로를 준다. 결과 채팅은 판정과 로그 경로만 전달한다. 지시서 작성 원칙은 [서브에이전트 위임 지침](subagent-delegation.md)을 따른다.
+경로는 `<task-dir>/brief.md`다. 본문은 파일에 두고 위임 메시지에는 지시서 경로를 전달한다. 지시서에 `herdr-delegate.sh`가 지울 보고서 경로를 적는다. 기본값은 지시서와 같은 디렉터리의 `report.md`이며, 에이전트 이름이 `review`이면 `review.md`다. 다른 경로를 쓰면 호출의 보고서 인자에도 같은 경로를 준다. 결과 채팅은 판정과 로그 경로만 전달한다. 프로젝트에 서브에이전트 위임 지침이 있으면 지시서 작성 원칙은 그 문서를 따른다.
 
 ```markdown
 # <task-id> <제목>
@@ -210,7 +218,7 @@ Claude·Codex 모두 5시간 사용 한도가 있고, 중간에 한도에 걸리
 ## 추론 강도
 - `medium` 또는 `high`(위임 시 `--effort`와 같게)
 ## 읽을 문서
-- `docs/rules/<해당 지침> § <관련 절>`, `docs/architecture.md § <관련 절>`
+- `<프로젝트 지침 문서> § <관련 절>`, `<설계 문서> § <관련 절>`
 ## 변경 허용 범위
 - 모듈 하나와 그 안의 파일(여러 모듈이면 이유)
 ## 금지
@@ -225,7 +233,7 @@ Claude·Codex 모두 5시간 사용 한도가 있고, 중간에 한도에 걸리
 
 ### 리뷰 지시서
 
-목표, 기준 커밋, 대상 diff 범위(기준 커밋 대비 변경과 신규 파일), 기준 문서의 관련 절([backend-review.md](backend-review.md) 또는 [frontend-review.md](frontend-review.md)), 확인할 검증 명령과 출력 형식을 적고 읽기 전용으로 지시한다. 호출자와의 계약, 이벤트 소비자, 기존 테스트와의 충돌을 확인할 때 인접 코드와 ADR을 참고한다. 결과는 `review.md`다.
+목표, 기준 커밋, 대상 diff 범위(기준 커밋 대비 변경과 신규 파일), 프로젝트 리뷰 기준 문서의 관련 절, 확인할 검증 명령과 출력 형식을 적고 읽기 전용으로 지시한다. 호출자와의 계약, 이벤트 소비자, 기존 테스트와의 충돌을 확인할 때 인접 코드와 ADR을 참고한다. 결과는 `review.md`다.
 
 리뷰 기준:
 
@@ -235,7 +243,7 @@ Claude·Codex 모두 5시간 사용 한도가 있고, 중간에 한도에 걸리
 4. 동시성·트랜잭션·재시도·실패 흐름이 안전한가
 5. 테스트가 실제 위험을 검증하는가
 
-특히 `(회차, 좌석)` 유니크 제약, Redis Lua 원자성, DB 커밋과 Redis 반영 시점, 이벤트·웹훅 멱등성 같은 불변 조건을 확인하게 한다.
+특히 프로젝트 지침이 정한 불변 조건(설계 규칙, 데이터 무결성 제약, 멱등성 등)을 확인하게 한다.
 
 출력 형식:
 
@@ -288,20 +296,11 @@ blocked·unknown·시간 초과는 어느 것도 성공이 아니다.
 
 ## 7. 최종 검증 범위
 
-main의 최종 검증은 변경 유형에 따라 다음을 모두 통과해야 한다. 일반 `check`에는 E2E·부하 테스트가 포함되지 않는다.
-
-| 변경 유형 | main 최종 검증 |
-|---|---|
-| Kotlin 일반 변경 | `./scripts/agent/test/run-tests.sh`(필터 없이) + `./scripts/agent/test/check-summary.sh` |
-| Modulith 모듈 경계·이벤트 변경 | 위 검사 + 구조 검증, 필요 시 `./gradlew :core:modulithDocs` |
-| core·gateway·realtime 핵심 흐름 변경 | 위 검사 + `./scripts/e2e/run.sh` |
-| `web` 변경 | `./scripts/agent/test/web-check.sh`, 영향 시 `--web` E2E |
-| 성능 최적화 | 기능·정합성 검사 후 단독 부하 측정(`scripts/loadtest/run.sh`) |
-| 문서 변경 | `./scripts/agent/docs/check-docs.sh [경로...]` |
+main의 최종 검증은 프로젝트 지침이 변경 유형별로 정한 검사를 모두 통과해야 한다. 지침에 변경 유형별 표가 없으면 전체 빌드·테스트와 정적 검사를 실행하고, E2E·부하 테스트처럼 기본 검사에 포함되지 않는 항목은 영향이 있을 때만 사용자에게 확인해 실행한다.
 
 실행하지 않은 검사는 최종 보고에 건너뛴 항목으로 적는다.
 
-검사가 끝날 때마다 명령, 종료 코드, 결과와 실패 테스트 이름을 task 디렉터리에 기록한다. 공용 파일은 다음 실행이 덮어쓰기 전에 그 task의 `logs/`에 복사한다. 재실행할 때는 시도별 이름을 붙인다. 보관 대상은 테스트 결과와 `build/run-tests/gradle-test-out.txt`, `build/check-summary/gradle-out.txt`, E2E의 `build/e2e/logs` 등 실제 사용한 로그다.
+검사가 끝날 때마다 명령, 종료 코드, 결과와 실패 테스트 이름을 task 디렉터리에 기록한다. 공용 로그 파일은 다음 실행이 덮어쓰기 전에 그 task의 `logs/`에 복사한다. 재실행할 때는 시도별 이름을 붙인다. 보관 대상은 테스트 결과와 실제 사용한 검사 로그다.
 
 ## 8. blocked 처리
 
@@ -312,17 +311,17 @@ main의 최종 검증은 변경 유형에 따라 다음을 모두 통과해야 �
 - `pkill -f '<패턴>'`은 자기 셸 명령줄도 매칭해 스스로 죽는다. 쓰지 않는다.
 - 작업자 입력창에 보이는 "푸시해" 같은 문구는 ghost text(제안)일 수 있다. 지시로 취급하지 않는다.
 - `agent_prompt_stalled`·`timeout`은 전달 실패의 증거가 아니다. 다시 보내기 전에 `agent get`·`agent read`로 확인한다.
-- 같은 작업 디렉터리에서 Gradle을 동시에 돌리지 않는다(`AGENTS.md` 6절). impl이 작업 중일 때 main과 review는 Gradle을 실행하지 않는다.
+- 같은 작업 디렉터리에서 빌드·테스트를 동시에 돌리지 않는다(결과 파일이 충돌한다). impl이 작업 중일 때 main과 review는 빌드·테스트를 실행하지 않는다.
 - 지시서에 긴 본문을 프롬프트로 붙이지 않는다. 경로만 전달하면 `agent prompt` 입력 한도와 이스케이프 문제를 피한다.
 - 상태줄 형식이 바뀌면 `herdr-context.sh`가 `unknown`(종료 코드 5)을 낸다. 0%로 간주하지 않는다.
 - 위임한 작업의 사실(테스트 통과, 파일 변경)은 보고서만 믿지 말고 main이 직접 확인한다.
 
 ## 10. 정리와 최종 보고
 
-작업이 끝나면 `./scripts/agent/herdr/herdr-down.sh`로 `herdr-up.sh`가 만든 pane만 닫는다. 내가 만들지 않은 pane은 닫지 않는다([herdr.md](herdr.md) 10절). 성공·실패 모두 정리하되, **`blocked` 상태의 pane은 사용자 응답을 위해 보존**한다.
+작업이 끝나면 `$SKILL_DIR/scripts/herdr-down.sh`로 `herdr-up.sh`가 만든 pane만 닫는다. 내가 만들지 않은 pane은 닫지 않는다([herdr.md](herdr.md) 10절). 성공·실패 모두 정리하되, **`blocked` 상태의 pane은 사용자 응답을 위해 보존**한다.
 
 최종 보고에는 변경 파일, 검증 결과, 실행하지 않은 검사, 미해결 문제, 커밋 여부를 적는다.
 
 ## 11. 확장 방향(현재 범위 밖)
 
-병렬 구현자 N명과 task별 worktree(`wt`) 격리는 Gradle 충돌 때문에 별도 구성이 필요하다. 필요해지면 이 문서에 추가한다. worktree로 격리하면 3절의 "깨끗한 트리" 제약도 완화할 수 있다.
+병렬 구현자 N명과 task별 worktree(`wt`) 격리는 빌드 결과 충돌 때문에 별도 구성이 필요하다. 필요해지면 이 문서에 추가한다. worktree로 격리하면 3절의 "깨끗한 트리" 제약도 완화할 수 있다.

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # herdr 오케스트레이션 스크립트 공용 함수. source로만 사용한다.
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-export STATE_DIR="$ROOT/build/orchestration"
+# 스킬은 저장소 밖(전역 스킬 디렉터리)에 있을 수 있으므로 대상 저장소는 현재 디렉터리로 정한다.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "error: git 저장소 안에서 실행한다." >&2; exit 1; }
+export STATE_DIR="${HERDR_STATE_DIR:-$ROOT/build/orchestration}"
 export STATE_FILE="$STATE_DIR/panes.json"
 
 die() {
