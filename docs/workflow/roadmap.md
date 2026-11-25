@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0047](../adr/0047-ai-dev-workflow-pipeline.md)
 - 작성일: 2026-11-25
-- 상태: W0·W1 완료. 다음은 W2
+- 상태: W0~W2 완료. 다음은 W2.5
 
 Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)의 M6와 병행하고, M6 task를 파이프라인의 시범 대상으로 쓴다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다.
 
@@ -37,11 +37,13 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 
 ## W2. 훅 어댑터와 Stop 게이트
 
-- [ ] `harness/lib/hook_input.py`: 두 도구의 훅 입력 정규화
-- [ ] `harness/hooks/stop_gate.py`: 파이프라인 세션 판별, 변경 경로별 검사 선택, task AC 우선, 반복 상한 3회
-- [ ] `harness/bin/pipeline.py`: 파이프라인 상태 파일(`.metrics/active.json`) 시작·task 전환·종료
-- [ ] `.claude/settings.json`, `.codex/hooks.json`에 Stop 훅과 세션 바인딩 훅(PostToolUse, `harness/hooks/bind_session.py`) 등록. 경로 규칙은 `scripts/agent/gate-rules.toml`
-- [ ] `harness/tests/` 단위 테스트
+- [x] `harness/lib/hook_input.py`: 두 도구의 훅 입력 정규화
+- [x] `harness/hooks/stop_gate.py`: 파이프라인 세션 판별, 변경 경로별 검사 선택, task AC 우선, 반복 상한 3회
+- [x] `harness/bin/pipeline.py`: 파이프라인 상태 파일(`.metrics/active.json`) 시작·task 전환·종료
+- [x] `.claude/settings.json`, `.codex/hooks.json`에 Stop 훅과 세션 바인딩 훅(PostToolUse, `harness/hooks/bind_session.py`) 등록. 경로 규칙은 `scripts/agent/gate-rules.toml`
+- [x] `harness/tests/` 단위 테스트
+- [x] Claude Code 실동작 확인: 고의 ktlint 위반을 1회 차단하고 수정한 뒤 통과(2026-11-25)
+- [x] Codex 실동작 확인: 훅 신뢰 승인 후 같은 절차로 2회 차단(형식 수정 → 식 본문 규칙)하고 수정한 뒤 통과(2026-11-25)
 
 **완료 기준**: 파이프라인 상태를 켠 세션에서 고의 ktlint 위반을 남기고 종료하려 하면 게이트가 막는다. 에이전트가 이를 고친 뒤 종료한다. 이 동작을 두 도구에서 각각 확인한다. 파이프라인 상태가 없는 세션에서는 게이트가 동작하지 않는다.
 
