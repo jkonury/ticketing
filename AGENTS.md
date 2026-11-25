@@ -7,7 +7,7 @@
 - `docs/architecture.md`: 아키텍처 문서. 구조·규칙에 대한 결정의 근거
 - `docs/roadmap.md`: 단계별 구현 체크리스트와 완료 기준
 - `docs/adr/`: 결정별로 검토한 대안과 선택 이유. 설계를 바꾸는 결정은 새 ADR로 남긴다
-- `docs/workflow/roadmap.md`: AI 개발 워크플로(W 트랙) 로드맵. M 트랙과 병행한다([ADR 0047](docs/adr/0047-ai-dev-workflow-pipeline.md))
+- `docs/workflow/roadmap.md`: AI 개발 워크플로(W 트랙) 로드맵. M 트랙과 병행한다([ADR 0048](docs/adr/0048-ai-dev-workflow-pipeline.md))
 
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
@@ -17,6 +17,7 @@
 - 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
 - [서브에이전트 위임 지침](docs/rules/subagent-delegation.md): 구현 계획을 서브에이전트 task로 나눠 위임할 때 읽는다.
 - herdr 위임은 사용자가 명시적으로 지시할 때만 `delegate` 스킬(`.agents/skills/delegate/SKILL.md`)을 따른다. 이 저장소의 위임 값은 [서브에이전트 위임 지침](docs/rules/subagent-delegation.md#이-저장소의-위임-값)에 있다.
+- 반복 작업 절차는 skill로 둔다. 원본은 `.agents/skills/<이름>/SKILL.md`(Codex가 읽음)이고 `.claude/skills`는 그 디렉터리를 가리키는 symlink다. 추가·수정 후 `./scripts/agent/skills/check-skills.sh`를 실행한다. skill에는 순서만 쓰고 규범은 `docs/rules`를 링크한다.
 
 ## 2. 저장소 구조
 
@@ -84,6 +85,7 @@ cd web && pnpm install && pnpm dev
 **Claude Code와 Codex 모두** 저장소 루트에서 다음 스크립트를 실행한다. 실패를 받으면 작업 중인 에이전트가 직접 고친다.
 
 - 사전 조건: Docker가 떠 있어야 한다(jOOQ 코드 생성과 Testcontainers가 사용한다). 에이전트 스크립트는 `fd`, `rg`를 쓴다.
+- 변경 범위 검사: `./scripts/agent/test/verify-changed.sh [--dry-run] [기준 ref | A..B]`. 변경 경로에 맞는 아래 검사를 골라 실행하고 E2E·`modulithDocs` 필요 여부를 알린다. 작업을 마치기 전에 실행한다.
 - test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 한다(`--no-verify`는 훅이 차단한다).
