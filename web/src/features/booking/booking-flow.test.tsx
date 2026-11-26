@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingFlow } from './booking-flow';
 import { Payment } from './payment';
 import { Seats } from './seats';
-import { Queue } from './queue';
+import { aheadOf, progressOf, Queue } from './queue';
 
 const stream = vi.hoisted(() => ({
   state: 'open',
@@ -184,7 +184,7 @@ describe('예매 흐름', () => {
     fireEvent.click(screen.getByRole('button', { name: '예매하기' }));
     expect(screen.queryByText('대기열')).not.toBeInTheDocument();
     expect(
-      await screen.findByText('대기 순번: 2', {}, { timeout: 3000 }),
+      await screen.findByText('내 앞에 1명이 있어요', {}, { timeout: 3000 }),
     ).toBeInTheDocument();
   });
   it.each(['2000-01-01', '2090-01-01'])(
@@ -314,20 +314,49 @@ describe('예매 흐름', () => {
     const props = { scheduleId: 1, onAdmitted: vi.fn() };
     const view = render(<Queue {...props} />);
     expect(
-      await screen.findByText('대기열에 연결하고 있습니다.'),
+      await screen.findByText('대기열에 연결하고 있어요.'),
     ).toBeInTheDocument();
     stream.state = 'reconnecting';
     view.rerender(<Queue {...props} />);
-    expect(
-      screen.getByText(/순번이 오래되었을 수 있습니다/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/순번이 오래되었을 수 있어요/)).toBeInTheDocument();
     stream.state = 'failed';
     view.rerender(<Queue {...props} />);
-    expect(screen.getByText(/대기열 연결에 실패했습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/대기열 연결에 실패했어요/)).toBeInTheDocument();
     stream.state = 'open';
     view.rerender(<Queue {...props} />);
     expect(
-      screen.queryByText(/대기열 연결에 실패했습니다/),
+      screen.queryByText(/대기열 연결에 실패했어요/),
     ).not.toBeInTheDocument();
+  });
+  it('앞 인원과 진행 바 값을 계산한다', () => {
+    expect(aheadOf(1)).toBe(0);
+    expect(aheadOf(20)).toBe(19);
+    expect(aheadOf(0)).toBe(0);
+    expect(progressOf(20, 20)).toBe(0);
+    expect(progressOf(20, 10)).toBe(53);
+    expect(progressOf(20, 1)).toBe(100);
+    expect(progressOf(1, 1)).toBe(100);
+    expect(progressOf(10, 15)).toBe(0);
+  });
+  it('순번 화면에 앞 인원·안내·연결 상태를 보여 준다', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      response({ status: 'WAITING', position: 5 }) as Response,
+    );
+    stream.state = 'open';
+    const props = { scheduleId: 1, onAdmitted: vi.fn() };
+    const view = render(<Queue {...props} />);
+    expect(
+      await screen.findByText('내 앞에 4명이 있어요', {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('queue-position')).toHaveTextContent('5');
+    expect(screen.getByText('연결됨')).toBeInTheDocument();
+    expect(screen.getByText(/새로고침하면 순번이 뒤로 밀릴 수 있어요/));
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '0',
+    );
+    stream.state = 'reconnecting';
+    view.rerender(<Queue {...props} />);
+    expect(screen.getByText('다시 연결 중')).toBeInTheDocument();
   });
 });

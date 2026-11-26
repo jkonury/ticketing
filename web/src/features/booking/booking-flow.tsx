@@ -79,6 +79,8 @@ export function BookingFlow({
         <Queue
           key={queueVersion}
           scheduleId={schedule.id}
+          title={schedule.performanceTitle}
+          startsAt={schedule.startsAt}
           onAdmitted={setAdmission}
         />
       )}
