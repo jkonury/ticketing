@@ -1,4 +1,9 @@
 import Link from 'next/link';
+import { Page, PageHeader } from '@/components/layout/page';
+import { Button, buttonClassName } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';
 import { formatSeoul, seoulLocalToInstant } from '@/lib/datetime';
 import { listAuditLogs } from '@/server/api/admin';
 import { withSessionRedirect } from '@/server/auth/require-user';
@@ -24,7 +29,7 @@ function toInstant(value?: string) {
   }
 }
 
-export default async function Page({
+export default async function Route({
   searchParams,
 }: {
   searchParams: Promise<Query>;
@@ -44,53 +49,63 @@ export default async function Page({
     if (query[key]) next.set(key, query[key]);
   if (page.nextCursor !== null) next.set('cursor', String(page.nextCursor));
   return (
-    <main>
-      <h1>감사 로그</h1>
-      <form>
-        <label>
-          액션 <input name="action" defaultValue={query.action ?? ''} />
-        </label>
-        <label>
-          행위자 ID <input name="actorId" defaultValue={query.actorId ?? ''} />
-        </label>
-        <label>
-          시작{' '}
-          <input
-            type="datetime-local"
-            name="from"
-            defaultValue={query.from ?? ''}
-          />
-        </label>
-        <label>
-          종료{' '}
-          <input
-            type="datetime-local"
-            name="to"
-            defaultValue={query.to ?? ''}
-          />
-        </label>
-        <button>조회</button>
+    <Page>
+      <PageHeader title="감사 로그" />
+      <form className="grid gap-4 md:grid-cols-2">
+        <Field label="액션">
+          {(c) => (
+            <Input {...c} name="action" defaultValue={query.action ?? ''} />
+          )}
+        </Field>
+        <Field label="행위자 ID">
+          {(c) => (
+            <Input {...c} name="actorId" defaultValue={query.actorId ?? ''} />
+          )}
+        </Field>
+        <Field label="시작">
+          {(c) => (
+            <Input
+              {...c}
+              type="datetime-local"
+              name="from"
+              defaultValue={query.from ?? ''}
+            />
+          )}
+        </Field>
+        <Field label="종료">
+          {(c) => (
+            <Input
+              {...c}
+              type="datetime-local"
+              name="to"
+              defaultValue={query.to ?? ''}
+            />
+          )}
+        </Field>
+        <div>
+          <Button type="submit">조회</Button>
+        </div>
       </form>
-      <table>
+      <table className={tableClass}>
         <thead>
           <tr>
-            <th>일시</th>
-            <th>행위자</th>
-            <th>액션</th>
-            <th>대상</th>
-            <th>상세</th>
+            <th className={thClass}>일시</th>
+            <th className={thClass}>행위자</th>
+            <th className={thClass}>액션</th>
+            <th className={thClass}>대상</th>
+            <th className={thClass}>상세</th>
           </tr>
         </thead>
         <tbody>
           {page.items.map((log) => (
             <tr key={log.id}>
-              <td>{formatSeoul(log.occurredAt)}</td>
-              <td>{log.actorId ?? '-'}</td>
-              <td>{log.action}</td>
-              <td>
+              <td className={tdClass}>{formatSeoul(log.occurredAt)}</td>
+              <td className={tdClass}>{log.actorId ?? '-'}</td>
+              <td className={tdClass}>{log.action}</td>
+              <td className={tdClass}>
                 {log.targetType} {log.targetId}
               </td>
-              <td>
+              <td className={tdClass}>
                 <code>{JSON.stringify(log.detail ?? {})}</code>
               </td>
             </tr>
@@ -98,8 +113,13 @@ export default async function Page({
         </tbody>
       </table>
       {page.nextCursor !== null && (
-        <Link href={`/admin/audit-logs?${next}`}>다음 페이지</Link>
+        <Link
+          href={`/admin/audit-logs?${next}`}
+          className={buttonClassName({ variant: 'secondary' })}
+        >
+          다음 페이지
+        </Link>
       )}
-    </main>
+    </Page>
   );
 }
