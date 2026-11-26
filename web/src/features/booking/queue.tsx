@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { InlineError } from '@/components/ui/feedback';
 import { useEventStream } from '@/features/stream/use-event-stream';
 import {
   admissionSchema,
@@ -80,24 +83,31 @@ export function Queue({
     },
   });
   return (
-    <section>
+    <Card padding="lg" className="grid gap-4">
       {showQueue && waiting ? (
         <>
-          <h2>대기열</h2>
+          <h2 className="text-heading font-bold text-fg">대기열</h2>
           <p>대기 순번: {position ?? '확인 중'}</p>
         </>
       ) : (
-        !removed && !error && <p role="status">입장을 확인하고 있습니다.</p>
+        !removed &&
+        !error && (
+          <p role="status" className="text-body text-fg-muted">
+            입장을 확인하고 있습니다.
+          </p>
+        )
       )}
       {waiting &&
         stream.state !== 'open' &&
         (stream.state === 'failed' ? (
-          <p role="alert">
+          <InlineError role="alert">
             대기열 연결에 실패했습니다.{' '}
-            <button onClick={stream.restart}>다시 연결</button>
-          </p>
+            <Button variant="secondary" onClick={stream.restart}>
+              다시 연결
+            </Button>
+          </InlineError>
         ) : (
-          <p role="status">
+          <p role="status" className="text-caption text-fg-muted">
             {stream.state === 'reconnecting'
               ? '대기열에 다시 연결하고 있습니다. 순번이 오래되었을 수 있습니다.'
               : '대기열에 연결하고 있습니다.'}
@@ -106,17 +116,19 @@ export function Queue({
       {removed && (
         <>
           <p>대기열에서 제외되었습니다.</p>
-          <button
-            onClick={() => {
-              setRemoved(false);
-              setAttempt((value) => value + 1);
-            }}
-          >
-            다시 줄 서기
-          </button>
+          <div>
+            <Button
+              onClick={() => {
+                setRemoved(false);
+                setAttempt((value) => value + 1);
+              }}
+            >
+              다시 줄 서기
+            </Button>
+          </div>
         </>
       )}
-      {error && <p role="alert">{error}</p>}
-    </section>
+      {error && <InlineError role="alert">{error}</InlineError>}
+    </Card>
   );
 }

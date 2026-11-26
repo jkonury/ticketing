@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { Page as PageShell } from '@/components/layout/page';
+import { buttonClassName } from '@/components/ui/button';
 import { BookingList } from '@/features/my/booking-list';
 import { getMyPage } from '@/server/aggregate/my-page';
 import { requireUser, withSessionRedirect } from '@/server/auth/require-user';
@@ -13,11 +15,18 @@ export default async function Page({
     getMyPage(Number.isSafeInteger(cursor) && cursor > 0 ? cursor : undefined),
   );
   return (
-    <main>
+    <PageShell>
       <BookingList view={view} />
       {view.nextCursor != null && (
-        <Link href={`/my?cursor=${view.nextCursor}`}>더 보기</Link>
+        <div className="mt-6 flex justify-center">
+          <Link
+            href={`/my?cursor=${view.nextCursor}`}
+            className={buttonClassName({ variant: 'secondary' })}
+          >
+            더 보기
+          </Link>
+        </div>
       )}
-    </main>
+    </PageShell>
   );
 }

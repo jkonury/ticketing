@@ -2,6 +2,9 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { InlineError } from '@/components/ui/feedback';
 import { useEventStream } from '@/features/stream/use-event-stream';
 import {
   bookingSchema,
@@ -124,36 +127,43 @@ export function Seats({
     }
   }
   return (
-    <section>
-      <h2>좌석 선택</h2>
+    <Card padding="lg" className="grid gap-4">
+      <h2 className="text-heading font-bold text-fg">좌석 선택</h2>
       <p>최대 4석</p>
       {stream.state === 'failed' ? (
-        <p role="alert">
+        <InlineError role="alert">
           좌석 정보를 연결할 수 없습니다.{' '}
-          <button onClick={stream.restart}>다시 연결</button>
-        </p>
+          <Button variant="secondary" onClick={stream.restart}>
+            다시 연결
+          </Button>
+        </InlineError>
       ) : !ready ? (
-        <p role="status">
+        <p role="status" className="text-caption text-fg-muted">
           좌석 정보를{' '}
           {stream.state === 'reconnecting'
             ? '다시 연결하고 있습니다. 표시된 정보는 오래되었을 수 있습니다.'
             : '확인하고 있습니다.'}
         </p>
       ) : null}
-      <p className="field-hint">
+      <p className="text-caption text-fg-muted">
         좌석은 선택 가능, 선점됨, 판매됨 상태로 표시됩니다. 좌석 배치는 가로로
         스크롤할 수 있습니다.
       </p>
       <div
-        className="seat-map"
+        className="overflow-x-auto"
         tabIndex={0}
         role="region"
         aria-label="좌석 배치"
       >
         {Array.from(new Set(seats.map((seat) => seat.section))).map(
           (section) => (
-            <fieldset key={section}>
-              <legend>{section}구역</legend>
+            <fieldset
+              key={section}
+              className="mb-3 min-w-full w-max rounded-control border border-line p-4"
+            >
+              <legend className="px-1 text-body font-semibold text-fg">
+                {section}구역
+              </legend>
               {Array.from(
                 new Set(
                   seats
@@ -161,8 +171,8 @@ export function Seats({
                     .map((seat) => seat.row),
                 ),
               ).map((row) => (
-                <div key={row}>
-                  <span>{row}열 </span>
+                <div key={row} className="mt-2 whitespace-nowrap">
+                  <span className="text-caption text-fg-muted">{row}열 </span>
                   {seats
                     .filter(
                       (seat) => seat.section === section && seat.row === row,
@@ -184,7 +194,7 @@ export function Seats({
                           type="button"
                           aria-label={`${seat.section}구역 ${seat.row}열 ${seat.number}번, ${seat.grade}석, ${label}`}
                           aria-pressed={selectedSeat}
-                          className="seat-button"
+                          className="m-0.5 min-h-11 cursor-pointer rounded-control border border-brand-line bg-brand-soft p-2 text-caption text-brand-strong aria-pressed:border-transparent aria-pressed:bg-brand aria-pressed:text-on-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-disabled disabled:text-on-disabled"
                           disabled={!ready || status !== 'AVAILABLE' || pending}
                           onClick={() => {
                             if (!selectedSeat && selected.length >= 4) {
@@ -218,13 +228,15 @@ export function Seats({
               .join(', ')
           : '없음'}
       </p>
-      {notice && <p role="alert">{notice}</p>}
-      <button
-        disabled={!ready || !selected.length || pending}
-        onClick={() => void submit()}
-      >
-        {pending ? '예매 중' : '예매하기'}
-      </button>
-    </section>
+      {notice && <InlineError role="alert">{notice}</InlineError>}
+      <div>
+        <Button
+          disabled={!ready || !selected.length || pending}
+          onClick={() => void submit()}
+        >
+          {pending ? '예매 중' : '예매하기'}
+        </Button>
+      </div>
+    </Card>
   );
 }
