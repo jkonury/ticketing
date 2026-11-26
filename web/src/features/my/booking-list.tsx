@@ -1,47 +1,83 @@
 import type { MyPageView } from '@/server/aggregate/my-page';
+import { PageHeader } from '@/components/layout/page';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Poster } from '@/components/ui/poster';
+import { EmptyState, InlineError } from '@/components/ui/feedback';
 import { bookingLabel, paymentLabel } from '@/lib/labels';
 import { formatSeoul } from '@/lib/datetime';
 import { MyCoupons } from './my-coupons';
 import { CancelButton } from './cancel-button';
+
+const bookingTones: Record<string, BadgeTone> = {
+  PENDING: 'warning',
+  CONFIRMED: 'success',
+  EXPIRED: 'neutral',
+  CANCELLED: 'neutral',
+};
+const paymentTones: Record<string, BadgeTone> = {
+  REQUESTED: 'warning',
+  SUCCEEDED: 'success',
+  FAILED: 'danger',
+  REFUND_REQUESTED: 'warning',
+  REFUNDED: 'neutral',
+};
+
 export function BookingList({ view }: { view: MyPageView }) {
   return (
     <>
-      <h1>마이페이지</h1>
+      <PageHeader title="마이페이지" />
       {view.paymentsStatus === 'unavailable' && (
-        <p>결제 상태를 불러오지 못했습니다</p>
+        <InlineError>결제 상태를 불러오지 못했습니다</InlineError>
       )}
-      <table>
-        <thead>
-          <tr>
-            <th>공연</th>
-            <th>회차</th>
-            <th>예매 상태</th>
-            {view.paymentsStatus === 'ok' && <th>결제 상태</th>}
-            <th>취소</th>
-          </tr>
-        </thead>
-        <tbody>
+      {view.bookings.length === 0 ? (
+        <EmptyState title="예매 내역이 없어요." />
+      ) : (
+        <ul className="my-5 grid list-none gap-3 p-0">
           {view.bookings.map((booking) => (
-            <tr key={booking.id}>
-              <td>{booking.title}</td>
-              <td>{formatSeoul(booking.startsAt)}</td>
-              <td>{bookingLabel(booking.status)}</td>
-              {view.paymentsStatus === 'ok' && (
-                <td>
-                  {booking.payment
-                    ? paymentLabel(booking.payment.status)
-                    : '결제 내역 없음'}
-                </td>
-              )}
-              <td>
+            <li key={booking.id}>
+              <Card className="grid gap-3 sm:grid-cols-[6rem_1fr_auto] sm:items-start">
+                <Poster
+                  id={booking.performanceId}
+                  title={booking.title}
+                  className="hidden sm:block"
+                />
+                <div className="grid min-w-0 gap-2">
+                  <h2 className="m-0 break-words text-heading font-bold text-fg">
+                    {booking.title}
+                  </h2>
+                  <p className="m-0 text-body text-fg-muted">
+                    {formatSeoul(booking.startsAt)} · 좌석 {booking.seatCount}석
+                    · {booking.amount.toLocaleString('ko-KR')}원
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={bookingTones[booking.status] ?? 'neutral'}>
+                      {bookingLabel(booking.status)}
+                    </Badge>
+                    {view.paymentsStatus === 'ok' &&
+                      (booking.payment ? (
+                        <Badge
+                          tone={
+                            paymentTones[booking.payment.status] ?? 'neutral'
+                          }
+                        >
+                          {paymentLabel(booking.payment.status)}
+                        </Badge>
+                      ) : (
+                        <Badge>결제 내역 없음</Badge>
+                      ))}
+                  </div>
+                </div>
                 {['PENDING', 'CONFIRMED'].includes(booking.status) && (
-                  <CancelButton id={booking.id} />
+                  <div>
+                    <CancelButton id={booking.id} />
+                  </div>
                 )}
-              </td>
-            </tr>
+              </Card>
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ul>
+      )}
       <MyCoupons view={view} />
     </>
   );

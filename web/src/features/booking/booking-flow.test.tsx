@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingFlow } from './booking-flow';
 import { Payment } from './payment';
 import { Seats } from './seats';
-import { Queue } from './queue';
+import { aheadOf, progressOf, Queue } from './queue';
 
 const stream = vi.hoisted(() => ({
   state: 'open',
@@ -102,15 +102,19 @@ describe('예매 흐름', () => {
     for (let index = 1; index <= 5; index++)
       fireEvent.click(
         screen.getByRole('button', {
-          name: `A구역 3열 ${index}번, R석, 선택 가능`,
+          name: `A구역 3열 ${index}번, R석 10,000원, 선택 가능`,
         }),
       );
     expect(
-      screen.getByRole('button', { name: 'A구역 3열 5번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 5번, R석 10,000원, 선택 가능',
+      }),
     ).toHaveAttribute('aria-pressed', 'false');
     act(() => stream.handlers.seat({ seatIds: [1], status: 'HELD' }, '1-0'));
     expect(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선점됨' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선점됨',
+      }),
     ).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('alert')).toHaveTextContent('다른 사용자');
   });
@@ -143,7 +147,9 @@ describe('예매 흐름', () => {
     });
     await openSeats();
     fireEvent.click(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선택 가능',
+      }),
     );
     fireEvent.click(screen.getByRole('button', { name: '예매하기' }));
     const pay = await screen.findByRole('button', { name: '결제하기' });
@@ -171,42 +177,87 @@ describe('예매 흐름', () => {
     );
     await openSeats();
     fireEvent.click(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선택 가능',
+      }),
     );
     fireEvent.click(screen.getByRole('button', { name: '예매하기' }));
     expect(screen.queryByText('대기열')).not.toBeInTheDocument();
     expect(
-      await screen.findByText('대기 순번: 2', {}, { timeout: 3000 }),
+      await screen.findByText('내 앞에 1명이 있어요', {}, { timeout: 3000 }),
     ).toBeInTheDocument();
   });
   it.each(['2000-01-01', '2090-01-01'])(
-    '기기 시각이 %s여도 서버 기준 만료 경계에서 버튼을 비활성화한다',
+    '기기 시각이 %s여도 서버 기준 만료 경계에서 결제를 막고 안내한다',
     (deviceTime) => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date(deviceTime));
-      const receivedAt = performance.now();
+      const onReset = vi.fn();
       render(
         <Payment
           booking={{
             bookingId: 1,
             expiresAt: '2026-01-01T00:00:02Z',
             serverTime: '2026-01-01T00:00:00Z',
-            receivedAt,
+            receivedAt: performance.now(),
             totalAmount: 1,
             seats: [],
           }}
           onDone={vi.fn()}
-          onReset={vi.fn()}
+          onReset={onReset}
         />,
       );
-      expect(screen.getByText('남은 시간: 2초')).toBeInTheDocument();
+      expect(screen.getByText('00:02')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
       act(() => vi.advanceTimersByTime(2000));
-      expect(screen.getByText('선점이 만료되었습니다.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '결제하기' })).toBeDisabled();
+      expect(
+        screen.getByRole('dialog', { name: '선점 시간이 끝났어요' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '결제하기', hidden: true }),
+      ).toBeDisabled();
+      expect(onReset).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole('button', { name: '좌석 다시 선택하기' }),
+      );
+      expect(onReset).toHaveBeenCalledTimes(1);
       vi.useRealTimers();
     },
   );
+  it('남은 시간을 mm:ss로 보이고 60초 이하에서 경고를 한 번만 알린다', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    render(
+      <Payment
+        booking={{
+          bookingId: 1,
+          expiresAt: '2026-01-01T00:01:03Z',
+          serverTime: '2026-01-01T00:00:00Z',
+          receivedAt: performance.now(),
+          totalAmount: 1,
+          seats: [],
+        }}
+        onDone={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('01:03')).toBeInTheDocument();
+    const bar = screen.getByRole('progressbar');
+    expect(bar).toHaveAttribute('aria-valuemax', '63');
+    expect(bar).toHaveAttribute('aria-valuenow', '63');
+    expect(screen.queryByText(/1분 남았어요/)).toBeNull();
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getByText('01:00')).toBeInTheDocument();
+    expect(screen.getAllByText(/1분 남았어요/)).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(10000));
+    expect(screen.getByText('00:50')).toBeInTheDocument();
+    expect(screen.getAllByText(/1분 남았어요/)).toHaveLength(1);
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    );
+    vi.useRealTimers();
+  });
   it('좌석 최초 연결과 단절 후 새 스냅샷을 기다리며 제출을 막는다', () => {
     stream.state = 'connecting';
     const props = {
@@ -232,7 +283,9 @@ describe('예매 흐름', () => {
       ),
     );
     fireEvent.click(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선택 가능',
+      }),
     );
     expect(screen.getByRole('button', { name: '예매하기' })).toBeEnabled();
     act(() => stream.onDisconnect());
@@ -261,20 +314,49 @@ describe('예매 흐름', () => {
     const props = { scheduleId: 1, onAdmitted: vi.fn() };
     const view = render(<Queue {...props} />);
     expect(
-      await screen.findByText('대기열에 연결하고 있습니다.'),
+      await screen.findByText('대기열에 연결하고 있어요.'),
     ).toBeInTheDocument();
     stream.state = 'reconnecting';
     view.rerender(<Queue {...props} />);
-    expect(
-      screen.getByText(/순번이 오래되었을 수 있습니다/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/순번이 오래되었을 수 있어요/)).toBeInTheDocument();
     stream.state = 'failed';
     view.rerender(<Queue {...props} />);
-    expect(screen.getByText(/대기열 연결에 실패했습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/대기열 연결에 실패했어요/)).toBeInTheDocument();
     stream.state = 'open';
     view.rerender(<Queue {...props} />);
     expect(
-      screen.queryByText(/대기열 연결에 실패했습니다/),
+      screen.queryByText(/대기열 연결에 실패했어요/),
     ).not.toBeInTheDocument();
+  });
+  it('앞 인원과 진행 바 값을 계산한다', () => {
+    expect(aheadOf(1)).toBe(0);
+    expect(aheadOf(20)).toBe(19);
+    expect(aheadOf(0)).toBe(0);
+    expect(progressOf(20, 20)).toBe(0);
+    expect(progressOf(20, 10)).toBe(53);
+    expect(progressOf(20, 1)).toBe(100);
+    expect(progressOf(1, 1)).toBe(100);
+    expect(progressOf(10, 15)).toBe(0);
+  });
+  it('순번 화면에 앞 인원·안내·연결 상태를 보여 준다', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      response({ status: 'WAITING', position: 5 }) as Response,
+    );
+    stream.state = 'open';
+    const props = { scheduleId: 1, onAdmitted: vi.fn() };
+    const view = render(<Queue {...props} />);
+    expect(
+      await screen.findByText('내 앞에 4명이 있어요', {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('queue-position')).toHaveTextContent('5');
+    expect(screen.getByText('연결됨')).toBeInTheDocument();
+    expect(screen.getByText(/새로고침하면 순번이 뒤로 밀릴 수 있어요/));
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '0',
+    );
+    stream.state = 'reconnecting';
+    view.rerender(<Queue {...props} />);
+    expect(screen.getByText('다시 연결 중')).toBeInTheDocument();
   });
 });

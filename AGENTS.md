@@ -8,6 +8,7 @@
 - `docs/roadmap.md`: 단계별 구현 체크리스트와 완료 기준
 - `docs/adr/`: 결정별로 검토한 대안과 선택 이유. 설계를 바꾸는 결정은 새 ADR로 남긴다
 - `docs/workflow/roadmap.md`: AI 개발 워크플로(W 트랙) 로드맵. M 트랙과 병행한다([ADR 0048](docs/adr/0048-ai-dev-workflow-pipeline.md))
+- `docs/ui/roadmap.md`: web UI 개편(U 트랙) 로드맵. M·W 트랙과 병행한다([ADR 0049](docs/adr/0049-ui-redesign-direction.md))
 
 작업 영역별 세부 지침은 도구에 상관없이 읽을 수 있도록 `docs/rules/`에 둔다. **해당 경로의 파일을 다루기 전에 먼저 읽는다.** (Claude Code와 Codex 공용)
 
@@ -43,7 +44,7 @@
 
 ## 3. 작업 방식
 
-- 작업 시작 전 `docs/roadmap.md`에서 현재 단계와 다음 미완료 항목을 확인한다. 워크플로 작업은 `docs/workflow/roadmap.md`(W 트랙)를 본다. 두 트랙은 병행하며 각 트랙 안에서만 단계 순서를 지킨다.
+- 작업 시작 전 `docs/roadmap.md`에서 현재 단계와 다음 미완료 항목을 확인한다. 워크플로 작업은 `docs/workflow/roadmap.md`(W 트랙), UI 개편 작업은 `docs/ui/roadmap.md`(U 트랙)를 본다. 트랙들은 병행하며 각 트랙 안에서만 단계 순서를 지킨다.
 - 한 단계의 **완료 기준**을 만족하기 전에는 다음 단계 항목을 시작하지 않는다.
 - 항목을 끝내면 `docs/roadmap.md`의 체크박스를 갱신한다.
 - 구현 중 설계와 다르게 가야 할 이유가 생기면 **먼저 사용자에게 알리고**, 합의되면 `docs/architecture.md`를 같이 고친다. 문서와 코드가 어긋난 채로 두지 않는다.
@@ -71,6 +72,7 @@ docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 �
 ./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund|coupon-drop>  # k6 부하 테스트 (Gateway 18000 호출)
 ./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.<Simulation>  # Gatling 부하 시나리오 (loadtest/gatling/README.md)
 ./gradlew build                      # 전체 빌드 + 테스트
+./scripts/dev/seed-demo.sh [--reset [--yes]]  # 화면 시연 데이터
 ./gradlew :core:bootRun
 ./gradlew :payment:bootRun          # 결제 앱(18085). fake-pg 웹훅이 직접 호출. scripts/dev/run.sh --payment
 ./gradlew :realtime:bootRun

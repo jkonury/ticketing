@@ -1,5 +1,13 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { RouteLoading } from '@/components/route-loading';
 import { notFound } from 'next/navigation';
+import { Page, PageHeader } from '@/components/layout/page';
+import { Button, buttonClassName } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
+import { Select } from '@/components/ui/input';
+import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';
 import { ApiError } from '@/lib/problem';
 import { formatSeoul } from '@/lib/datetime';
 import { instantToSeoulLocal } from '@/features/admin/coupon-input';
@@ -14,13 +22,20 @@ import { withSessionRedirect } from '@/server/auth/require-user';
 
 const STATUSES = ['ISSUED', 'RESERVED', 'USED', 'REVOKED', 'EXPIRED'];
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
+type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ status?: string; cursor?: string }>;
-}) {
+};
+
+export default function Route(props: Props) {
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <CouponDetail {...props} />
+    </Suspense>
+  );
+}
+
+async function CouponDetail({ params, searchParams }: Props) {
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const query = await searchParams;
@@ -49,12 +64,19 @@ export default async function Page({
   if (status) next.set('status', status);
   if (issued.nextCursor !== null) next.set('cursor', String(issued.nextCursor));
   return (
-    <main>
-      <h1>
-        {coupon.name} ({coupon.status})
-      </h1>
-      <Link href="/admin/coupons">목록</Link>
-      <p>
+    <Page>
+      <PageHeader
+        title={`${coupon.name} (${coupon.status})`}
+        actions={
+          <Link
+            href="/admin/coupons"
+            className={buttonClassName({ variant: 'secondary' })}
+          >
+            목록
+          </Link>
+        }
+      />
+      <p className="text-body text-fg-muted">
         발급(미사용) {coupon.stats.issued} / 예약 {coupon.stats.reserved} / 사용{' '}
         {coupon.stats.used} / 회수 {coupon.stats.revoked} (현재 상태별 건수,
         누적{' '}
@@ -64,8 +86,12 @@ export default async function Page({
           coupon.stats.revoked}
         건)
       </p>
-      {locked && <p>발급이 시작되어 이름·설명·종료일만 수정할 수 있습니다.</p>}
-      <h2>수정</h2>
+      {locked && (
+        <p className="mt-2 text-body text-fg-muted">
+          발급이 시작되어 이름·설명·종료일만 수정할 수 있습니다.
+        </p>
+      )}
+      <h2 className="mb-4 mt-8 text-heading font-bold">수정</h2>
       <CouponForm
         locked={locked}
         values={{
@@ -84,51 +110,56 @@ export default async function Page({
         }}
       />
       {coupon.status === 'ACTIVE' && <StopForm id={coupon.id} />}
-      <h2>직접 지급</h2>
+      <h2 className="mb-4 mt-8 text-heading font-bold">직접 지급</h2>
       {coupon.status === 'ACTIVE' ? (
         <GrantForm id={coupon.id} />
       ) : (
-        <p>중지된 쿠폰은 지급할 수 없습니다.</p>
+        <p className="text-body text-fg-muted">
+          중지된 쿠폰은 지급할 수 없습니다.
+        </p>
       )}
-      <h2>발급 목록</h2>
-      <form>
-        <label>
-          상태{' '}
-          <select name="status" defaultValue={status ?? ''}>
-            <option value="">전체</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button>조회</button>
+      <h2 className="mb-4 mt-8 text-heading font-bold">발급 목록</h2>
+      <form className="flex flex-wrap items-end gap-3">
+        <Field label="상태" className="w-full max-w-60">
+          {(c) => (
+            <Select {...c} name="status" defaultValue={status ?? ''}>
+              <option value="">전체</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Button type="submit">조회</Button>
       </form>
-      <table>
+      <table className={tableClass}>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>회원</th>
-            <th>상태</th>
-            <th>주문</th>
-            <th>할인액</th>
-            <th>발급</th>
-            <th>사용</th>
-            <th>회수</th>
+            <th className={thClass}>ID</th>
+            <th className={thClass}>회원</th>
+            <th className={thClass}>상태</th>
+            <th className={thClass}>주문</th>
+            <th className={thClass}>할인액</th>
+            <th className={thClass}>발급</th>
+            <th className={thClass}>사용</th>
+            <th className={thClass}>회수</th>
           </tr>
         </thead>
         <tbody>
           {issued.items.map((c) => (
             <tr key={c.id}>
-              <td>{c.id}</td>
-              <td>{c.memberId}</td>
-              <td>{c.status}</td>
-              <td>{c.orderId ?? '-'}</td>
-              <td>{c.discountAmount ?? '-'}</td>
-              <td>{formatSeoul(c.issuedAt)}</td>
-              <td>{c.usedAt ? formatSeoul(c.usedAt) : '-'}</td>
-              <td>
+              <td className={tdClass}>{c.id}</td>
+              <td className={tdClass}>{c.memberId}</td>
+              <td className={tdClass}>{c.status}</td>
+              <td className={tdClass}>{c.orderId ?? '-'}</td>
+              <td className={tdClass}>{c.discountAmount ?? '-'}</td>
+              <td className={tdClass}>{formatSeoul(c.issuedAt)}</td>
+              <td className={tdClass}>
+                {c.usedAt ? formatSeoul(c.usedAt) : '-'}
+              </td>
+              <td className={tdClass}>
                 {c.status === 'ISSUED' && (
                   <RevokeForm issuedCouponId={c.id} definitionId={id} />
                 )}
@@ -138,8 +169,13 @@ export default async function Page({
         </tbody>
       </table>
       {issued.nextCursor !== null && (
-        <Link href={`/admin/coupons/${id}?${next}`}>다음 페이지</Link>
+        <Link
+          href={`/admin/coupons/${id}?${next}`}
+          className={buttonClassName({ variant: 'secondary' })}
+        >
+          다음 페이지
+        </Link>
       )}
-    </main>
+    </Page>
   );
 }

@@ -31,7 +31,7 @@ class KafkaRecoveryIntegrationTests {
     @ExtendWith(OutputCaptureExtension::class)
     fun `브로커 장애로 실패한 결제 요청 외부화는 복구 후 재기동에서 재발행되어 예매가 확정된다`(output: CapturedOutput) {
         val namespace = SharedContainers.newNamespace()
-        KafkaContainer("apache/kafka:4.3.2").use { kafka ->
+        TestKafkaContainer().use { kafka ->
             kafka.start()
             verifyRecovery(namespace, kafka)
         }

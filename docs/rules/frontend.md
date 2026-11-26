@@ -93,6 +93,7 @@ web/src
 ## TypeScript와 스타일
 
 - 화면 구성과 시각 규칙은 [UI 가이드](../ui-guide.md)를 따른다.
+- 화면 문구(안내, 버튼, 오류 메시지)는 해요체로 쓴다. 예: "좌석을 선택해 주세요", "예매가 완료됐어요".
 - `strict` 모드. `any` 금지, `as` 단언은 사유 주석과 함께 최소화한다.
 - 컴포넌트는 함수 선언과 named export. 기본 export는 Next.js가 요구하는 파일(`page`, `layout`, `proxy` 등)에만 쓴다. (`proxy.ts`는 named `proxy` export를 쓰는 Next 규약을 따른다.)
 - 파일명은 kebab-case, 컴포넌트 이름은 PascalCase.
@@ -109,3 +110,4 @@ web/src
 - 토큰 비노출 검증: E2E에서 브라우저 저장소와 네트워크 응답에 JWT가 없음을 확인한다 (M4 완료 기준).
 - 실행: `./scripts/agent/test/web-check.sh [--build]`
 - 실행: `./scripts/e2e/run.sh --web`
+- 화면 시각 회귀(`toHaveScreenshot`)와 기준 이미지 관리: [web/capture/README.md](../../web/capture/README.md#시각-회귀-비교와-기준-이미지)

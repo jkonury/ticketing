@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Page, PageHeader } from '@/components/layout/page';
 import { formatSeoul } from '@/lib/datetime';
 import {
   call,
@@ -10,6 +10,7 @@ import {
   type Schedule,
   type Seat,
 } from './booking-shared';
+import { BookingDone } from './booking-done';
 import { Queue } from './queue';
 import { Seats } from './seats';
 import { Payment } from './payment';
@@ -41,17 +42,13 @@ export function BookingFlow({
     setQueueVersion((value) => value + 1);
   };
   return (
-    <main className="booking-page">
-      <h1>{schedule.performanceTitle}</h1>
-      <p>{formatSeoul(schedule.startsAt)}</p>
+    <Page>
+      <PageHeader
+        title={schedule.performanceTitle}
+        description={formatSeoul(schedule.startsAt)}
+      />
       {done && booking ? (
-        <section>
-          <h2>예매 완료</h2>
-          <p>예매 번호: {booking.bookingId}</p>
-          <p>{booking.seats.map((seat) => seat.label).join(', ')}</p>
-          <p>{booking.totalAmount.toLocaleString('ko-KR')}원</p>
-          <Link href="/my">마이페이지</Link>
-        </section>
+        <BookingDone schedule={schedule} booking={booking} />
       ) : booking ? (
         <Payment
           booking={booking}
@@ -70,9 +67,11 @@ export function BookingFlow({
         <Queue
           key={queueVersion}
           scheduleId={schedule.id}
+          title={schedule.performanceTitle}
+          startsAt={schedule.startsAt}
           onAdmitted={setAdmission}
         />
       )}
-    </main>
+    </Page>
   );
 }

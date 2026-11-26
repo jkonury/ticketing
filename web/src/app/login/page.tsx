@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { AuthForm } from '@/features/auth/auth-form';
+import { Page, PageHeader } from '@/components/layout/page';
+import { Card } from '@/components/ui/card';
 
 async function LoginForm({
   searchParams,
@@ -17,15 +19,16 @@ export default function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   return (
-    <main className="auth-page">
-      <div className="auth-card">
-        <h1>로그인</h1>
-        <p className="page-intro">공연 예매를 이어가세요.</p>
+    <Page narrow className="md:pt-16">
+      <Card padding="lg">
+        <PageHeader title="로그인" description="공연 예매를 이어가세요." />
         <Suspense fallback={null}>
           <LoginForm searchParams={searchParams} />
         </Suspense>
-        <Link href="/signup">회원 가입</Link>
-      </div>
-    </main>
+        <Link href="/signup" className="mt-5 inline-flex min-h-11 items-center">
+          회원 가입
+        </Link>
+      </Card>
+    </Page>
   );
 }

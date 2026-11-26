@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeSeats } from './seats';
+import { makeSeats, previewLayout } from './seats';
 describe('좌석 생성', () => {
   it('구역마다 앞 열부터 등급을 배정한다', () => {
     const seats = makeSeats(['A', 'B'], 3, 2, { VIP: 1, R: 1, S: 0, A: 1 });
@@ -19,5 +19,42 @@ describe('좌석 생성', () => {
     expect(() =>
       makeSeats(['A'], 51, 100, { VIP: 51, R: 0, S: 0, A: 0 }),
     ).toThrow('TOO_MANY_SEATS');
+  });
+});
+
+describe('배치 미리보기', () => {
+  it('구역 목록과 열별 등급, 전체 좌석 수를 돌려준다', () => {
+    const result = previewLayout({
+      sections: ' A, B ',
+      rows: 3,
+      perRow: 2,
+      counts: { VIP: 1, R: 1, S: 0, A: 1 },
+    });
+    expect(result).toEqual({
+      error: null,
+      sections: ['A', 'B'],
+      perRow: 2,
+      rowGrades: ['VIP', 'R', 'A'],
+      total: 12,
+    });
+  });
+  it('등급별 열 수 합이 다르면 오류 코드를 돌려준다', () => {
+    expect(
+      previewLayout({
+        sections: 'A',
+        rows: 2,
+        perRow: 1,
+        counts: { VIP: 1, R: 0, S: 0, A: 0 },
+      }),
+    ).toEqual({ error: 'ROW_COUNT_MISMATCH' });
+  });
+  it('구역이 비었거나 중복이면 잘못된 입력으로 본다', () => {
+    const counts = { VIP: 1, R: 0, S: 0, A: 0 };
+    expect(
+      previewLayout({ sections: '', rows: 1, perRow: 1, counts }).error,
+    ).toBe('INVALID_SEATS');
+    expect(
+      previewLayout({ sections: 'A,A', rows: 1, perRow: 1, counts }).error,
+    ).toBe('INVALID_SEATS');
   });
 });

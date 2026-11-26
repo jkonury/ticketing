@@ -4,7 +4,7 @@
 - 작성일: 2026-11-10
 - 상태: M0~M5.5 완료. M5 완료 확정, M5.5 쿠폰 완료(M5.5-1·2·3 게이트 통과, coupon-drop p95 1초는 후속 항목, [결과](./performance/m5.5/coupon-drop.md)). M5 미달 성능 목표 3건(300ms·900ms 계열)은 장기 과제로 후속 항목에 이관. M6 진행 중: 사전 작업과 1·2단계 완료, payment 분리 진행 중(측정 남음). (이력: [M0·M1](./backup/roadmap-completed-M0-M1.md), [M2·M3·M4·M5·M5.5](./backup/roadmap-completed-M2-M5.5.md))
 
-AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/roadmap.md)(W 트랙)로 병행한다.
+AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/roadmap.md)(W 트랙), web UI 개편은 [ui/roadmap.md](./ui/roadmap.md)(U 트랙)로 병행한다.
 
 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 완료한 항목은 체크하고, 설계와 달라진 점은 `architecture.md`를 함께 고친다.
 

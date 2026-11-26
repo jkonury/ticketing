@@ -1,10 +1,11 @@
+import { Page, PageHeader } from '@/components/layout/page';
 import { CouponForm } from '@/features/admin/coupon-forms';
 
-export default function Page() {
+export default function NewCouponPage() {
   return (
-    <main>
-      <h1>쿠폰 생성</h1>
+    <Page>
+      <PageHeader title="쿠폰 생성" />
       <CouponForm />
-    </main>
+    </Page>
   );
 }

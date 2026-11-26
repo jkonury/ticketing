@@ -1,12 +1,14 @@
 import { AuthForm } from '@/features/auth/auth-form';
+import { Page, PageHeader } from '@/components/layout/page';
+import { Card } from '@/components/ui/card';
 
 export default function SignupPage() {
   return (
-    <main className="auth-page">
-      <div className="auth-card">
-        <h1>회원 가입</h1>
+    <Page narrow className="md:pt-16">
+      <Card padding="lg">
+        <PageHeader title="회원 가입" />
         <AuthForm mode="signup" />
-      </div>
-    </main>
+      </Card>
+    </Page>
   );
 }

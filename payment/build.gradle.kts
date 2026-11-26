@@ -27,7 +27,7 @@ dependencies {
     runtimeOnly("org.springframework.modulith:spring-modulith-runtime")
 
     testImplementation("org.testcontainers:testcontainers-postgresql")
-    testImplementation("org.testcontainers:testcontainers-kafka")
+    testImplementation(testFixtures(project(":common")))
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation("org.springframework.batch:spring-batch-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

@@ -49,7 +49,7 @@ test('브라우저 예매와 좌석 전파 및 JWT 비노출', async ({
     const seat1 = 'A구역 1열 1번, A석';
     const seat2 = 'A구역 1열 2번, A석';
     await expect(
-      viewer.getByRole('button', { name: `${seat1}, 선택 가능` }),
+      viewer.getByRole('button', { name: new RegExp(`${seat1}.*, 선택 가능`) }),
     ).toBeEnabled();
 
     await buyer.goto('/');
@@ -72,20 +72,24 @@ test('브라우저 예매와 좌석 전파 및 JWT 비노출', async ({
     await expect(buyer.getByRole('heading', { name: '좌석 선택' })).toBeVisible(
       { timeout: 45_000 },
     );
-    await buyer.getByRole('button', { name: `${seat1}, 선택 가능` }).click();
-    await buyer.getByRole('button', { name: `${seat2}, 선택 가능` }).click();
+    await buyer
+      .getByRole('button', { name: new RegExp(`${seat1}.*, 선택 가능`) })
+      .click();
+    await buyer
+      .getByRole('button', { name: new RegExp(`${seat2}.*, 선택 가능`) })
+      .click();
     await buyer.getByRole('button', { name: '예매하기' }).click();
     await expect(
       buyer.getByRole('heading', { name: '결제', exact: true }),
     ).toBeVisible();
     await expect(
       viewer.getByRole('button', {
-        name: new RegExp(`${seat1}, (선점됨|판매됨)`),
+        name: new RegExp(`${seat1}.*, (선점됨|판매됨)`),
       }),
     ).toBeDisabled();
     await expect(
       viewer.getByRole('button', {
-        name: new RegExp(`${seat2}, (선점됨|판매됨)`),
+        name: new RegExp(`${seat2}.*, (선점됨|판매됨)`),
       }),
     ).toBeDisabled();
     await buyer.getByRole('button', { name: '결제하기' }).click();
@@ -93,8 +97,8 @@ test('브라우저 예매와 좌석 전파 및 JWT 비노출', async ({
       { timeout: 45_000 },
     );
     await buyer.getByRole('link', { name: '마이페이지' }).last().click();
-    const row = buyer.getByRole('row').filter({ hasText: show.title });
-    await expect(row).toContainText('확정');
+    const row = buyer.getByRole('listitem').filter({ hasText: show.title });
+    await expect(row).toContainText('예매 확정');
     await expect(row).toContainText('결제 완료');
     await buyer.goto(`/performances/${show.performanceId}`);
     await expect(

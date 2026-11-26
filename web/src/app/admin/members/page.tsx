@@ -1,14 +1,36 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { RouteLoading } from '@/components/route-loading';
+import { Page, PageHeader } from '@/components/layout/page';
+import { Button, buttonClassName } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import {
+  tableClass,
+  thClass,
+  tdClass,
+  secondaryCol,
+} from '@/components/ui/table-styles';
 import { formatSeoul } from '@/lib/datetime';
 import { listAdminMembers } from '@/server/api/admin';
 import { withSessionRedirect } from '@/server/auth/require-user';
 import { RoleForm } from '@/features/admin/role-form';
 
-export default async function Page({
+type SearchParams = Promise<{ email?: string; cursor?: string }>;
+
+export default function Route({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; cursor?: string }>;
+  searchParams: SearchParams;
 }) {
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <Members searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function Members({ searchParams }: { searchParams: SearchParams }) {
   const { email, cursor } = await searchParams;
   const cursorNumber = cursor ? Number(cursor) : undefined;
   const page = await withSessionRedirect(() =>
@@ -21,32 +43,34 @@ export default async function Page({
   if (email) next.set('email', email);
   if (page.nextCursor !== null) next.set('cursor', String(page.nextCursor));
   return (
-    <main>
-      <h1>회원 관리</h1>
-      <form>
-        <label>
-          이메일 <input name="email" defaultValue={email ?? ''} />
-        </label>
-        <button>검색</button>
+    <Page>
+      <PageHeader title="회원 관리" />
+      <form className="flex flex-wrap items-end gap-3">
+        <Field label="이메일" className="w-full max-w-100">
+          {(c) => <Input {...c} name="email" defaultValue={email ?? ''} />}
+        </Field>
+        <Button type="submit">검색</Button>
       </form>
-      <table>
+      <table className={tableClass}>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>이메일</th>
-            <th>이름</th>
-            <th>가입일</th>
-            <th>역할</th>
+            <th className={`${thClass} ${secondaryCol}`}>ID</th>
+            <th className={thClass}>이메일</th>
+            <th className={`${thClass} ${secondaryCol}`}>이름</th>
+            <th className={`${thClass} ${secondaryCol}`}>가입일</th>
+            <th className={thClass}>역할</th>
           </tr>
         </thead>
         <tbody>
           {page.items.map((member) => (
             <tr key={member.id}>
-              <td>{member.id}</td>
-              <td>{member.email}</td>
-              <td>{member.name}</td>
-              <td>{formatSeoul(member.createdAt)}</td>
-              <td>
+              <td className={`${tdClass} ${secondaryCol}`}>{member.id}</td>
+              <td className={`${tdClass} break-all`}>{member.email}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>{member.name}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>
+                {formatSeoul(member.createdAt)}
+              </td>
+              <td className={tdClass}>
                 <RoleForm memberId={member.id} role={member.role} />
               </td>
             </tr>
@@ -54,8 +78,13 @@ export default async function Page({
         </tbody>
       </table>
       {page.nextCursor !== null && (
-        <Link href={`/admin/members?${next}`}>다음 페이지</Link>
+        <Link
+          href={`/admin/members?${next}`}
+          className={buttonClassName({ variant: 'secondary' })}
+        >
+          다음 페이지
+        </Link>
       )}
-    </main>
+    </Page>
   );
 }

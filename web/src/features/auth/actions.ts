@@ -7,7 +7,21 @@ import { ApiError } from '@/lib/problem';
 import { assertSameOrigin } from '@/server/auth/csrf';
 import { login, logout, signup } from '@/server/auth/auth-service';
 
-export type AuthState = { message: string };
+// 제출 실패 시 React 폼 액션이 폼을 초기화하므로 비밀번호를 뺀 입력값을 돌려줘 defaultValue로 복원한다.
+export type AuthState = {
+  message: string;
+  fields?: { email?: string; name?: string; role?: string };
+};
+function text(value: FormDataEntryValue | null) {
+  return typeof value === 'string' ? value : undefined;
+}
+function keptFields(form: FormData) {
+  return {
+    email: text(form.get('email')),
+    name: text(form.get('name')),
+    role: text(form.get('role')),
+  };
+}
 const loginSchema = z.object({
   email: z.email(),
   password: z.string().min(8).max(64),
@@ -19,13 +33,13 @@ const signupSchema = loginSchema.extend({
 function message(error: unknown) {
   if (error instanceof ApiError) {
     if (error.code === 'INVALID_CREDENTIALS')
-      return '이메일 또는 비밀번호가 올바르지 않습니다.';
+      return '이메일 또는 비밀번호가 올바르지 않아요.';
     if (error.code === 'EMAIL_ALREADY_EXISTS')
-      return '이미 사용 중인 이메일입니다.';
+      return '이미 사용 중인 이메일이에요.';
     if (error.code === 'CSRF_REJECTED') return '요청 출처를 확인해 주세요.';
-    if (error.code === 'INVALID_REQUEST') return '입력 내용을 확인해 주세요.';
+    if (error.code === 'INVALID_REQUEST') return '입력한 내용을 확인해 주세요.';
   }
-  return '요청을 처리하지 못했습니다. 다시 시도해 주세요.';
+  return '요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.';
 }
 function safeNext(value: FormDataEntryValue | null) {
   if (
@@ -47,10 +61,14 @@ export async function loginAction(
       email: form.get('email'),
       password: form.get('password'),
     });
-    if (!input.success) return { message: '입력 내용을 확인해 주세요.' };
+    if (!input.success)
+      return {
+        message: '입력한 내용을 확인해 주세요.',
+        fields: keptFields(form),
+      };
     await login(input.data);
   } catch (error) {
-    return { message: message(error) };
+    return { message: message(error), fields: keptFields(form) };
   }
   redirect(safeNext(form.get('next')));
 }
@@ -66,10 +84,14 @@ export async function signupAction(
       name: form.get('name'),
       role: form.get('role'),
     });
-    if (!input.success) return { message: '입력 내용을 확인해 주세요.' };
+    if (!input.success)
+      return {
+        message: '입력한 내용을 확인해 주세요.',
+        fields: keptFields(form),
+      };
     await signup(input.data);
   } catch (error) {
-    return { message: message(error) };
+    return { message: message(error), fields: keptFields(form) };
   }
   redirect('/login');
 }

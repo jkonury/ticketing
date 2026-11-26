@@ -1,7 +1,10 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { InlineError } from '@/components/ui/feedback';
 import { useEventStream } from '@/features/stream/use-event-stream';
 import {
   bookingSchema,
@@ -16,6 +19,7 @@ import {
   type SeatStatus,
 } from './booking-shared';
 import { bookingError } from './error-messages';
+import { SeatGrid, won } from './seat-grid';
 
 export function Seats({
   scheduleId,
@@ -35,6 +39,8 @@ export function Seats({
   const [selected, setSelected] = useState<number[]>([]);
   const [notice, setNotice] = useState('');
   const [pending, setPending] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [flashing, setFlashing] = useState<ReadonlySet<number>>(new Set());
   const key = useRef(crypto.randomUUID());
   const router = useRouter();
   const apply = useCallback(
@@ -58,6 +64,24 @@ export function Seats({
     },
     [selected],
   );
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const active = timers.current;
+    return () => active.forEach(clearTimeout);
+  }, []);
+  // 다른 사용자가 선점한 좌석을 잠깐 강조한다. 움직임은 CSS의 motion-safe가 맡는다.
+  const flash = useCallback((ids: number[]) => {
+    setFlashing((current) => new Set([...current, ...ids]));
+    const timer = setTimeout(() => {
+      timers.current.delete(timer);
+      setFlashing((current) => {
+        const next = new Set(current);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 1500);
+    timers.current.add(timer);
+  }, []);
   const stream = useEventStream({
     request: { kind: 'seats', scheduleId },
     freshSnapshot: true,
@@ -72,6 +96,8 @@ export function Seats({
       },
       seat(data) {
         const parsed = changeSchema.safeParse(data);
+        if (parsed.success && parsed.data.status === 'HELD')
+          flash(parsed.data.seatIds);
         if (parsed.success)
           apply(
             parsed.data.seatIds.map((seatId) => ({
@@ -123,108 +149,122 @@ export function Seats({
       setPending(false);
     }
   }
+  const chosen = seats.filter((seat) => selected.includes(seat.seatId));
+  const total = chosen.reduce((sum, seat) => sum + seat.price, 0);
+  const byGrade = [...Map.groupBy(chosen, (seat) => seat.grade)];
+  function toggle(seat: Seat) {
+    const isSelected = selected.includes(seat.seatId);
+    if (!isSelected && selected.length >= 4) {
+      setNotice(bookingError('TOO_MANY_SEATS'));
+      return;
+    }
+    setSelected(
+      isSelected
+        ? selected.filter((id) => id !== seat.seatId)
+        : [...selected, seat.seatId],
+    );
+    key.current = crypto.randomUUID();
+  }
   return (
-    <section>
-      <h2>좌석 선택</h2>
-      <p>최대 4석</p>
-      {stream.state === 'failed' ? (
-        <p role="alert">
-          좌석 정보를 연결할 수 없습니다.{' '}
-          <button onClick={stream.restart}>다시 연결</button>
+    <div className="grid gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:pb-0">
+      <Card padding="lg" className="grid gap-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-heading font-bold text-fg">좌석 선택</h2>
+          <Button
+            variant="secondary"
+            className="lg:hidden"
+            aria-pressed={zoomed}
+            onClick={() => setZoomed((value) => !value)}
+          >
+            {zoomed ? '전체 보기' : '확대'}
+          </Button>
+        </div>
+        <p className="text-caption text-fg-muted">
+          최대 4석까지 고를 수 있어요. 좌석 현황은 참고용이고, 실제 선점 결과는
+          예매할 때 확정돼요.
         </p>
-      ) : !ready ? (
-        <p role="status">
-          좌석 정보를{' '}
-          {stream.state === 'reconnecting'
-            ? '다시 연결하고 있습니다. 표시된 정보는 오래되었을 수 있습니다.'
-            : '확인하고 있습니다.'}
-        </p>
-      ) : null}
-      <p className="field-hint">
-        좌석은 선택 가능, 선점됨, 판매됨 상태로 표시됩니다. 좌석 배치는 가로로
-        스크롤할 수 있습니다.
-      </p>
-      <div
-        className="seat-map"
-        tabIndex={0}
-        role="region"
-        aria-label="좌석 배치"
+        {stream.state === 'failed' ? (
+          <InlineError role="alert">
+            좌석 정보를 연결할 수 없습니다.{' '}
+            <Button variant="secondary" onClick={stream.restart}>
+              다시 연결
+            </Button>
+          </InlineError>
+        ) : !ready ? (
+          <p role="status" className="text-caption text-fg-muted">
+            좌석 정보를{' '}
+            {stream.state === 'reconnecting'
+              ? '다시 연결하고 있습니다. 표시된 정보는 오래되었을 수 있습니다.'
+              : '확인하고 있습니다.'}
+          </p>
+        ) : null}
+        <SeatGrid
+          seats={seats}
+          statuses={statuses}
+          selected={selected}
+          flashing={flashing}
+          interactive={ready && !pending}
+          zoomed={zoomed}
+          onToggle={toggle}
+        />
+      </Card>
+      <aside
+        aria-label="선택 요약"
+        className="fixed inset-x-0 bottom-0 z-30 grid gap-3 border-t border-line bg-surface p-3 shadow-bar lg:sticky lg:top-4 lg:rounded-card lg:border lg:p-5 lg:shadow-none"
       >
-        {Array.from(new Set(seats.map((seat) => seat.section))).map(
-          (section) => (
-            <fieldset key={section}>
-              <legend>{section}구역</legend>
-              {Array.from(
-                new Set(
-                  seats
-                    .filter((seat) => seat.section === section)
-                    .map((seat) => seat.row),
-                ),
-              ).map((row) => (
-                <div key={row}>
-                  <span>{row}열 </span>
-                  {seats
-                    .filter(
-                      (seat) => seat.section === section && seat.row === row,
-                    )
-                    .map((seat) => {
-                      const status = statuses[seat.seatId];
-                      const selectedSeat = selected.includes(seat.seatId);
-                      const label =
-                        status === 'AVAILABLE'
-                          ? '선택 가능'
-                          : status === 'HELD'
-                            ? '선점됨'
-                            : status === 'SOLD'
-                              ? '판매됨'
-                              : '확인 중';
-                      return (
-                        <button
-                          key={seat.seatId}
-                          type="button"
-                          aria-label={`${seat.section}구역 ${seat.row}열 ${seat.number}번, ${seat.grade}석, ${label}`}
-                          aria-pressed={selectedSeat}
-                          className="seat-button"
-                          disabled={!ready || status !== 'AVAILABLE' || pending}
-                          onClick={() => {
-                            if (!selectedSeat && selected.length >= 4) {
-                              setNotice(bookingError('TOO_MANY_SEATS'));
-                              return;
-                            }
-                            setSelected(
-                              selectedSeat
-                                ? selected.filter((id) => id !== seat.seatId)
-                                : [...selected, seat.seatId],
-                            );
-                            key.current = crypto.randomUUID();
-                          }}
-                        >
-                          {seat.section} {seat.row}-{seat.number} ({seat.grade})
-                        </button>
-                      );
-                    })}
-                </div>
+        <div className="hidden gap-2 lg:grid">
+          <h3 className="text-body font-semibold text-fg">선택한 좌석</h3>
+          {chosen.length ? (
+            <ul className="grid gap-1 text-caption text-fg">
+              {chosen.map((seat) => (
+                <li key={seat.seatId} className="flex justify-between gap-2">
+                  <span>
+                    {seat.section}구역 {seat.row}열 {seat.number}번
+                  </span>
+                  <span className="text-fg-muted">
+                    {seat.grade} {won(seat.price)}
+                  </span>
+                </li>
               ))}
-            </fieldset>
-          ),
-        )}
-      </div>
-      <p>
-        선택한 좌석:{' '}
-        {selected.length
-          ? seats
-              .filter((seat) => selected.includes(seat.seatId))
-              .map((seat) => `${seat.section} ${seat.row}-${seat.number}`)
-              .join(', ')
-          : '없음'}
-      </p>
-      {notice && <p role="alert">{notice}</p>}
-      <button
-        disabled={!ready || !selected.length || pending}
-        onClick={() => void submit()}
-      >
-        {pending ? '예매 중' : '예매하기'}
-      </button>
-    </section>
+            </ul>
+          ) : (
+            <p className="text-caption text-fg-muted">선택한 좌석이 없어요.</p>
+          )}
+          {byGrade.length > 0 && (
+            <ul className="grid gap-1 border-t border-line pt-2 text-caption text-fg-muted">
+              {byGrade.map(([grade, items]) => (
+                <li key={grade} className="flex justify-between gap-2">
+                  <span>
+                    {grade}석 {items.length}석
+                  </span>
+                  <span>
+                    {won(items.reduce((sum, seat) => sum + seat.price, 0))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {notice && <InlineError role="alert">{notice}</InlineError>}
+        <div className="flex items-center justify-between gap-3 lg:grid">
+          <p className="flex gap-2 text-body font-bold text-fg lg:justify-between">
+            <span>
+              {selected.length ? `${selected.length}석` : '선택 없음'}
+            </span>
+            <span>
+              <span className="sr-only">합계 </span>
+              {won(total)}
+            </span>
+          </p>
+          <Button
+            className="lg:w-full"
+            disabled={!ready || !selected.length || pending}
+            onClick={() => void submit()}
+          >
+            {pending ? '예매 중' : '예매하기'}
+          </Button>
+        </div>
+      </aside>
+    </div>
   );
 }
