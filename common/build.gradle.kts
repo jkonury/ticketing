@@ -1,5 +1,6 @@
 plugins {
     id("ticketing.library-conventions")
+    `java-test-fixtures`
 }
 
 // 앱 간 공용 클래스. 기능별 compileOnly 의존은 해당 기능을 쓰는 앱이 제공한다.
@@ -16,6 +17,8 @@ dependencies {
     compileOnly("org.jooq:jooq")
     compileOnly("io.micrometer:micrometer-core")
     compileOnly("org.slf4j:slf4j-api")
+
+    testFixturesApi("org.testcontainers:testcontainers-kafka")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.batch:spring-batch-infrastructure")

@@ -19,7 +19,7 @@ class KafkaRecoveryIntegrationTests {
     @Test
     fun `브로커 장애로 실패한 외부화는 복구 후 결제 앱 재기동에서 결과가 재발행된다`() {
         val namespace = SharedContainers.newNamespace()
-        KafkaContainer("apache/kafka:4.3.2").use { kafka ->
+        TestKafkaContainer().use { kafka ->
             kafka.start()
             verifyRecovery(namespace, kafka)
         }

@@ -32,7 +32,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
-    testImplementation("org.testcontainers:testcontainers-kafka")
+    testImplementation(testFixtures(project(":common")))
     testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation(libs.archunit.junit5)
