@@ -188,33 +188,76 @@ describe('예매 흐름', () => {
     ).toBeInTheDocument();
   });
   it.each(['2000-01-01', '2090-01-01'])(
-    '기기 시각이 %s여도 서버 기준 만료 경계에서 버튼을 비활성화한다',
+    '기기 시각이 %s여도 서버 기준 만료 경계에서 결제를 막고 안내한다',
     (deviceTime) => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date(deviceTime));
-      const receivedAt = performance.now();
+      const onReset = vi.fn();
       render(
         <Payment
           booking={{
             bookingId: 1,
             expiresAt: '2026-01-01T00:00:02Z',
             serverTime: '2026-01-01T00:00:00Z',
-            receivedAt,
+            receivedAt: performance.now(),
             totalAmount: 1,
             seats: [],
           }}
           onDone={vi.fn()}
-          onReset={vi.fn()}
+          onReset={onReset}
         />,
       );
-      expect(screen.getByText('남은 시간: 2초')).toBeInTheDocument();
+      expect(screen.getByText('00:02')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
       act(() => vi.advanceTimersByTime(2000));
-      expect(screen.getByText('선점이 만료되었습니다.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '결제하기' })).toBeDisabled();
+      expect(
+        screen.getByRole('dialog', { name: '선점 시간이 끝났어요' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '결제하기', hidden: true }),
+      ).toBeDisabled();
+      expect(onReset).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole('button', { name: '좌석 다시 선택하기' }),
+      );
+      expect(onReset).toHaveBeenCalledTimes(1);
       vi.useRealTimers();
     },
   );
+  it('남은 시간을 mm:ss로 보이고 60초 이하에서 경고를 한 번만 알린다', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    render(
+      <Payment
+        booking={{
+          bookingId: 1,
+          expiresAt: '2026-01-01T00:01:03Z',
+          serverTime: '2026-01-01T00:00:00Z',
+          receivedAt: performance.now(),
+          totalAmount: 1,
+          seats: [],
+        }}
+        onDone={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('01:03')).toBeInTheDocument();
+    const bar = screen.getByRole('progressbar');
+    expect(bar).toHaveAttribute('aria-valuemax', '63');
+    expect(bar).toHaveAttribute('aria-valuenow', '63');
+    expect(screen.queryByText(/1분 남았어요/)).toBeNull();
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getByText('01:00')).toBeInTheDocument();
+    expect(screen.getAllByText(/1분 남았어요/)).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(10000));
+    expect(screen.getByText('00:50')).toBeInTheDocument();
+    expect(screen.getAllByText(/1분 남았어요/)).toHaveLength(1);
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    );
+    vi.useRealTimers();
+  });
   it('좌석 최초 연결과 단절 후 새 스냅샷을 기다리며 제출을 막는다', () => {
     stream.state = 'connecting';
     const props = {
