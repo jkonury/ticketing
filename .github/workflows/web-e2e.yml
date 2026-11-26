@@ -55,10 +55,28 @@ jobs:
       - name: 시연 데이터
         run: ./scripts/dev/seed-demo.sh
       - name: 화면 캡처
+        id: capture
         working-directory: web
         env:
           CAPTURE_BASE_URL: http://localhost:13000
+          VISUAL: '1'
         run: pnpm capture
+      # 시각 비교가 실패하면 같은 스택에서 새 기준을 만들어 갱신 후보로 올린다(README 참고).
+      - name: 기준 이미지 후보 생성
+        if: ${{ failure() && steps.capture.outcome == 'failure' }}
+        working-directory: web
+        env:
+          CAPTURE_BASE_URL: http://localhost:13000
+          VISUAL: '1'
+        run: pnpm capture --update-snapshots
+      - name: 기준 이미지 후보 업로드
+        if: ${{ failure() && steps.capture.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-baseline
+          path: web/capture/__screenshots__/
+          if-no-files-found: warn
+          retention-days: 14
       - name: 캡처 업로드
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

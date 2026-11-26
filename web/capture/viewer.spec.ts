@@ -45,7 +45,7 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
     if (isMobile) {
       await page.getByRole('button', { name: '메뉴 열기' }).click();
       await page.getByRole('dialog').waitFor();
-      await capture(page, testInfo, '11-header-menu');
+      await capture(page, testInfo, '11-header-menu', { visual: {} });
       await page.keyboard.press('Escape');
     }
 
@@ -84,7 +84,16 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
     // 쿠폰 패널은 마운트 후 목록을 불러오고, 불러오기 전에도 "없습니다"를 보여 준다.
     // 시드 관람객은 미사용 쿠폰이 있으므로 선택 상자가 뜰 때까지 기다린다.
     await expect(page.getByRole('button', { name: '쿠폰 적용' })).toBeVisible();
-    await capture(page, testInfo, '13-payment');
+    // 시각 비교: 남은 시간은 시간 기반, 좌석·쿠폰·금액은 누적 데이터라 가린다.
+    await capture(page, testInfo, '13-payment', {
+      visual: {
+        mask: [
+          page.getByRole('region', { name: '남은 선점 시간' }),
+          page.getByRole('region', { name: '선택한 좌석' }),
+          page.getByTestId('payable-amount'),
+        ],
+      },
+    });
 
     await page.getByRole('button', { name: '결제하기' }).click();
     await expect(page.getByRole('heading', { name: '예매 완료' })).toBeVisible({

@@ -23,6 +23,9 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   reporter: 'list',
+  // 기준 이미지는 CI에서만 만들어 커밋한다(capture/README.md).
+  snapshotPathTemplate: '{testDir}/__screenshots__/{projectName}/{arg}{ext}',
+  expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide' } },
   use: {
     baseURL: webOrigin(),
     browserName: 'chromium',
