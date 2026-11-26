@@ -13,15 +13,11 @@ test('비로그인 화면', async ({ browser }, testInfo) => {
   const { page, errors, context } = await newWatchedPage(browser, testInfo);
   try {
     await gotoReady(page, '/');
-    // 시각 비교: 공연 데이터(포스터·제목·장소·일시)는 시드 시점에 따라 달라 가리고 레이아웃만 본다.
-    // 공연 개수도 실행마다 달라 페이지 길이가 변하므로 첫 화면만 비교한다.
+    // 시각 비교: 목록 카드는 공연 수·순서·제목 줄 수가 실행마다 달라 마스크 박스도 흔들리므로,
+    // 머리글(제목·설명) 영역만 비교한다. 카드 배치는 캡처 이미지로 눈으로 확인한다.
     await capture(page, testInfo, '01-home', {
       visual: {
-        fullPage: false,
-        mask: [
-          page.locator('[data-visual-mask]'),
-          page.locator('main li h2, main li p'),
-        ],
+        target: page.getByRole('heading', { level: 1 }).locator('xpath=../..'),
       },
     });
 
@@ -35,8 +31,14 @@ test('비로그인 화면', async ({ browser }, testInfo) => {
           ),
         ),
       );
-    let target: string | null = null;
-    for (const href of hrefs) {
+    // 시각 비교가 같은 화면을 보도록 시드 공연(회차 2개, 등급 4개)을 이름으로 고정한다. E2E가 만든
+    // 공연이 목록에 섞이면 먼저 만나는 공연이 실행마다 달라진다. 없을 때만 아래 탐색으로 대신한다.
+    let target: string | null = await page
+      .locator('a[href^="/performances/"]', { hasText: '라스트 발레 나이트' })
+      .first()
+      .getAttribute('href', { timeout: 2_000 })
+      .catch(() => null);
+    for (const href of target ? [] : hrefs) {
       if (!href) continue;
       await gotoReady(page, href);
       const n = await page.locator('a[href^="/booking/"]').count();

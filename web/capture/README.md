@@ -43,6 +43,7 @@ PR마다 `.github/workflows/web-e2e.yml`이 웹 E2E 뒤에 시연 데이터를 �
 
 ### 대상과 제외
 
-- 비교: 03-login, 04-signup, 05-login-error, 11-header-menu(모바일), 01-home, 02-performance, 13-payment.
-- 01-home·02-performance·13-payment는 실행일 기준 일시, 생성형 포스터, 누적 좌석·쿠폰, 결제 카운트다운을 `mask`로 가리고 레이아웃만 본다. 포스터는 `data-visual-mask` 속성으로 찾는다.
+- 비교: 03-login, 04-signup, 05-login-error, 11-header-menu(모바일, 시트 요소만), 01-home(머리글 영역만), 02-performance, 13-payment.
+- 02-performance·13-payment는 실행일 기준 일시, 생성형 포스터, 누적 좌석·쿠폰, 결제 카운트다운을 `mask`로 가리고 레이아웃만 본다. 포스터는 `data-visual-mask` 속성으로 찾는다. 02-performance는 시드 공연(`라스트 발레 나이트`)으로 고정한다(E2E가 만든 공연이 섞여도 같은 화면을 보도록).
+- 01-home은 공연 수·순서·제목 줄 수가 실행마다 달라 카드 영역을 비교하지 않고 머리글(제목·설명)만 `target`으로 비교한다. 11-header-menu도 시트 뒤 배경이 목록이라 시트 요소만 비교한다. 화면 길이가 가변인 화면은 `fullPage: false`나 `target`으로 좁힌다.
 - 제외: 마이페이지·쿠폰·예매 완료, 주최자·관리자, 좌석 상태(12-seats), 대기열. 예매·좌석이 반복할수록 쌓이거나 시간·계정에 따라 달라서다.
