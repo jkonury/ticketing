@@ -1,19 +1,36 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { RouteLoading } from '@/components/route-loading';
 import { Page, PageHeader } from '@/components/layout/page';
 import { Button, buttonClassName } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';
+import {
+  tableClass,
+  thClass,
+  tdClass,
+  secondaryCol,
+} from '@/components/ui/table-styles';
 import { formatSeoul } from '@/lib/datetime';
 import { listAdminMembers } from '@/server/api/admin';
 import { withSessionRedirect } from '@/server/auth/require-user';
 import { RoleForm } from '@/features/admin/role-form';
 
-export default async function Route({
+type SearchParams = Promise<{ email?: string; cursor?: string }>;
+
+export default function Route({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; cursor?: string }>;
+  searchParams: SearchParams;
 }) {
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <Members searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function Members({ searchParams }: { searchParams: SearchParams }) {
   const { email, cursor } = await searchParams;
   const cursorNumber = cursor ? Number(cursor) : undefined;
   const page = await withSessionRedirect(() =>
@@ -37,20 +54,22 @@ export default async function Route({
       <table className={tableClass}>
         <thead>
           <tr>
-            <th className={thClass}>ID</th>
+            <th className={`${thClass} ${secondaryCol}`}>ID</th>
             <th className={thClass}>이메일</th>
-            <th className={thClass}>이름</th>
-            <th className={thClass}>가입일</th>
+            <th className={`${thClass} ${secondaryCol}`}>이름</th>
+            <th className={`${thClass} ${secondaryCol}`}>가입일</th>
             <th className={thClass}>역할</th>
           </tr>
         </thead>
         <tbody>
           {page.items.map((member) => (
             <tr key={member.id}>
-              <td className={tdClass}>{member.id}</td>
-              <td className={tdClass}>{member.email}</td>
-              <td className={tdClass}>{member.name}</td>
-              <td className={tdClass}>{formatSeoul(member.createdAt)}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>{member.id}</td>
+              <td className={`${tdClass} break-all`}>{member.email}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>{member.name}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>
+                {formatSeoul(member.createdAt)}
+              </td>
               <td className={tdClass}>
                 <RoleForm memberId={member.id} role={member.role} />
               </td>

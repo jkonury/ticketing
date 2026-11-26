@@ -17,8 +17,7 @@ export const accounts = {
 const outDir = path.resolve(__dirname, '../../build/ui-capture');
 
 // 알려진 무해 메시지는 여기에 정규식으로 추가한다.
-// - admin 화면의 Cache Components 'uncached data' 개발 모드 경고: 화면 개편(U 트랙)에서 다룬다.
-const ignoredConsole: RegExp[] = [/uncached data during prerendering/];
+const ignoredConsole: RegExp[] = [];
 
 export type Watched = { page: Page; errors: string[] };
 
