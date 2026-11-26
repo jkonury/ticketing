@@ -1,0 +1,80 @@
+name: Web E2E
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-e2e:
+    name: web E2E + 화면 캡처
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      # E2E 스크립트의 기동 확인이 rg를 쓴다.
+      - name: 도구 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+      # CI 전용 .env. 비밀 값은 실행마다 새로 만들고 저장하지 않는다.
+      - name: .env 준비
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e "s|^TICKETING_POSTGRES_PASSWORD=.*|TICKETING_POSTGRES_PASSWORD=$(openssl rand -hex 16)|" \
+            -e "s|^TICKETING_PAYMENT_POSTGRES_PASSWORD=.*|TICKETING_PAYMENT_POSTGRES_PASSWORD=$(openssl rand -hex 16)|" \
+            -e "s|^TICKETING_JWT_SECRET=.*|TICKETING_JWT_SECRET=$(openssl rand -hex 32)|" \
+            -e "s|^FAKE_PG_WEBHOOK_SECRET=.*|FAKE_PG_WEBHOOK_SECRET=$(openssl rand -hex 32)|" \
+            .env
+      - name: web 의존성·브라우저 설치
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      # --keep: 캡처 단계가 같은 스택을 쓰도록 프로세스를 남긴다.
+      - name: 웹 E2E
+        run: ./scripts/e2e/run.sh --web --keep
+      - name: 시연 데이터
+        run: ./scripts/dev/seed-demo.sh
+      - name: 화면 캡처
+        working-directory: web
+        env:
+          CAPTURE_BASE_URL: http://localhost:13000
+        run: pnpm capture
+      - name: 캡처 업로드
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-capture
+          path: build/ui-capture/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: 로그·리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-e2e-logs
+          path: |
+            build/e2e/logs/
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

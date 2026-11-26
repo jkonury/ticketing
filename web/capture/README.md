@@ -23,3 +23,7 @@ CAPTURE_QUEUE=1 pnpm capture    # 대기 순번(20) 포함
 ## 출력
 
 저장소 루트의 `build/ui-capture/<project>/<NN-name>.png`(git 제외). 콘솔 오류·pageerror가 한 건이라도 있으면 실패한다. 무해한 메시지는 `support.ts`의 `ignoredConsole`에 정규식으로 추가한다.
+
+## CI
+
+PR마다 `.github/workflows/web-e2e.yml`이 웹 E2E 뒤에 시연 데이터를 넣고 캡처를 실행한다. 결과는 실행 페이지의 artifact `ui-capture`에서 받는다.
