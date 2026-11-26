@@ -18,6 +18,8 @@ export async function getPerformanceDetail(id: number) {
     id: performance.id,
     title: performance.title,
     description: performance.description,
+    genre: performance.genre,
+    posterUrl: performance.posterUrl,
     venue: { id: performance.venueId, name: performance.venueName },
     prices: performance.prices.map((item) => ({
       grade: item.grade,

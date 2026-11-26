@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0049](../adr/0049-ui-redesign-direction.md), [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 - 작성일: 2026-11-26
-- 상태: U0·U1·U2·U3·U5 완료. 남은 것은 U4(포스터·장르 백엔드)
+- 상태: U0~U5 완료
 
 web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)(M 트랙), 워크플로 로드맵 [workflow/roadmap.md](../workflow/roadmap.md)(W 트랙)와 병행한다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 시각 규칙의 기준은 [UI 가이드](../ui-guide.md)다.
 
@@ -63,11 +63,11 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 
 ## U4. 포스터·장르 백엔드 확장
 
-- [ ] `catalog.performance`에 `genre`(고정 enum, CHECK 제약) 추가, API·BFF 경계 스키마 반영
-- [ ] MinIO Compose 추가, core 업로드 URL 발급·완료 확인 API([ADR 0050](../adr/0050-poster-storage-minio-presigned.md))
-- [ ] 주최자 등록 폼의 포스터 업로드, 목록·상세의 실제 포스터 표시와 장르 탭
-- [ ] 시드 스크립트에 장르·포스터 추가
-- [ ] `docs/architecture.md`, `AGENTS.md` 5절 갱신
+- [x] `catalog.performance`에 `genre`(고정 enum, CHECK 제약) 추가, API·BFF 경계 스키마 반영
+- [x] MinIO Compose 추가, core 업로드 URL 발급·완료 확인 API([ADR 0050](../adr/0050-poster-storage-minio-presigned.md))
+- [x] 주최자 등록 폼의 포스터 업로드, 목록·상세의 실제 포스터 표시와 장르 탭
+- [x] 시드 스크립트에 장르·포스터 추가
+- [x] `docs/architecture.md`, `AGENTS.md` 5절 갱신
 
 **완료 기준**: 주최자가 올린 포스터와 장르가 목록·상세에 표시되고, E2E가 통과한다.
 

@@ -1,9 +1,17 @@
 import 'server-only';
 import { z } from 'zod';
+import {
+  performanceGenre,
+  type PerformanceGenre,
+} from '@/lib/performance-genre';
 import { gateway } from './gateway-client';
 
 const price = z.object({ grade: z.string(), price: z.number() });
 const schedule = z.object({ id: z.number(), startsAt: z.string() });
+const posterFields = {
+  genre: performanceGenre.nullish(),
+  posterUrl: z.url({ protocol: /^https?$/ }).nullish(),
+};
 export const performanceSchema = z.object({
   id: z.number(),
   title: z.string(),
@@ -12,6 +20,7 @@ export const performanceSchema = z.object({
   venueName: z.string(),
   prices: z.array(price),
   schedules: z.array(schedule),
+  ...posterFields,
 });
 const pageSchema = z.object({
   items: z.array(
@@ -20,6 +29,7 @@ const pageSchema = z.object({
       title: z.string(),
       venueName: z.string(),
       firstStartsAt: z.string().nullish(),
+      ...posterFields,
     }),
   ),
   nextCursor: z.number().nullish(),
@@ -38,10 +48,15 @@ const registeredSchema = z.object({
   id: z.number(),
   seatCount: z.number().optional(),
 });
-export function getPerformances(cursor?: number, size?: number) {
+export function getPerformances(
+  cursor?: number,
+  size?: number,
+  genre?: PerformanceGenre,
+) {
   const query = new URLSearchParams();
   if (cursor !== undefined) query.set('cursor', String(cursor));
   if (size !== undefined) query.set('size', String(size));
+  if (genre !== undefined) query.set('genre', genre);
   return gateway.call({
     path: `/api/v1/performances?${query}`,
     schema: pageSchema,
@@ -102,5 +117,29 @@ export function createSchedule(id: number, body: unknown) {
     body,
     schema: registeredSchema,
     auth: 'required',
+  });
+}
+
+export function issuePosterUpload(id: number, contentType: string) {
+  return gateway.call({
+    path: `/api/v1/performances/${id}/poster-uploads`,
+    method: 'POST',
+    body: { contentType },
+    schema: z.object({
+      uploadId: z.uuid(),
+      url: z.url({ protocol: /^https?$/ }),
+      headers: z.record(z.string(), z.string()),
+    }),
+    auth: 'required',
+  });
+}
+
+export function completePosterUpload(id: number, uploadId: string) {
+  return gateway.call({
+    path: `/api/v1/performances/${id}/poster-uploads/${uploadId}/complete`,
+    method: 'POST',
+    schema: z.object({ posterUrl: z.url({ protocol: /^https?$/ }) }),
+    auth: 'required',
+    timeoutMs: 10000,
   });
 }

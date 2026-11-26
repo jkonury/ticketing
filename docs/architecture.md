@@ -62,6 +62,7 @@
 | Gradle | 9.8.2 | wrapper |
 | PostgreSQL / Redis | 18.3-alpine / 8.6.2-alpine | Compose, Testcontainers 공통 |
 | Kafka | apache/kafka 4.3.2 | Compose 단일 KRaft 브로커 |
+| S3 호환 객체 저장소 | MinIO(개발·CI) | 공연 포스터, S3 SDK로 접근 |
 | Next.js | 16.4.6 | App Router |
 | Node.js | 24 | web 런타임 |
 
@@ -81,10 +82,12 @@
 ```
 브라우저
   ├─ 일반 요청 ──▶ Next.js BFF ──▶ Gateway ──▶ 코어 (Modulith, MVC+VT)
-  └─ SSE(단기 티켓) ───────────▶ Gateway ──▶ 실시간 앱 (WebFlux+Coroutines)
+  ├─ SSE(단기 티켓) ───────────▶ Gateway ──▶ 실시간 앱 (WebFlux+Coroutines)
+  └─ 포스터 PUT(presigned URL)·GET(공개) ──▶ S3 호환 객체 저장소
 
 코어 ──▶ PostgreSQL (모듈별 스키마)
 코어 ──▶ Redis (좌석 선점, 좌석 스냅샷, Streams 발행)
+코어 ──▶ S3 호환 객체 저장소 (포스터 검증·공개)
 코어 ──▶ Kafka ──▶ payment 앱 (PaymentRequested·RefundRequested)
 payment 앱 ──▶ Kafka ──▶ 코어 (PaymentSucceeded·PaymentFailed·PaymentRefunded)
 core-batch, payment-batch ──▶ Kafka (이벤트 발행, 리스너 미기동)
@@ -118,7 +121,7 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 | 모듈 | 책임 | 구조 |
 |---|---|---|
 | `member` | 회원 가입, 로그인, JWT 발급, 역할 | 계층형 |
-| `catalog` | 공연, 회차, 공연장, 좌석 배치 | 계층형 |
+| `catalog` | 공연·장르·포스터, 회차, 공연장, 좌석 배치 | 계층형 |
 | `booking` | 좌석 선점, 예매 생성·확정·만료·취소 | 헥사고날 |
 | `settlement` | 정산 (Batch). 정가 기준 집계와 플랫폼 할인 부담 기록 | 헥사고날 |
 | `coupon` | 쿠폰 정의·발급·예약·사용 확정, 선착순 발급 | 헥사고날 |
@@ -237,7 +240,7 @@ Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJ
 
 ## 11. 개발 환경과 테스트
 
-- 로컬 실행: Docker Compose 기본 서비스 PostgreSQL·Redis·Kafka. 가짜 PG는 `scripts/dev/run.sh --fake-pg`, payment 앱은 `scripts/dev/run.sh --payment`로 별도 실행한다.
+- 로컬 실행은 Docker Compose의 PostgreSQL·Redis·Kafka·MinIO를 쓴다. MinIO는 `127.0.0.1:19010`에 바인딩하고, `minio-init`이 포스터 버킷의 공개 조회 정책을 설정한다. nginx 도메인으로 접속할 때는 `.env.example`에 있는 포스터 주소·CORS 설정을 적용하고 nginx 템플릿을 다시 설치한다. 가짜 PG는 `scripts/dev/run.sh --fake-pg`, payment 앱은 `scripts/dev/run.sh --payment`로 별도 실행한다.
 - 통합 테스트: Testcontainers (PostgreSQL·Kafka 등)
 - 모듈 테스트: Modulith 모듈 단위 테스트(`@ApplicationModuleTest`)
 - 동시성 테스트: 같은 좌석에 대한 동시 선점·확정

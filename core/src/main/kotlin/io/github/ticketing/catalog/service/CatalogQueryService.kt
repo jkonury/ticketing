@@ -1,6 +1,7 @@
 package io.github.ticketing.catalog.service
 
 import io.github.ticketing.catalog.config.CatalogCaches
+import io.github.ticketing.catalog.domain.PerformanceGenre
 import io.github.ticketing.catalog.query.CatalogQueryRepository
 import io.github.ticketing.catalog.query.PerformanceDetail
 import io.github.ticketing.catalog.query.PerformancePage
@@ -17,7 +18,8 @@ class CatalogQueryService(private val queries: CatalogQueryRepository) {
     fun schedule(id: Long): ScheduleDetail = queries.findSchedule(id) ?: throw ScheduleNotFoundException()
 
     @Transactional(readOnly = true)
-    fun performances(cursor: Long?, size: Int): PerformancePage = queries.findPerformances(cursor, size.coerceIn(1, MAX_PAGE_SIZE))
+    fun performances(cursor: Long?, size: Int, genre: PerformanceGenre? = null): PerformancePage =
+        queries.findPerformances(cursor, size.coerceIn(1, MAX_PAGE_SIZE), genre)
 
     @Transactional(readOnly = true)
     @Cacheable(CatalogCaches.PERFORMANCE, key = "#id")

@@ -45,6 +45,18 @@ server {
         proxy_read_timeout 90s;
     }
 
+    location ~ ^/ticketing-posters/(posters|uploads)/ {
+        limit_except GET PUT OPTIONS {
+            deny all;
+        }
+        client_max_body_size 5m;
+        proxy_set_header Host $http_host;
+        proxy_set_header Cookie "";
+        add_header X-Content-Type-Options nosniff always;
+        proxy_request_buffering off;
+        proxy_pass http://127.0.0.1:19010;
+    }
+
     location / {
         proxy_pass http://ticketing_dev_web;
     }
