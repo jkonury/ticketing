@@ -11,6 +11,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "capture": "playwright test -c playwright.capture.config.ts",
+    "api:generate": "openapi-ts",
+    "api:check": "node scripts/api-contracts.mjs check",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -27,6 +29,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.1",
+    "@hey-api/openapi-ts": "0.99.0",
     "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "4.3.3",
     "@testing-library/jest-dom": "^7.0.1",

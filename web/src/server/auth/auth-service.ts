@@ -1,11 +1,16 @@
 import 'server-only';
 
-import { z } from 'zod';
 import {
   gateway,
   getMemberForLogin,
   memberSchema,
 } from '@/server/api/gateway-client';
+import {
+  zLoginRequest,
+  zRefreshRequest,
+  zSignUpRequest,
+  zTokenResponse,
+} from '@/server/api/generated/core/zod.gen';
 import { sessions } from './redis';
 import {
   clearSessionCookie,
@@ -13,12 +18,6 @@ import {
   writeSessionCookie,
 } from './session-cookie';
 
-const tokensSchema = z.object({
-  accessToken: z.string(),
-  accessExpiresIn: z.number(),
-  refreshToken: z.string(),
-  refreshExpiresIn: z.number(),
-});
 type SignupInput = {
   email: string;
   password: string;
@@ -30,6 +29,7 @@ export async function signup(input: SignupInput) {
     path: '/api/v1/members',
     method: 'POST',
     body: input,
+    bodySchema: zSignUpRequest,
     schema: memberSchema,
     auth: 'none',
   });
@@ -39,7 +39,8 @@ export async function login(input: { email: string; password: string }) {
     path: '/api/v1/auth/tokens',
     method: 'POST',
     body: input,
-    schema: tokensSchema,
+    bodySchema: zLoginRequest,
+    schema: zTokenResponse,
     auth: 'none',
   });
   const member = await getMemberForLogin(tokens.accessToken);
@@ -87,6 +88,7 @@ export const logout = createLogout({
       path: '/api/v1/auth/tokens/revoke',
       method: 'POST',
       body: { refreshToken: token },
+      bodySchema: zRefreshRequest,
       schema: null,
       auth: 'none',
     });

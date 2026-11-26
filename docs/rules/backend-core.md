@@ -73,6 +73,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 - **불변식 실패의 종류.** 생성 시 인자 불변식은 `require`, 객체 상태가 허용하지 않는 호출은 `check`로 막는다. 호출자(사용자)에게 의미 있는 업무 오류는 `DomainException`(안정적 `code`)으로 던진다. `IllegalStateException`·`IllegalArgumentException`이 API 경계까지 올라가 500이 되지 않게 한다.
 
 공개 API 경로·헤더·응답의 상세 계약은 [API 규약](../architecture/api-conventions.md)을 따른다.
+컨트롤러·DTO의 HTTP 계약을 바꾸면 [스펙 갱신 절차](backend-testing.md#http-api-계약)로 앱의 OpenAPI 스펙과 BFF 경계 코드를 재생성한다.
 
 ## 보안
 

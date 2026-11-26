@@ -1,40 +1,19 @@
 import 'server-only';
-import { z } from 'zod';
 import { gateway } from './gateway-client';
+import {
+  zAuditLogPage,
+  zChangeRoleRequest,
+  zMemberPage,
+  zMemberResponse,
+} from './generated/core/zod.gen';
+import type { ChangeRoleRequest } from './generated/core/types.gen';
 
-export const roleSchema = z.enum(['USER', 'ORGANIZER', 'ADMIN']);
-export const adminMemberPageSchema = z.object({
-  items: z.array(
-    z.object({
-      id: z.number(),
-      email: z.string(),
-      name: z.string(),
-      role: roleSchema,
-      createdAt: z.string(),
-    }),
-  ),
-  nextCursor: z.number().nullable(),
-});
-export const roleChangeSchema = z.object({
-  id: z.number(),
-  email: z.string(),
-  name: z.string(),
-  role: roleSchema,
-});
-export const auditLogPageSchema = z.object({
-  items: z.array(
-    z.object({
-      id: z.number(),
-      actorId: z.number().nullable(),
-      action: z.string(),
-      targetType: z.string(),
-      targetId: z.string(),
-      detail: z.record(z.string(), z.unknown()).nullable().optional(),
-      occurredAt: z.string(),
-    }),
-  ),
-  nextCursor: z.number().nullable(),
-});
+export const roleSchema = zChangeRoleRequest.shape.role;
+export {
+  zAuditLogPage as auditLogPageSchema,
+  zMemberPage as adminMemberPageSchema,
+  zMemberResponse as roleChangeSchema,
+};
 
 function toQuery(params: Record<string, string | number | undefined>) {
   const query = new URLSearchParams();
@@ -51,17 +30,18 @@ export function listAdminMembers(params: {
 }) {
   return gateway.call({
     path: `/api/v1/admin/members${toQuery(params)}`,
-    schema: adminMemberPageSchema,
+    schema: zMemberPage,
     auth: 'required',
   });
 }
 
-export function changeMemberRole(id: number, role: z.infer<typeof roleSchema>) {
+export function changeMemberRole(id: number, role: ChangeRoleRequest['role']) {
   return gateway.call({
     method: 'PUT',
     path: `/api/v1/admin/members/${id}/role`,
     body: { role },
-    schema: roleChangeSchema,
+    bodySchema: zChangeRoleRequest,
+    schema: zMemberResponse,
     auth: 'required',
   });
 }
@@ -76,7 +56,7 @@ export function listAuditLogs(params: {
 }) {
   return gateway.call({
     path: `/api/v1/admin/audit-logs${toQuery(params)}`,
-    schema: auditLogPageSchema,
+    schema: zAuditLogPage,
     auth: 'required',
   });
 }

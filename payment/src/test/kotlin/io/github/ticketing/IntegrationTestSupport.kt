@@ -19,6 +19,7 @@ internal const val TEST_WEBHOOK_SECRET = "test-webhook-secret"
         "ticketing.jwt.secret=$TEST_JWT_SECRET",
         "ticketing.payment.fake-pg.webhook-secret=$TEST_WEBHOOK_SECRET",
         "ticketing.startup-warmup.enabled=false",
+        "springdoc.api-docs.enabled=true",
     ],
 )
 @AutoConfigureMockMvc

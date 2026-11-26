@@ -100,13 +100,13 @@ async function CouponDetail({ params, searchParams }: Props) {
           description: coupon.description ?? '',
           discountType: coupon.discountType,
           discountValue: coupon.discountValue,
-          maxDiscount: coupon.maxDiscount,
+          maxDiscount: coupon.maxDiscount ?? null,
           minOrderAmount: coupon.minOrderAmount,
-          performanceId: coupon.performanceId,
+          performanceId: coupon.performanceId ?? null,
           validFrom: instantToSeoulLocal(coupon.validFrom),
           validUntil: instantToSeoulLocal(coupon.validUntil),
           issueMode: coupon.issueMode,
-          totalQuantity: coupon.totalQuantity,
+          totalQuantity: coupon.totalQuantity ?? null,
         }}
       />
       {coupon.status === 'ACTIVE' && <StopForm id={coupon.id} />}

@@ -12,7 +12,7 @@ import { couponError } from '@/features/booking/error-messages';
 export type ClaimableCoupon = {
   id: number;
   name: string;
-  description: string | null;
+  description?: string | null;
   discountType: 'FIXED' | 'RATE';
   discountValue: number;
   minOrderAmount: number;

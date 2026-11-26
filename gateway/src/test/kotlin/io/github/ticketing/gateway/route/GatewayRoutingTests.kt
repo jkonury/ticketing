@@ -104,6 +104,15 @@ class GatewayRoutingTests(
     }
 
     @Test
+    fun `OpenAPI 문서 요청은 Gateway에서 어떤 앱에도 전달하지 않는다`() {
+        for (path in listOf("/v3/api-docs", "/v3/api-docs.yaml")) {
+            client.get().uri(path).headers { it.setBearerAuth(token()) }.exchange().expectStatus().isNotFound
+        }
+
+        assertNothingForwarded()
+    }
+
+    @Test
     fun `정규화하면 결제 웹훅인 경로는 어디에도 전달하지 않고 404로 막는다`() {
         val webhookPaths = listOf(
             "/api/v1/payments/webhooks/fake-pg",

@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.application.port.provided
 
+import io.github.ticketing.booking.domain.CouponState
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -46,4 +47,4 @@ data class BookingDetailView(
     val seats: List<BookingSeatResult>,
 )
 
-data class BookingCouponView(val issuedCouponId: Long, val state: String, val discountAmount: BigDecimal?, val rejectReason: String?)
+data class BookingCouponView(val issuedCouponId: Long, val state: CouponState, val discountAmount: BigDecimal?, val rejectReason: String?)

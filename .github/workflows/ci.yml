@@ -68,6 +68,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: OpenAPI 생성물 일치 검사
+        run: |
+          pnpm run api:generate
+          git diff --exit-code -- src/server/api/generated
+          test -z "$(git ls-files --others --exclude-standard -- src/server/api/generated)"
       - run: pnpm run lint
       - run: pnpm run typecheck
       - run: pnpm run test

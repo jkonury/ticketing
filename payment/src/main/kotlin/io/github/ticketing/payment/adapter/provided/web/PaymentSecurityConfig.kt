@@ -37,6 +37,7 @@ internal class PaymentSecurityConfig {
             .authorizeHttpRequests {
                 it.requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/fake-pg").permitAll()
                     .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml").permitAll()
                     .anyRequest().authenticated()
             }
             .oauth2ResourceServer {

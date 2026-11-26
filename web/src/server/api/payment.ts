@@ -1,19 +1,10 @@
 import 'server-only';
-import { z } from 'zod';
 import { gateway } from './gateway-client';
-const schema = z.array(
-  z.object({
-    bookingId: z.number(),
-    status: z.string(),
-    failureReason: z.string().nullish(),
-    approvedAt: z.string().nullish(),
-    refundedAt: z.string().nullish(),
-  }),
-);
+import { zMineResponse } from './generated/payment/zod.gen';
 export function getPayments(ids: number[]) {
   return gateway.call({
     path: `/api/v1/payments/me?bookingIds=${ids.join(',')}`,
-    schema,
+    schema: zMineResponse,
     auth: 'required',
     timeoutMs: 2000,
   });

@@ -1,56 +1,29 @@
 import 'server-only';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { gateway } from './gateway-client';
+import {
+  zAdminCouponPageResponse,
+  zAdminCouponResponse,
+  zCouponDefinitionView,
+  zCreateCouponRequest,
+  zCursorPageIssuedCouponView,
+  zGrantCouponRequest,
+  zGrantResult,
+  zIssuedCouponView,
+  zUpdateCouponRequest,
+} from './generated/core/zod.gen';
 
-export const couponDefinitionSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  description: z.string().nullable(),
-  discountType: z.enum(['FIXED', 'RATE']),
-  discountValue: z.number(),
-  maxDiscount: z.number().nullable(),
-  minOrderAmount: z.number(),
-  performanceId: z.number().nullable(),
-  validFrom: z.string(),
-  validUntil: z.string(),
-  issueMode: z.enum(['UNLIMITED', 'LIMITED', 'DIRECT']),
-  totalQuantity: z.number().nullable(),
-  status: z.enum(['ACTIVE', 'STOPPED']),
-  issueStartedAt: z.string().nullable(),
-});
-export const couponStatsSchema = z.object({
-  issued: z.number(),
-  reserved: z.number(),
-  used: z.number(),
-  revoked: z.number(),
-});
-export const couponWithStatsSchema = couponDefinitionSchema.extend({
-  stats: couponStatsSchema,
-});
-export const couponPageSchema = z.object({
-  items: z.array(couponWithStatsSchema),
-  nextCursor: z.number().nullable(),
-});
-export const issuedCouponSchema = z.object({
-  id: z.number(),
-  definitionId: z.number(),
-  memberId: z.number(),
-  status: z.enum(['ISSUED', 'RESERVED', 'USED', 'REVOKED', 'EXPIRED']),
-  orderId: z.number().nullable(),
-  discountAmount: z.number().nullable(),
-  issuedAt: z.string(),
-  usedAt: z.string().nullable(),
-});
-export const issuedCouponPageSchema = z.object({
-  items: z.array(issuedCouponSchema),
-  nextCursor: z.number().nullable(),
-});
-export const grantResultSchema = z.object({
-  granted: z.array(z.number()),
-  alreadyClaimed: z.array(z.number()),
-});
+export {
+  zAdminCouponPageResponse as couponPageSchema,
+  zAdminCouponResponse as couponWithStatsSchema,
+  zCouponDefinitionView as couponDefinitionSchema,
+  zCouponStats as couponStatsSchema,
+  zCursorPageIssuedCouponView as issuedCouponPageSchema,
+  zGrantResult as grantResultSchema,
+  zIssuedCouponView as issuedCouponSchema,
+} from './generated/core/zod.gen';
 
-export type CouponWithStats = z.infer<typeof couponWithStatsSchema>;
+export type CouponWithStats = z.infer<typeof zAdminCouponResponse>;
 export type CouponBody = Record<string, string | number | null | undefined>;
 
 function toQuery(params: Record<string, string | number | undefined>) {
@@ -64,14 +37,14 @@ function toQuery(params: Record<string, string | number | undefined>) {
 export function listAdminCoupons(params: { cursor?: number; size?: number }) {
   return gateway.call({
     path: `/api/v1/admin/coupons${toQuery(params)}`,
-    schema: couponPageSchema,
+    schema: zAdminCouponPageResponse,
     auth: 'required',
   });
 }
 export function getAdminCoupon(id: number) {
   return gateway.call({
     path: `/api/v1/admin/coupons/${id}`,
-    schema: couponWithStatsSchema,
+    schema: zAdminCouponResponse,
     auth: 'required',
   });
 }
@@ -80,7 +53,8 @@ export function createCoupon(body: CouponBody) {
     method: 'POST',
     path: '/api/v1/admin/coupons',
     body,
-    schema: couponDefinitionSchema,
+    bodySchema: zCreateCouponRequest,
+    schema: zCouponDefinitionView,
     auth: 'required',
   });
 }
@@ -89,7 +63,8 @@ export function updateCoupon(id: number, body: CouponBody) {
     method: 'PATCH',
     path: `/api/v1/admin/coupons/${id}`,
     body,
-    schema: couponDefinitionSchema,
+    bodySchema: zUpdateCouponRequest,
+    schema: zCouponDefinitionView,
     auth: 'required',
   });
 }
@@ -97,7 +72,7 @@ export function stopCoupon(id: number) {
   return gateway.call({
     method: 'POST',
     path: `/api/v1/admin/coupons/${id}/stop`,
-    schema: couponDefinitionSchema,
+    schema: zCouponDefinitionView,
     auth: 'required',
   });
 }
@@ -107,7 +82,7 @@ export function listIssuedCoupons(
 ) {
   return gateway.call({
     path: `/api/v1/admin/coupons/${id}/issued${toQuery(params)}`,
-    schema: issuedCouponPageSchema,
+    schema: zCursorPageIssuedCouponView,
     auth: 'required',
   });
 }
@@ -116,7 +91,8 @@ export function grantCoupons(id: number, memberIds: number[]) {
     method: 'POST',
     path: `/api/v1/admin/coupons/${id}/grants`,
     body: { memberIds },
-    schema: grantResultSchema,
+    bodySchema: zGrantCouponRequest,
+    schema: zGrantResult,
     auth: 'required',
   });
 }
@@ -124,7 +100,7 @@ export function revokeIssuedCoupon(issuedCouponId: number) {
   return gateway.call({
     method: 'POST',
     path: `/api/v1/admin/issued-coupons/${issuedCouponId}/revoke`,
-    schema: issuedCouponSchema,
+    schema: zIssuedCouponView,
     auth: 'required',
   });
 }

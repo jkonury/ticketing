@@ -70,6 +70,12 @@ core 테스트에서 결제 결과는 `KafkaPaymentStub`(`core/src/test/.../supp
 
 - `contract`의 `ContractEventSerializationTests`와 `core`의 `ContractEventPublicationSerializationTests`에서 JSON 골든 파일을 공유한다. 계약 이벤트 변경 시 기본 직렬화와 실제 Modulith `EventSerializer`의 호환성을 모두 검증한다. core는 결제 요청 2종의 외부화(`PaymentEventExternalizationTests`)와 결과 3종의 수신(Kafka 메시지 변환기)도 같은 골든으로 확인한다. [ADR 0042](../adr/0042-contract-module-keeps-packages-and-json-compat-rules.md)
 
+## HTTP API 계약
+
+- core·payment·realtime의 `OpenApiContractTests`는 기존 통합 테스트 컨텍스트에서 `/v3/api-docs`를 호출해 `docs/api/openapi/`의 앱별 JSON과 비교한다.
+- 계약을 변경했으면 `UPDATE_OPENAPI=1 ./scripts/agent/test/run-tests.sh :core:test :payment:test :realtime:test`로 스펙을 갱신한다. 이후 `pnpm --dir web run api:generate`로 BFF 코드를 생성한다.
+- `./scripts/agent/test/verify-changed.sh`에서 백엔드 스펙과 web 생성물을 검증한다. web 생성물만 검사하려면 `pnpm --dir web run api:check`를 실행한다. [ADR 0047](../adr/0047-openapi-codegen-for-bff-boundary.md)
+
 ## E2E·부하·CI 실행
 
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.

@@ -6,6 +6,7 @@ plugins {
 val jooqGenerator = sourceSets.create("jooqGenerator")
 
 dependencies {
+    implementation(libs.springdoc.webmvc.api)
     implementation(project(":common"))
     implementation(project(":contract"))
     implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
@@ -95,6 +96,11 @@ tasks.matching { it.name.startsWith("runKtlint") || it.name.startsWith("ktlint")
 
 // 문서 생성 테스트는 docs/를 덮어쓰므로 기본 test에서 빼고, 모듈 의존을 바꿨을 때만 modulithDocs로 실행한다.
 tasks.test {
+    val updateOpenApi = providers.environmentVariable("UPDATE_OPENAPI").map { it == "1" }.orElse(false)
+    inputs.property("updateOpenApi", updateOpenApi)
+    inputs.files(rootProject.file("docs/api/openapi/core.json"))
+    outputs.upToDateWhen { !updateOpenApi.get() }
+    outputs.doNotCacheIf("OpenAPI 스펙을 갱신할 때") { updateOpenApi.get() }
     useJUnitPlatform {
         excludeTags("docs")
     }

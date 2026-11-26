@@ -10,6 +10,8 @@ import io.github.ticketing.booking.application.port.provided.CancelBookingUseCas
 import io.github.ticketing.booking.application.port.provided.CreateBookingCommand
 import io.github.ticketing.booking.application.port.provided.CreateBookingUseCase
 import io.github.ticketing.booking.application.port.provided.RequestPaymentUseCase
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Positive
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -40,6 +43,10 @@ class BookingController(
     private val bookingCoupons: BookingCouponUseCase,
 ) {
     @PostMapping
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "기존 예매 재반환", useReturnTypeSchema = true),
+        ApiResponse(responseCode = "201", description = "예매 생성", useReturnTypeSchema = true),
+    )
     fun create(
         authentication: Authentication,
         @RequestHeader("Idempotency-Key") @Size(min = 1, max = 100) idempotencyKey: String,
@@ -81,15 +88,16 @@ class BookingController(
         BookingResponse.from(cancelBooking.cancel(authentication.name.toLong(), id))
 
     @PostMapping("/{id}/payments")
+    @ResponseStatus(HttpStatus.ACCEPTED)
     @Suppress("UnusedParameter")
     fun pay(
         authentication: Authentication,
         @PathVariable id: Long,
         @RequestHeader("Idempotency-Key") @Size(min = 1, max = 100) idempotencyKey: String,
-    ): ResponseEntity<PaymentRequestResponse> {
+    ): PaymentRequestResponse {
         // PG 멱등 키는 예매 하나에 결제 하나가 되도록 서버가 정한다. 헤더 값은 재시도 식별용으로 받기만 한다
         val result = requestPayment.request(authentication.name.toLong(), id)
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(PaymentRequestResponse(result.bookingId, result.status))
+        return PaymentRequestResponse(result.bookingId, result.status)
     }
 }
 

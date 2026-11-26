@@ -1,11 +1,11 @@
 import 'server-only';
-import { z } from 'zod';
 import { gateway } from './gateway-client';
+import { zSseTicketResponse } from './generated/core/zod.gen';
 export function createSseTicket() {
   return gateway.call({
     method: 'POST',
     path: '/api/v1/sse-tickets',
-    schema: z.object({ ticket: z.string(), expiresAt: z.string() }),
+    schema: zSseTicketResponse,
     auth: 'required',
   });
 }

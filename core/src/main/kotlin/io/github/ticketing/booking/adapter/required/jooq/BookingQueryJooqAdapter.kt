@@ -6,6 +6,7 @@ import io.github.ticketing.booking.application.port.provided.BookingPage
 import io.github.ticketing.booking.application.port.provided.BookingSeatResult
 import io.github.ticketing.booking.application.port.provided.BookingSummaryView
 import io.github.ticketing.booking.application.port.required.BookingQueryPort
+import io.github.ticketing.booking.domain.CouponState
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
@@ -112,16 +113,14 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
             }
 
         val listAmount = BigDecimal.valueOf(requireNotNull(head[BOOKING.TOTAL_AMOUNT]))
-        val couponState = head[BOOKING.COUPON_STATE]
+        val couponState = head[BOOKING.COUPON_STATE]?.let(CouponState::valueOf)
         val discount = BigDecimal.valueOf(requireNotNull(head[BOOKING.DISCOUNT_AMOUNT]))
-        val applied = if (couponState == "RESERVED") discount else BigDecimal.ZERO
+        val applied = if (couponState == CouponState.RESERVED) discount else BigDecimal.ZERO
         val coupon = head[BOOKING.COUPON_ISSUED_ID]?.let {
             BookingCouponView(
                 it,
                 requireNotNull(couponState),
-                discount.takeIf { _ ->
-                    couponState == "RESERVED"
-                },
+                discount.takeIf { couponState == CouponState.RESERVED },
                 head[BOOKING.COUPON_REJECT_REASON],
             )
         }
