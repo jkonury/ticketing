@@ -55,7 +55,9 @@ export function expectNoConsoleErrors(errors: string[]) {
 
 export type CaptureOptions = {
   // 지정하면 VISUAL=1일 때 기준 이미지와 비교한다. mask는 실행마다 달라지는 영역이다.
-  visual?: { mask?: Locator[] };
+  // 목록처럼 길이가 실행마다 달라지는 화면은 fullPage: false(첫 화면만), 배경이 가변인 오버레이는
+  // target(요소만)으로 좁혀 비교한다.
+  visual?: { mask?: Locator[]; fullPage?: boolean; target?: Locator };
 };
 
 export async function capture(
@@ -72,12 +74,18 @@ export async function capture(
   });
   // 기준 이미지는 CI(ubuntu)에서만 만든다. 로컬 렌더링은 달라 기본은 비교하지 않는다.
   if (options.visual && process.env.VISUAL === '1') {
-    await expect(page).toHaveScreenshot(`${name}.png`, {
-      fullPage: true,
-      animations: 'disabled',
-      mask: options.visual.mask,
+    const { mask, fullPage = true, target } = options.visual;
+    const common = {
+      animations: 'disabled' as const,
+      mask,
       maxDiffPixelRatio: 0.01,
-    });
+    };
+    if (target) await expect(target).toHaveScreenshot(`${name}.png`, common);
+    else
+      await expect(page).toHaveScreenshot(`${name}.png`, {
+        ...common,
+        fullPage,
+      });
   }
 }
 

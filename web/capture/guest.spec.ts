@@ -14,8 +14,10 @@ test('비로그인 화면', async ({ browser }, testInfo) => {
   try {
     await gotoReady(page, '/');
     // 시각 비교: 공연 데이터(포스터·제목·장소·일시)는 시드 시점에 따라 달라 가리고 레이아웃만 본다.
+    // 공연 개수도 실행마다 달라 페이지 길이가 변하므로 첫 화면만 비교한다.
     await capture(page, testInfo, '01-home', {
       visual: {
+        fullPage: false,
         mask: [
           page.locator('[data-visual-mask]'),
           page.locator('main li h2, main li p'),

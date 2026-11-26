@@ -45,7 +45,10 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
     if (isMobile) {
       await page.getByRole('button', { name: '메뉴 열기' }).click();
       await page.getByRole('dialog').waitFor();
-      await capture(page, testInfo, '11-header-menu', { visual: {} });
+      // 시트 뒤 배경은 공연 목록이라 가변이므로 시트 요소만 비교한다.
+      await capture(page, testInfo, '11-header-menu', {
+        visual: { target: page.getByRole('dialog') },
+      });
       await page.keyboard.press('Escape');
     }
 
