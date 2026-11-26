@@ -2,6 +2,7 @@ package io.github.ticketing.catalog
 
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.catalog.config.CatalogCaches
+import io.github.ticketing.catalog.domain.PerformanceGenre
 import io.github.ticketing.catalog.domain.SeatGrade
 import io.github.ticketing.catalog.service.CatalogRegistrationService
 import io.github.ticketing.catalog.service.CatalogRegistrationService.PriceSpec
@@ -37,7 +38,7 @@ class CatalogQueryApiTests(
         ).id,
     )
 
-    private fun performance(venueId: Long, title: String = "조회 공연"): Long = requireNotNull(
+    private fun performance(venueId: Long, title: String = "조회 공연", genre: PerformanceGenre? = null): Long = requireNotNull(
         registration.registerPerformance(
             RegisterPerformanceCommand(
                 organizerId,
@@ -45,6 +46,7 @@ class CatalogQueryApiTests(
                 "설명",
                 venueId,
                 listOf(PriceSpec(SeatGrade.VIP, BigDecimal(150000)), PriceSpec(SeatGrade.R, BigDecimal(100000))),
+                genre,
             ),
         ).id,
     )
@@ -92,6 +94,22 @@ class CatalogQueryApiTests(
         assertThat(Instant.parse(top["firstStartsAt"].asString())).isEqualTo(Instant.parse("2027-02-01T10:00:00Z"))
         val noSchedule = body("/api/v1/performances?size=100").get("items").values().first { it["id"].asLong() == ids.first() }
         assertThat(noSchedule["firstStartsAt"].isNull).isTrue()
+    }
+
+    @Test
+    fun `장르 필터는 커서 페이징 전에 적용된다`() {
+        val venueId = venue()
+        val older = performance(venueId, genre = PerformanceGenre.CONCERT)
+        performance(venueId, genre = PerformanceGenre.PLAY)
+        val newer = performance(venueId, genre = PerformanceGenre.CONCERT)
+        performance(venueId)
+
+        val first = body("/api/v1/performances?genre=CONCERT&size=1")
+        assertThat(first["items"][0]["id"].asLong()).isEqualTo(newer)
+        assertThat(first["items"][0]["genre"].asString()).isEqualTo("CONCERT")
+        val next = body("/api/v1/performances?genre=CONCERT&size=1&cursor=${first["nextCursor"].asLong()}")
+        assertThat(next["items"][0]["id"].asLong()).isEqualTo(older)
+        mockMvcTester.get().uri("/api/v1/performances?genre=unknown").assertThat().hasStatus(HttpStatus.BAD_REQUEST)
     }
 
     @Test

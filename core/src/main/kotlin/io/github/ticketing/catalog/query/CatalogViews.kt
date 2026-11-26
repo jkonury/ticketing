@@ -1,11 +1,19 @@
 package io.github.ticketing.catalog.query
 
+import io.github.ticketing.catalog.domain.PerformanceGenre
 import java.math.BigDecimal
 import java.time.Instant
 
 // 조회 전용 DTO. jOOQ 결과를 직접 매핑하고 Redis에 JSON으로 캐시되므로 단순 타입만 쓴다.
 
-data class PerformanceSummary(val id: Long, val title: String, val venueName: String, val firstStartsAt: Instant?)
+data class PerformanceSummary(
+    val id: Long,
+    val title: String,
+    val venueName: String,
+    val firstStartsAt: Instant?,
+    val genre: PerformanceGenre?,
+    val posterKey: String?,
+)
 
 data class PerformancePage(val items: List<PerformanceSummary>, val nextCursor: Long?)
 
@@ -23,6 +31,8 @@ data class PerformanceDetail(
     val venueName: String,
     val prices: List<GradePrice>,
     val schedules: List<ScheduleSummary>,
+    val genre: PerformanceGenre? = null,
+    val posterKey: String? = null,
 )
 
 /** 좌석 상태(선점·판매)는 담지 않는다. 상태는 booking과 realtime 소관이다. */

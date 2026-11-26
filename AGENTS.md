@@ -67,7 +67,7 @@
 실제 구성이 달라지면 이 절을 고친다.
 
 ```bash
-docker compose up -d                 # PostgreSQL, Redis, Kafka (fake-pg는 scripts/dev/run.sh --fake-pg)
+docker compose up -d                 # PostgreSQL, Redis, Kafka, 포스터 저장용 MinIO (fake-pg는 scripts/dev/run.sh --fake-pg)
 docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 스택 (Prometheus, Tempo, Grafana 13001)
 ./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund|coupon-drop>  # k6 부하 테스트 (Gateway 18000 호출)
 ./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.<Simulation>  # Gatling 부하 시나리오 (loadtest/gatling/README.md)

@@ -1,20 +1,63 @@
 'use client';
 import { useActionState, useMemo, useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { InlineError } from '@/components/ui/feedback';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input, Select, Textarea } from '@/components/ui/input';
+import { genreLabels, performanceGenre } from '@/lib/performance-genre';
 import { registerAction } from './actions';
+import {
+  confirmPoster,
+  posterMaxSize,
+  posterTypes,
+  uploadPoster,
+} from './poster-upload';
 import { SeatPreview } from './seat-preview';
 import { grades, previewLayout, type Grade } from './seats';
 
 const num = (value: string) => (value === '' ? NaN : Number(value));
 
+type FormState = {
+  message: string;
+  performanceId?: number;
+  uploadId?: string;
+};
+
 export function RegistrationForm() {
-  const [state, action, pending] = useActionState(registerAction, {
-    message: '',
-  });
+  const [poster, setPoster] = useState<File | null>(null);
+  const [posterError, setPosterError] = useState<string>();
+  const [state, action, pending] = useActionState(
+    async (previous: FormState, form: FormData): Promise<FormState> => {
+      let performanceId = previous.performanceId;
+      let uploadId = previous.uploadId;
+      if (performanceId === undefined) {
+        if (poster) form.set('withPoster', 'true');
+        const registered = await registerAction(form);
+        if ('message' in registered) return registered;
+        performanceId = registered.performanceId;
+      }
+      if (!poster)
+        return { message: '포스터 파일을 선택해 주세요.', performanceId };
+      try {
+        uploadId ??= await uploadPoster(performanceId, poster);
+        await confirmPoster(performanceId, uploadId);
+      } catch (error) {
+        const lostUpload =
+          error instanceof Error && error.message === 'POSTER_UPLOAD_NOT_FOUND';
+        return {
+          message:
+            '공연은 등록했지만 포스터를 올리지 못했어요. 다시 시도해 주세요.',
+          performanceId,
+          uploadId: lostUpload ? undefined : uploadId,
+        };
+      }
+      window.location.assign(`/performances/${performanceId}`);
+      return { message: '', performanceId };
+    },
+    { message: '' },
+  );
   const [sections, setSections] = useState('');
   const [rows, setRows] = useState('');
   const [perRow, setPerRow] = useState('');
@@ -57,7 +100,35 @@ export function RegistrationForm() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     setSubmitted(true);
-    if (preview.error) event.preventDefault();
+    if (!state.performanceId && preview.error) event.preventDefault();
+
+    const invalidPoster =
+      poster &&
+      (!posterTypes.includes(poster.type) ||
+        poster.size < 1 ||
+        poster.size > posterMaxSize);
+    if (invalidPoster) {
+      event.preventDefault();
+      setPosterError('5MB 이하의 JPEG, PNG, WebP 파일을 선택해 주세요.');
+    }
+  }
+
+  if (state.performanceId) {
+    return (
+      <form action={action} onSubmit={onSubmit} className="grid gap-4">
+        {state.message && (
+          <InlineError role="alert">{state.message}</InlineError>
+        )}
+        {posterError && <InlineError role="alert">{posterError}</InlineError>}
+        {poster && <p className="text-caption text-fg-muted">{poster.name}</p>}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" loading={pending}>
+            포스터 다시 올리기
+          </Button>
+          <Link href={`/performances/${state.performanceId}`}>공연 보기</Link>
+        </div>
+      </form>
+    );
   }
 
   return (
@@ -72,6 +143,38 @@ export function RegistrationForm() {
         </Field>
         <Field label="공연 설명">
           {(c) => <Textarea {...c} name="description" required />}
+        </Field>
+        <Field label="장르" required>
+          {(c) => (
+            <Select {...c} name="genre" defaultValue="">
+              <option value="" disabled>
+                장르를 선택해 주세요
+              </option>
+              {performanceGenre.options.map((genre) => (
+                <option key={genre} value={genre}>
+                  {genreLabels[genre]}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field
+          label="포스터 (선택)"
+          hint="JPEG, PNG, WebP · 최대 5MB"
+          error={posterError}
+        >
+          {(c) => (
+            <Input
+              {...c}
+              type="file"
+              accept={posterTypes.join(',')}
+              disabled={pending}
+              onChange={(event) => {
+                setPoster(event.target.files?.[0] ?? null);
+                setPosterError(undefined);
+              }}
+            />
+          )}
         </Field>
         <Field label="회차 시작 시각 (한국 시간)">
           {(c) => (

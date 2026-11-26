@@ -8,7 +8,7 @@ usage() {
   cat <<'HELP'
 사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--payment] [--realtime] [--gateway] [--web] [--slow-queue]
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
---infra: PostgreSQL, Redis, Kafka(기동 뒤 payment_db 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
+--infra: PostgreSQL, Redis, Kafka, MinIO(기동 뒤 payment_db·포스터 버킷 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
 --payment: 결제 앱(18085, 웹훅은 fake-pg가 직접 호출). 결제 흐름에는 --core와 --payment를 함께 띄운다
 --slow-queue: 대기열 입장을 5초에 1명으로 늦춘다(대기 순번 화면 확인용, realtime에 적용. 예: --all --slow-queue)
 앱 옵션은 조합할 수 있습니다. 의존 인프라는 별도로 선택해야 합니다.
@@ -69,7 +69,8 @@ $realtime && tasks+=(:realtime:bootJar)
 $gateway && tasks+=(:gateway:bootJar)
 if ((${#tasks[@]})); then ./gradlew "${tasks[@]}"; fi
 if $infra; then
-  docker compose up -d --wait postgres redis kafka
+  docker compose up -d --wait postgres redis kafka minio
+  docker compose run --rm --no-deps minio-init
   # 기존 볼륨에는 payment_db가 없을 수 있으므로 멱등하게 준비한다
   ./scripts/db/ensure-payment-db.sh
 fi

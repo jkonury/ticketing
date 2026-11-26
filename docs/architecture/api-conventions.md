@@ -150,13 +150,15 @@
 | `POST /api/v1/auth/tokens/refresh` | 공개 | refresh 로테이션 |
 | `POST /api/v1/auth/tokens/revoke` | 공개, 멱등 | refresh 폐기. 없어도 204 |
 | `POST /api/v1/sse-tickets` | 로그인 | 1회용 SSE 티켓 발급(TTL 30초) |
-| `GET /api/v1/performances` | 공개 | 공연 목록(커서) |
+| `GET /api/v1/performances` | 공개 | 공연 목록(커서, `genre` 필터) |
 | `GET /api/v1/performances/{id}` | 공개 | 공연 상세 |
 | `GET /api/v1/schedules/{id}` | 공개 | 회차 상세([ADR 0023](../adr/0023-schedule-detail-api.md)) |
 | `GET /api/v1/schedules/{id}/seats` | 공개 | 회차 좌석 |
 | `GET /api/v1/schedules/availability?scheduleIds=` | 공개 | 회차별 잔여 좌석 |
 | `POST /api/v1/venues` | ORGANIZER | 공연장 등록 |
 | `POST /api/v1/performances` | ORGANIZER | 공연 등록 |
+| `POST /api/v1/performances/{performanceId}/poster-uploads` | 공연 소유 ORGANIZER | `contentType`으로 5분짜리 PUT URL, 업로드 ID, 서명 헤더 발급 |
+| `POST /api/v1/performances/{performanceId}/poster-uploads/{uploadId}/complete` | 공연 소유 ORGANIZER | 업로드 완료 확인 후 공개 `posterUrl` 반환. 같은 업로드 ID는 재시도 가능 |
 | `POST /api/v1/performances/{performanceId}/schedules` | ORGANIZER | 회차 등록 |
 | `POST /api/v1/bookings` | USER | 예매 생성. `Idempotency-Key`, `X-Admission-Token` 필요 |
 | `GET /api/v1/bookings/me` | USER | 내 예매 목록(커서, `performanceId` 필터) |
@@ -182,6 +184,8 @@
 | `GET /api/v1/admin/coupons/{id}/issued` | ADMIN | 발급 내역 |
 | `POST /api/v1/admin/coupons/{id}/grants` | ADMIN | 직접 지급 |
 | `POST /api/v1/admin/issued-coupons/{issuedCouponId}/revoke` | ADMIN | 발급 쿠폰 회수 |
+
+공연 목록과 상세는 `genre`와 `posterUrl`을 반환한다. 장르는 `CONCERT`, `MUSICAL`, `PLAY`, `CLASSICAL`, `SPORTS`, `EXHIBITION`이며 값이 없는 공연은 전체 목록에 포함된다. URL 발급 후에는 응답의 헤더를 포함해 저장소에 직접 PUT을 보낸다. 포스터는 JPEG·PNG·WebP를 지원하며 최대 크기는 5MiB다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 
 ### realtime
 
