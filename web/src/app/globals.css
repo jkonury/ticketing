@@ -54,6 +54,19 @@
     var(--font-pretendard), 'Pretendard Variable', Pretendard, system-ui,
     -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
 
+  --animate-queue-swap: queue-swap 300ms ease-out;
+  @keyframes queue-swap {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  --text-display: 56px;
+  --text-display--line-height: 1.1;
   --text-title: 28px;
   --text-title--line-height: 1.3;
   --text-heading: 20px;
