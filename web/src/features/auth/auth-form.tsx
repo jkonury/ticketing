@@ -2,6 +2,9 @@
 
 import { useActionState } from 'react';
 import { FormMessage } from '@/components/form-message';
+import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { Input, Select } from '@/components/ui/input';
 import { loginAction, signupAction } from './actions';
 
 export function AuthForm({
@@ -16,43 +19,44 @@ export function AuthForm({
     { message: '' },
   );
   return (
-    <form className="stacked-form" action={action}>
+    <form className="grid gap-4" action={action}>
       {mode === 'signup' && (
         <>
-          <label>
-            이름 <input name="name" required maxLength={50} />
-          </label>
-          <label>
-            역할{' '}
-            <select name="role">
-              <option value="USER">관객</option>
-              <option value="ORGANIZER">주최자</option>
-            </select>
-          </label>
+          <Field label="이름">
+            {(control) => (
+              <Input name="name" required maxLength={50} {...control} />
+            )}
+          </Field>
+          <Field label="역할">
+            {(control) => (
+              <Select name="role" {...control}>
+                <option value="USER">관객</option>
+                <option value="ORGANIZER">주최자</option>
+              </Select>
+            )}
+          </Field>
         </>
       )}
-      <label>
-        이메일 <input name="email" type="email" required />
-      </label>
-      <label>
-        비밀번호{' '}
-        <input
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          maxLength={64}
-          aria-describedby="password-hint"
-        />
-      </label>
-      <p id="password-hint" className="field-hint">
-        비밀번호는 8~64자로 입력해 주세요.
-      </p>
+      <Field label="이메일">
+        {(control) => <Input name="email" type="email" required {...control} />}
+      </Field>
+      <Field label="비밀번호" hint="비밀번호는 8~64자로 입력해 주세요.">
+        {(control) => (
+          <Input
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            maxLength={64}
+            {...control}
+          />
+        )}
+      </Field>
       {next && <input name="next" type="hidden" value={next} />}
       <FormMessage message={state.message} />
-      <button disabled={pending}>
+      <Button type="submit" loading={pending}>
         {pending ? '처리 중' : mode === 'login' ? '로그인' : '가입'}
-      </button>
+      </Button>
     </form>
   );
 }
