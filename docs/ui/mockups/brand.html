@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오픈석 브랜드 시안 (U1)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root {
+    --bg: #F4F5F8; --surface: #FFFFFF; --fg: #141A33; --fg-muted: #5B6478; --border: #E2E5EC;
+    --warning: #D97706; --warning-soft: #FEF3C7; --danger: #DC2626; --sold: #CBD0DA; --sold-fg: #8A92A3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 "Pretendard Variable", Pretendard, system-ui, sans-serif; }
+  h1 { font-size: 28px; line-height: 1.3; margin: 0 0 4px; }
+  .lead { color: var(--fg-muted); margin: 0 0 24px; font-size: 14px; }
+  main { padding: 32px 24px; max-width: 1440px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .col { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .col h2 { font-size: 20px; line-height: 1.4; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 20px; height: 20px; border-radius: 6px; background: var(--brand); }
+  .meta { font-size: 13px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--fg); font-weight: 600; }
+  .ramp { display: flex; border-radius: 8px; overflow: hidden; height: 28px; }
+  .ramp span { flex: 1; }
+  .label { font-size: 12px; font-weight: 600; color: var(--fg-muted); letter-spacing: .02em; }
+
+  /* 헤더 */
+  .header { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .wordmark { font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: var(--brand); }
+  .wordmark small { font-size: 10px; font-weight: 700; letter-spacing: .12em; color: var(--fg-muted); margin-left: 6px; }
+  .menu { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); display: grid; place-items: center; }
+
+  /* 카드 */
+  .card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .poster { aspect-ratio: 3 / 4; position: relative; background: var(--brand-strong); overflow: hidden; color: #fff; padding: 14px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .poster::before { content: ""; position: absolute; inset: -20%; background:
+      radial-gradient(circle at 20% 25%, var(--brand-soft-on-dark) 0 22%, transparent 23%),
+      radial-gradient(circle at 85% 60%, var(--brand) 0 30%, transparent 31%),
+      linear-gradient(160deg, transparent 50%, rgba(255,255,255,.08) 50% 60%, transparent 60%); }
+  .poster .genre { position: relative; font-size: 11px; font-weight: 700; letter-spacing: .1em; opacity: .85; }
+  .poster .ptitle { position: relative; font-size: 22px; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; }
+  .card-body { padding: 12px 14px 14px; }
+  .card-title { font-weight: 700; margin: 0 0 2px; }
+  .card-sub { font-size: 14px; color: var(--fg-muted); margin: 0; }
+  .card-date { font-size: 14px; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+  .link { color: var(--brand); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; font-size: 14px; }
+
+  /* 버튼 */
+  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { min-height: 44px; border-radius: 8px; font: inherit; font-weight: 600; font-size: 15px; border: 1px solid transparent; cursor: pointer; }
+  .btn.primary { background: var(--brand); color: #fff; }
+  .btn.primary.hover { background: var(--brand-strong); }
+  .btn.secondary { background: #fff; color: var(--fg); border-color: var(--border); }
+  .btn.ghost { background: transparent; color: var(--brand); }
+  .btn.danger { background: var(--danger); color: #fff; }
+  .btn.focus { outline: 3px solid var(--brand); outline-offset: 2px; }
+  .btn:disabled { background: #E7E9EF; color: #9AA1B0; }
+
+  /* 좌석 */
+  .stage { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .2em; color: var(--fg-muted); background: var(--bg); border-radius: 6px; padding: 4px; }
+  .seats { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; }
+  .seat { aspect-ratio: 1; border-radius: 5px; border: 1.5px solid #AEB5C4; background: #fff; position: relative; display: grid; place-items: center; }
+  .seat svg { width: 70%; height: 70%; }
+  .seat.mine { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .seat.held { background: repeating-linear-gradient(135deg, var(--warning-soft) 0 3px, #F5B544 3px 5px); border-color: var(--warning); }
+  .seat.sold { background: var(--sold); border-color: var(--sold); color: var(--sold-fg); }
+  .seat.flash { box-shadow: 0 0 0 3px rgba(217,119,6,.45); }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 13px; color: var(--fg-muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .seat { width: 16px; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .total { font-variant-numeric: tabular-nums; }
+  .total b { font-size: 18px; }
+
+  /* 타이머 */
+  .timer { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .track { flex: 1; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .track i { display: block; height: 100%; background: var(--brand); }
+  .timer.warn { color: #B45309; }
+  .timer.warn .track i { background: var(--warning); }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .badge.brand { background: var(--brand-soft); color: var(--brand-strong); }
+  .badge.ok { background: #DCFCE7; color: #166534; }
+  .badge.warn { background: var(--warning-soft); color: #92400E; }
+</style>
+</head>
+<body>
+<main>
+  <h1>오픈석 브랜드 시안</h1>
+  <p class="lead">인디고 계열 후보 네 개를 같은 컴포넌트에 적용했어요. 대비는 흰 배경 위 브랜드 색(글자·버튼 배경) 기준이에요. 좌석 상태 색(앰버·회색)은 후보와 관계없이 같아요.</p>
+  <div class="grid" id="grid"></div>
+</main>
+
+<template id="tpl">
+  <section class="col">
+    <h2><span class="swatch"></span><span class="name"></span></h2>
+    <div class="meta"></div>
+    <div class="ramp"><span style="background:var(--brand-soft)"></span><span style="background:var(--brand)"></span><span style="background:var(--brand-strong)"></span></div>
+
+    <div class="label">헤더</div>
+    <div class="header"><span class="wordmark">오픈석<small>OPENSEAT</small></span>
+      <span class="menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+
+    <div class="label">공연 카드</div>
+    <div class="card">
+      <div class="poster"><span class="genre">MUSICAL</span><span class="ptitle">한여름 밤의<br>오케스트라</span></div>
+      <div class="card-body">
+        <p class="card-title">한여름 밤의 오케스트라</p>
+        <p class="card-sub">세종문화회관 대극장</p>
+        <p class="card-date">2026.12.24 (목) 19:30</p>
+      </div>
+    </div>
+    <a class="link" href="#">전체 회차 보기</a>
+
+    <div class="label">버튼</div>
+    <div class="buttons">
+      <button class="btn primary">결제하기</button>
+      <button class="btn primary hover">호버</button>
+      <button class="btn secondary">취소</button>
+      <button class="btn ghost">더 보기</button>
+      <button class="btn danger">예매 취소</button>
+      <button class="btn primary focus">포커스</button>
+    </div>
+
+    <div class="label">좌석</div>
+    <div class="stage">STAGE</div>
+    <div class="seats"></div>
+    <div class="legend">
+      <span><i class="seat"></i>선택 가능</span>
+      <span><i class="seat mine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12l5 5 9-10"/></svg></i>내 선택</span>
+      <span><i class="seat held"></i>선점 중</span>
+      <span><i class="seat sold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><path d="M6 6l12 12M18 6L6 18"/></svg></i>판매됨</span>
+    </div>
+    <div class="bar"><span class="total">2석 · <b>300,000원</b></span><button class="btn primary" style="padding:0 20px">예매하기</button></div>
+
+    <div class="label">남은 시간 · 배지</div>
+    <div class="timer"><span>04:12</span><span class="track"><i style="width:84%"></i></span></div>
+    <div class="timer warn"><span>00:48</span><span class="track"><i style="width:16%"></i></span></div>
+    <div class="badges"><span class="badge brand">주최자</span><span class="badge ok">예매 확정</span><span class="badge warn">결제 대기</span></div>
+  </section>
+</template>
+
+<script>
+  const candidates = [
+    { name: "A · Indigo 700", brand: "#4338CA", strong: "#3730A3", soft: "#E0E7FF", softDark: "#6366F1", note: "ADR 기준값" },
+    { name: "B · Indigo 600", brand: "#4F46E5", strong: "#4338CA", soft: "#E0E7FF", softDark: "#818CF8", note: "더 밝고 선명" },
+    { name: "C · Deep Indigo", brand: "#3B2FC9", strong: "#2A2096", soft: "#E4E1FF", softDark: "#6C5CF0", note: "보라 쪽으로 이동, 채도 높음" },
+    { name: "D · Blue Indigo", brand: "#3B4FD8", strong: "#2D3BA8", soft: "#E1E7FF", softDark: "#6B80F2", note: "파랑 쪽으로 이동" },
+  ];
+  const lum = hex => { const c = hex.match(/\w\w/g).map(h => parseInt(h, 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return ((x + 0.05) / (y + 0.05)).toFixed(2); };
+  // 좌석 배치: 0 선택 가능, 1 내 선택, 2 선점, 3 판매
+  const layout = "0000330000" + "0122000330" + "0110030000" + "3330000220" + "0000000000";
+  const check = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12l5 5 9-10"/></svg>';
+  const x = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  const grid = document.getElementById("grid");
+  for (const c of candidates) {
+    const node = document.getElementById("tpl").content.cloneNode(true);
+    const col = node.querySelector(".col");
+    col.style.setProperty("--brand", c.brand);
+    col.style.setProperty("--brand-strong", c.strong);
+    col.style.setProperty("--brand-soft", c.soft);
+    col.style.setProperty("--brand-soft-on-dark", c.softDark);
+    col.querySelector(".name").textContent = c.name;
+    col.querySelector(".meta").innerHTML = `<b>${c.brand}</b> · ${c.note}<br>흰 배경 대비 <b>${ratio(c.brand, "#FFFFFF")}:1</b> · 호버(${c.strong}) <b>${ratio(c.strong, "#FFFFFF")}:1</b> · 연한 배지 글자 <b>${ratio(c.strong, c.soft)}:1</b>`;
+    const seats = col.querySelector(".seats");
+    [...layout].forEach((s, i) => {
+      const el = document.createElement("i");
+      el.className = "seat" + ["", " mine", " held", " sold"][+s] + (i === 12 ? " flash" : "");
+      el.innerHTML = s === "1" ? check : s === "3" ? x : "";
+      seats.append(el);
+    });
+    grid.append(node);
+  }
+</script>
+</body>
+</html>

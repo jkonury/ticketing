@@ -31,7 +31,7 @@ M4에서 만든 web 화면은 기능 검증이 목적이었다. 전체 흐름을
    - 다른 사용자 선점: 앰버와 빗금
    - 판매됨: 회색과 X 표시
    - 빨강은 오류 전용이고 초록은 좌석 상태에 쓰지 않는다.
-5. 스타일은 Tailwind 4 `@theme` 토큰 → 프리미티브(Button, Input, Badge, Card 등) → 기능 컴포넌트 계층으로 직접 만든다. 다이얼로그, 시트, 토스트처럼 접근성 구현이 까다로운 것만 Radix 프리미티브를 감싸 쓴다. 아이콘은 `lucide-react`, 서체는 Pretendard 가변 폰트를 `next/font/local`로 셀프 호스팅한다.
+5. 스타일은 Tailwind 4 `@theme` 토큰 → 프리미티브(Button, Input, Badge, Card 등) → 기능 컴포넌트 계층으로 직접 만든다. 다이얼로그, 시트, 토스트처럼 접근성 구현이 까다로운 것만 Radix 프리미티브를 감싸 쓴다. 아이콘은 `lucide-react`, 서체는 Pretendard KS X 1001 서브셋 정적 폰트(400·600·700·800)를 `next/font/local`로 셀프 호스팅한다. 가변 폰트 원본은 2MB라 첫 로딩이 무거워 쓰지 않는다.
 6. 접근성 목표는 WCAG 2.2 AA다. 좌석 맵은 DOM 버튼 그리드에 roving tabindex를 적용해 방향키로 이동하고, 좌석마다 위치·등급·가격·상태 레이블을 둔다. 자동 검사는 `@axe-core/playwright`로 한다.
 7. 모션은 실시간성을 드러내는 곳에만 CSS로 쓴다. 대상은 대기 순번 감소, 다른 사용자 선점 반영, 선점 타이머다. `prefers-reduced-motion`을 따른다.
 8. 문구는 해요체로 통일한다.
