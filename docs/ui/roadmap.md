@@ -31,7 +31,7 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 - [x] 브랜드 시안 HTML: 인디고 계열 후보를 카드, 버튼, 좌석 칩에 적용해 비교하고 확정([시안](./mockups/brand.html), A안 `#4338CA`)
 - [x] `@theme` 시맨틱 토큰(색, 간격, 모서리, 그림자, 타이포그래피), Pretendard 셀프 호스팅(서브셋 4굵기), `lucide-react`
 - [x] 프리미티브: Button(4단계), Input, Field, Badge, Card, Dialog·Sheet·Toast(Radix 래핑), 빈 상태·로딩·오류 (`web/src/components/ui/`)
-- [ ] 헤더와 레이아웃: 워드마크, 모바일 한 줄 헤더와 시트 메뉴, 역할 배지
+- [x] 헤더와 레이아웃: 워드마크, 모바일 한 줄 헤더와 시트 메뉴, 역할 배지
 - [ ] 시연 데이터 시드 스크립트(`scripts/dev/`, API 호출, DB 초기화 옵션)
 - [ ] 전체 흐름 캡처 스크립트(모바일·데스크톱, dev 인디케이터 숨김)
 - [ ] 개발 환경 대기열 입장 속도 조절 설정(대기 순번 화면 재현용)
