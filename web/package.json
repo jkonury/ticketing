@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
+    "capture": "playwright test -c playwright.capture.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

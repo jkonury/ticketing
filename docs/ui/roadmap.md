@@ -33,7 +33,7 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 - [x] 프리미티브: Button(4단계), Input, Field, Badge, Card, Dialog·Sheet·Toast(Radix 래핑), 빈 상태·로딩·오류 (`web/src/components/ui/`)
 - [x] 헤더와 레이아웃: 워드마크, 모바일 한 줄 헤더와 시트 메뉴, 역할 배지
 - [x] 시연 데이터 시드 스크립트(`scripts/dev/seed-demo.sh`, API 호출, DB 초기화 옵션)
-- [ ] 전체 흐름 캡처 스크립트(모바일·데스크톱, dev 인디케이터 숨김)
+- [x] 전체 흐름 캡처 스크립트(모바일·데스크톱, dev 인디케이터 숨김, `cd web && pnpm capture`)
 - [x] 개발 환경 대기열 입장 속도 조절 설정(대기 순번 화면 재현용, `run.sh --slow-queue`)
 - [ ] `globals.css`의 직접 작성 클래스를 토큰·프리미티브로 대체
 
