@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0049](../adr/0049-ui-redesign-direction.md), [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 - 작성일: 2026-11-26
-- 상태: U0·U1·U2·U3 완료. 다음은 U4(포스터·장르 백엔드)
+- 상태: U0·U1·U2·U3·U5 완료. 남은 것은 U4(포스터·장르 백엔드)
 
 web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)(M 트랙), 워크플로 로드맵 [workflow/roadmap.md](../workflow/roadmap.md)(W 트랙)와 병행한다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 시각 규칙의 기준은 [UI 가이드](../ui-guide.md)다.
 
@@ -73,6 +73,6 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 
 ## U5. 시각 회귀 테스트 전환
 
-- [ ] 캡처 스크립트를 Playwright `toHaveScreenshot()` 테스트로 전환하고 기준 이미지 관리 규칙을 정함
+- [x] 캡처 스크립트를 Playwright `toHaveScreenshot()` 테스트로 전환하고 기준 이미지 관리 규칙을 정함
 
 **완료 기준**: 기준 이미지 테스트가 web 검사에 포함되고 통과한다.
