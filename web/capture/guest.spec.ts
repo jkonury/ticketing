@@ -47,7 +47,8 @@ test('비로그인 화면', async ({ browser }, testInfo) => {
     await page.getByLabel('이메일').fill(accounts.user);
     await page.getByLabel('비밀번호').fill('wrong-password-000');
     await page.getByRole('button', { name: '로그인' }).click();
-    await page.getByRole('alert').first().waitFor({ timeout: 15_000 });
+    // Next의 route announcer도 role=alert라서 폼 안의 오류로 좁힌다.
+    await page.locator('form [role="alert"]').waitFor({ timeout: 15_000 });
     await capture(page, testInfo, '05-login-error');
 
     // 틀린 비밀번호 응답(401)은 브라우저가 리소스 오류로 기록할 수 있어 별도로 걸러지지 않는다.

@@ -126,14 +126,8 @@
   main > p {
     margin-top: 12px;
   }
-  .page-intro,
   .field-hint {
     color: var(--color-fg-muted);
-  }
-  .page-intro {
-    margin-top: 10px;
-  }
-  .field-hint {
     font-size: 14px;
   }
   button,
@@ -161,109 +155,6 @@
     background: var(--color-disabled);
     color: var(--color-fg-muted);
   }
-  .button-secondary {
-    background: var(--color-surface);
-    color: var(--color-brand);
-    border-color: var(--color-line);
-  }
-  .button-secondary:hover {
-    background: var(--color-brand-soft);
-  }
-  .performance-grid,
-  .price-list,
-  .schedule-list {
-    list-style: none;
-    padding: 0;
-  }
-  .performance-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 20px;
-    margin: 32px 0;
-  }
-  .performance-card {
-    min-height: 190px;
-    padding: 24px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-line);
-    border-radius: 12px;
-  }
-  .performance-card h2 {
-    margin: 18px 0 12px;
-  }
-  .performance-card h2 a {
-    color: var(--color-fg);
-  }
-  .performance-card p {
-    color: var(--color-fg-muted);
-    margin-top: 4px;
-  }
-  .card-label,
-  .eyebrow {
-    color: var(--color-brand);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-  }
-  .empty-state {
-    padding: 40px;
-    text-align: center;
-    background: var(--color-surface);
-    border: 1px solid var(--color-line);
-    border-radius: 12px;
-  }
-  .detail-venue {
-    color: var(--color-fg-muted);
-  }
-  .detail-section {
-    margin-top: 40px;
-  }
-  .detail-section h2 {
-    margin-bottom: 16px;
-  }
-  .price-list,
-  .schedule-list {
-    margin: 0;
-    background: var(--color-surface);
-    border: 1px solid var(--color-line);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .price-list li {
-    padding: 12px 20px;
-  }
-  .price-list li + li,
-  .schedule-list li + li {
-    border-top: 1px solid var(--color-disabled);
-  }
-  .schedule-list li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 20px;
-  }
-  .schedule-list time {
-    font-weight: 700;
-  }
-  .schedule-list p {
-    color: var(--color-fg-muted);
-    margin-top: 4px;
-  }
-  .auth-page {
-    max-width: 488px;
-    padding-top: 64px;
-  }
-  .auth-card {
-    padding: 32px;
-    border: 1px solid var(--color-line);
-    border-radius: 12px;
-    background: var(--color-surface);
-  }
-  .auth-card > a {
-    display: inline-block;
-    margin-top: 20px;
-  }
   main form label {
     display: grid;
     gap: 6px;
@@ -284,14 +175,10 @@
   textarea {
     min-height: 100px;
   }
-  .stacked-form,
   main > form {
     display: grid;
     gap: 16px;
     margin-top: 24px;
-  }
-  .stacked-form .field-hint {
-    margin-top: -10px;
   }
   [role='alert'] {
     color: var(--color-danger);
@@ -369,21 +256,6 @@
   @media (max-width: 767px) {
     main {
       padding: 32px 16px 64px;
-    }
-    .performance-grid {
-      grid-template-columns: 1fr;
-    }
-    .schedule-list li {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .auth-card {
-      padding: 24px;
-    }
-  }
-  @media (min-width: 768px) and (max-width: 1023px) {
-    .performance-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 }
