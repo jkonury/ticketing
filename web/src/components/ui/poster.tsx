@@ -99,6 +99,7 @@ export function Poster({ id, title, imageUrl, className }: PosterProps) {
   const hash = posterHash(id, title);
   return (
     <div
+      data-visual-mask
       className={cx(
         'relative aspect-[3/4] w-full overflow-hidden',
         imageUrl ? 'bg-line' : backgrounds[hash % backgrounds.length],
