@@ -71,145 +71,16 @@
   line-height: 1.5;
 }
 
-/*
- * U1 이전의 직접 작성 스타일. base 레이어에 두어 프리미티브의 유틸리티 클래스가 항상 우선하게 한다.
- * 화면을 프리미티브로 옮기면서 지운다.
- */
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
-  body {
-    margin: 0;
+  :focus-visible {
+    outline: 3px solid var(--color-brand);
+    outline-offset: 2px;
   }
   a {
     color: var(--color-brand);
-    text-decoration: none;
+    text-underline-offset: 3px;
   }
   a:hover {
     text-decoration: underline;
-  }
-  :focus-visible {
-    outline: 3px solid var(--color-brand);
-    outline-offset: 3px;
-  }
-  main {
-    max-width: 1120px;
-    margin: 0 auto;
-    padding: 48px 24px 80px;
-  }
-  h1,
-  h2,
-  h3,
-  p {
-    margin: 0;
-  }
-  h1 {
-    font-size: 28px;
-    line-height: 1.3;
-    font-weight: 750;
-    letter-spacing: -0.03em;
-  }
-  h2 {
-    font-size: 20px;
-    line-height: 1.4;
-    font-weight: 700;
-  }
-  h3 {
-    font-size: 17px;
-    font-weight: 700;
-  }
-  main > h2,
-  main > h3 {
-    margin: 32px 0 16px;
-  }
-  main > p {
-    margin-top: 12px;
-  }
-  button,
-  .button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
-    padding: 10px 20px;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    background: var(--color-brand);
-    color: var(--color-on-brand);
-    font: inherit;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  button:hover:not(:disabled),
-  .button:hover {
-    background: var(--color-brand-strong);
-    text-decoration: none;
-  }
-  button:disabled {
-    cursor: not-allowed;
-    background: var(--color-disabled);
-    color: var(--color-fg-muted);
-  }
-  main form label {
-    display: grid;
-    gap: 6px;
-    font-weight: 600;
-  }
-  input,
-  select,
-  textarea {
-    width: 100%;
-    min-height: 44px;
-    padding: 9px 12px;
-    border: 1px solid var(--color-line-strong);
-    border-radius: 8px;
-    background: var(--color-surface);
-    color: var(--color-fg);
-    font: inherit;
-  }
-  textarea {
-    min-height: 100px;
-  }
-  main > form {
-    display: grid;
-    gap: 16px;
-    margin-top: 24px;
-  }
-  [role='alert'] {
-    color: var(--color-danger);
-  }
-  fieldset {
-    min-width: 0;
-    padding: 16px;
-    border: 1px solid var(--color-line);
-    border-radius: 8px;
-  }
-  fieldset label {
-    margin: 8px 0;
-  }
-  table {
-    display: block;
-    width: 100%;
-    overflow-x: auto;
-    margin: 20px 0;
-    border-collapse: collapse;
-    background: var(--color-surface);
-  }
-  th,
-  td {
-    min-width: 120px;
-    padding: 14px;
-    text-align: left;
-    border-bottom: 1px solid var(--color-line);
-  }
-  th {
-    color: var(--color-fg-muted);
-    font-size: 14px;
-  }
-  @media (max-width: 767px) {
-    main {
-      padding: 32px 16px 64px;
-    }
   }
 }

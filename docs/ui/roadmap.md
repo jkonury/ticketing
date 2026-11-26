@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0049](../adr/0049-ui-redesign-direction.md), [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 - 작성일: 2026-11-26
-- 상태: U0 진행 중
+- 상태: U0·U1 완료. 다음은 U2(사용자 흐름)
 
 web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)(M 트랙), 워크플로 로드맵 [workflow/roadmap.md](../workflow/roadmap.md)(W 트랙)와 병행한다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 시각 규칙의 기준은 [UI 가이드](../ui-guide.md)다.
 
@@ -35,7 +35,7 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 - [x] 시연 데이터 시드 스크립트(`scripts/dev/seed-demo.sh`, API 호출, DB 초기화 옵션)
 - [x] 전체 흐름 캡처 스크립트(모바일·데스크톱, dev 인디케이터 숨김, `cd web && pnpm capture`)
 - [x] 개발 환경 대기열 입장 속도 조절 설정(대기 순번 화면 재현용, `run.sh --slow-queue`)
-- [ ] `globals.css`의 직접 작성 클래스를 토큰·프리미티브로 대체
+- [x] `globals.css`의 직접 작성 클래스를 토큰·프리미티브로 대체
 
 **완료 기준**: 시안이 확정되고, 기존 모든 화면이 새 프리미티브와 토큰으로 깨짐 없이 표시된다. `web-check.sh`가 통과한다.
 

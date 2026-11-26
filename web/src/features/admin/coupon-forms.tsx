@@ -1,6 +1,9 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { Input, Select, Textarea } from '@/components/ui/input';
 import { FormMessage } from '@/components/form-message';
 import {
   createCouponAction,
@@ -59,106 +62,134 @@ export function CouponForm({
   const [mode, setMode] = useState(values.issueMode);
   const text = (v: number | null) => (v === null ? '' : String(v));
   return (
-    <form action={action}>
+    <form action={action} className="grid max-w-160 gap-4">
       {editing && <input type="hidden" name="id" value={values.id} />}
-      <label>
-        이름 <input name="name" defaultValue={values.name} required />
-      </label>
-      <label>
-        설명 <textarea name="description" defaultValue={values.description} />
-      </label>
-      <label>
-        종료일(KST){' '}
-        <input
-          type="datetime-local"
-          name="validUntil"
-          defaultValue={values.validUntil}
-          required
-        />
-      </label>
+      <Field label="이름">
+        {(c) => (
+          <Input {...c} name="name" defaultValue={values.name} required />
+        )}
+      </Field>
+      <Field label="설명">
+        {(c) => (
+          <Textarea
+            {...c}
+            name="description"
+            defaultValue={values.description}
+          />
+        )}
+      </Field>
+      <Field label="종료일(KST)">
+        {(c) => (
+          <Input
+            {...c}
+            type="datetime-local"
+            name="validUntil"
+            defaultValue={values.validUntil}
+            required
+          />
+        )}
+      </Field>
       {!locked && (
         <>
-          <label>
-            할인 유형{' '}
-            <select
-              name="discountType"
-              value={type}
-              onChange={(e) => setType(e.target.value as 'FIXED' | 'RATE')}
-            >
-              <option value="FIXED">정액(원)</option>
-              <option value="RATE">정률(%)</option>
-            </select>
-          </label>
-          <label>
-            {type === 'RATE' ? '할인율(%)' : '할인 금액(원)'}{' '}
-            <input
-              name="discountValue"
-              inputMode="numeric"
-              defaultValue={values.discountValue}
-              required
-            />
-          </label>
-          {type === 'RATE' && (
-            <label>
-              최대 할인 금액(원){' '}
-              <input
-                name="maxDiscount"
+          <Field label="할인 유형">
+            {(c) => (
+              <Select
+                {...c}
+                name="discountType"
+                value={type}
+                onChange={(e) => setType(e.target.value as 'FIXED' | 'RATE')}
+              >
+                <option value="FIXED">정액(원)</option>
+                <option value="RATE">정률(%)</option>
+              </Select>
+            )}
+          </Field>
+          <Field label={type === 'RATE' ? '할인율(%)' : '할인 금액(원)'}>
+            {(c) => (
+              <Input
+                {...c}
+                name="discountValue"
                 inputMode="numeric"
-                defaultValue={text(values.maxDiscount)}
+                defaultValue={values.discountValue}
+                required
               />
-            </label>
+            )}
+          </Field>
+          {type === 'RATE' && (
+            <Field label="최대 할인 금액(원)">
+              {(c) => (
+                <Input
+                  {...c}
+                  name="maxDiscount"
+                  inputMode="numeric"
+                  defaultValue={text(values.maxDiscount)}
+                />
+              )}
+            </Field>
           )}
-          <label>
-            최소 주문 금액(원){' '}
-            <input
-              name="minOrderAmount"
-              inputMode="numeric"
-              defaultValue={values.minOrderAmount}
-              required
-            />
-          </label>
-          <label>
-            공연 ID(비우면 전체){' '}
-            <input
-              name="performanceId"
-              inputMode="numeric"
-              defaultValue={text(values.performanceId)}
-            />
-          </label>
-          <label>
-            시작일(KST){' '}
-            <input
-              type="datetime-local"
-              name="validFrom"
-              defaultValue={values.validFrom}
-              required
-            />
-          </label>
-          <label>
-            발급 방식{' '}
-            <select
-              name="issueMode"
-              value={mode}
-              onChange={(e) =>
-                setMode(e.target.value as 'UNLIMITED' | 'LIMITED' | 'DIRECT')
-              }
-            >
-              <option value="UNLIMITED">무제한</option>
-              <option value="LIMITED">수량 한정</option>
-              <option value="DIRECT">관리자 직접 지급</option>
-            </select>
-          </label>
-          <label>
-            총 수량(한정일 때){' '}
-            <input
-              name="totalQuantity"
-              inputMode="numeric"
-              defaultValue={text(values.totalQuantity)}
-            />
-          </label>
+          <Field label="최소 주문 금액(원)">
+            {(c) => (
+              <Input
+                {...c}
+                name="minOrderAmount"
+                inputMode="numeric"
+                defaultValue={values.minOrderAmount}
+                required
+              />
+            )}
+          </Field>
+          <Field label="공연 ID(비우면 전체)">
+            {(c) => (
+              <Input
+                {...c}
+                name="performanceId"
+                inputMode="numeric"
+                defaultValue={text(values.performanceId)}
+              />
+            )}
+          </Field>
+          <Field label="시작일(KST)">
+            {(c) => (
+              <Input
+                {...c}
+                type="datetime-local"
+                name="validFrom"
+                defaultValue={values.validFrom}
+                required
+              />
+            )}
+          </Field>
+          <Field label="발급 방식">
+            {(c) => (
+              <Select
+                {...c}
+                name="issueMode"
+                value={mode}
+                onChange={(e) =>
+                  setMode(e.target.value as 'UNLIMITED' | 'LIMITED' | 'DIRECT')
+                }
+              >
+                <option value="UNLIMITED">무제한</option>
+                <option value="LIMITED">수량 한정</option>
+                <option value="DIRECT">관리자 직접 지급</option>
+              </Select>
+            )}
+          </Field>
+          <Field label="총 수량(한정일 때)">
+            {(c) => (
+              <Input
+                {...c}
+                name="totalQuantity"
+                inputMode="numeric"
+                defaultValue={text(values.totalQuantity)}
+              />
+            )}
+          </Field>
         </>
       )}
-      <button disabled={pending}>{editing ? '수정' : '생성'}</button>
+      <Button type="submit" disabled={pending} className="justify-self-start">
+        {editing ? '수정' : '생성'}
+      </Button>
       <FormMessage message={state.message} />
     </form>
   );
@@ -167,9 +198,11 @@ export function CouponForm({
 export function StopForm({ id }: { id: number }) {
   const [state, action, pending] = useActionState(stopCouponAction, initial);
   return (
-    <form action={action}>
+    <form action={action} className="grid max-w-160 gap-3">
       <input type="hidden" name="id" value={id} />
-      <button disabled={pending}>발급 중지</button>
+      <Button type="submit" disabled={pending} className="justify-self-start">
+        발급 중지
+      </Button>
       <FormMessage message={state.message} />
     </form>
   );
@@ -178,13 +211,14 @@ export function StopForm({ id }: { id: number }) {
 export function GrantForm({ id }: { id: number }) {
   const [state, action, pending] = useActionState(grantCouponsAction, initial);
   return (
-    <form action={action}>
+    <form action={action} className="grid max-w-160 gap-3">
       <input type="hidden" name="id" value={id} />
-      <label>
-        회원 ID(쉼표·줄바꿈 구분, 최대 100명){' '}
-        <textarea name="memberIds" required />
-      </label>
-      <button disabled={pending}>지급</button>
+      <Field label="회원 ID(쉼표·줄바꿈 구분, 최대 100명)">
+        {(c) => <Textarea {...c} name="memberIds" required />}
+      </Field>
+      <Button type="submit" disabled={pending} className="justify-self-start">
+        지급
+      </Button>
       <FormMessage message={state.message} />
     </form>
   );
@@ -199,10 +233,12 @@ export function RevokeForm({
 }) {
   const [state, action, pending] = useActionState(revokeCouponAction, initial);
   return (
-    <form action={action}>
+    <form action={action} className="grid max-w-160 gap-3">
       <input type="hidden" name="issuedCouponId" value={issuedCouponId} />
       <input type="hidden" name="definitionId" value={definitionId} />
-      <button disabled={pending}>회수</button>
+      <Button type="submit" disabled={pending} className="justify-self-start">
+        회수
+      </Button>
       <FormMessage message={state.message} />
     </form>
   );
