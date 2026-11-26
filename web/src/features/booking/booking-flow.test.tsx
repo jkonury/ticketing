@@ -102,15 +102,19 @@ describe('예매 흐름', () => {
     for (let index = 1; index <= 5; index++)
       fireEvent.click(
         screen.getByRole('button', {
-          name: `A구역 3열 ${index}번, R석, 선택 가능`,
+          name: `A구역 3열 ${index}번, R석 10,000원, 선택 가능`,
         }),
       );
     expect(
-      screen.getByRole('button', { name: 'A구역 3열 5번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 5번, R석 10,000원, 선택 가능',
+      }),
     ).toHaveAttribute('aria-pressed', 'false');
     act(() => stream.handlers.seat({ seatIds: [1], status: 'HELD' }, '1-0'));
     expect(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선점됨' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선점됨',
+      }),
     ).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('alert')).toHaveTextContent('다른 사용자');
   });
@@ -143,7 +147,9 @@ describe('예매 흐름', () => {
     });
     await openSeats();
     fireEvent.click(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선택 가능',
+      }),
     );
     fireEvent.click(screen.getByRole('button', { name: '예매하기' }));
     const pay = await screen.findByRole('button', { name: '결제하기' });
@@ -171,7 +177,9 @@ describe('예매 흐름', () => {
     );
     await openSeats();
     fireEvent.click(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선택 가능',
+      }),
     );
     fireEvent.click(screen.getByRole('button', { name: '예매하기' }));
     expect(screen.queryByText('대기열')).not.toBeInTheDocument();
@@ -232,7 +240,9 @@ describe('예매 흐름', () => {
       ),
     );
     fireEvent.click(
-      screen.getByRole('button', { name: 'A구역 3열 1번, R석, 선택 가능' }),
+      screen.getByRole('button', {
+        name: 'A구역 3열 1번, R석 10,000원, 선택 가능',
+      }),
     );
     expect(screen.getByRole('button', { name: '예매하기' })).toBeEnabled();
     act(() => stream.onDisconnect());

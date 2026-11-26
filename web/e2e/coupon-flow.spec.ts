@@ -38,7 +38,7 @@ test('결제 화면에서 쿠폰을 적용해 할인된 금액으로 결제한�
       timeout: 45_000,
     });
     await page
-      .getByRole('button', { name: 'A구역 1열 1번, A석, 선택 가능' })
+      .getByRole('button', { name: /A구역 1열 1번, A석 .*, 선택 가능/ })
       .click();
     await page.getByRole('button', { name: '예매하기' }).click();
     await expect(
