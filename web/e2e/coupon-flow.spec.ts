@@ -44,14 +44,14 @@ test('결제 화면에서 쿠폰을 적용해 할인된 금액으로 결제한�
     await expect(
       page.getByRole('heading', { name: '결제', exact: true }),
     ).toBeVisible();
-    await expect(page.getByText('결제 금액: 10,000원')).toBeVisible();
+    await expect(page.getByTestId('payable-amount')).toHaveText('10,000원');
 
     await page.getByLabel('쿠폰 선택').selectOption({ label: couponName });
     await page.getByRole('button', { name: '쿠폰 적용' }).click();
     await expect(page.getByText('쿠폰 적용됨: -3,000원')).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText('결제 금액: 7,000원')).toBeVisible();
+    await expect(page.getByTestId('payable-amount')).toHaveText('7,000원');
 
     await page.getByRole('button', { name: '결제하기' }).click();
     await expect(page.getByRole('heading', { name: '예매 완료' })).toBeVisible({

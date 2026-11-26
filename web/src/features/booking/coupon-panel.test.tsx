@@ -69,12 +69,14 @@ describe('결제 화면 쿠폰', () => {
       coupon: { issuedCouponId: 7, state: 'RESERVED', discountAmount: 1000 },
     });
     await apply();
-    expect(await screen.findByText('쿠폰 적용 중입니다.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('쿠폰을 적용하고 있어요.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '결제하기' })).toBeDisabled();
     expect(
       await screen.findByText('쿠폰 적용됨: -1,000원', {}, { timeout: 4000 }),
     ).toBeInTheDocument();
-    expect(screen.getByText('결제 금액: 9,000원')).toBeInTheDocument();
+    expect(screen.getByTestId('payable-amount')).toHaveTextContent('9,000원');
     expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
   });
   it('REJECTED면 사유를 보여 주고 정가로 결제할 수 있다', async () => {
@@ -94,7 +96,7 @@ describe('결제 화면 쿠폰', () => {
         { timeout: 4000 },
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('결제 금액: 10,000원')).toBeInTheDocument();
+    expect(screen.getByTestId('payable-amount')).toHaveTextContent('10,000원');
     expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
   });
 
@@ -142,7 +144,40 @@ describe('결제 화면 쿠폰', () => {
       );
     });
     expect(screen.queryByRole('button', { name: '쿠폰 해제' })).toBeNull();
-    expect(screen.getByText('결제 금액: 10,000원')).toBeInTheDocument();
+    expect(screen.getByTestId('payable-amount')).toHaveTextContent('10,000원');
     expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
+  });
+
+  describe('쿠폰 목록 3상태', () => {
+    it('불러오는 중에는 스켈레톤만 보이고 없음 문구를 보이지 않는다', async () => {
+      const pending = Promise.withResolvers<ReturnType<typeof response>>();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => pending.promise),
+      );
+      render(<Payment booking={booking} onDone={vi.fn()} onReset={vi.fn()} />);
+      expect(
+        screen.getByRole('status', { name: '쿠폰을 불러오는 중이에요' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/사용할 수 있는 쿠폰이 없어요/)).toBeNull();
+      await act(async () => pending.resolve(response([])));
+      expect(
+        await screen.findByText('사용할 수 있는 쿠폰이 없어요'),
+      ).toBeInTheDocument();
+    });
+    it('조회에 실패하면 오류와 다시 시도를 보이고 다시 시도로 복구한다', async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(response({ code: 'X' }, 500))
+        .mockResolvedValueOnce(response(coupons));
+      vi.stubGlobal('fetch', fetch);
+      render(<Payment booking={booking} onDone={vi.fn()} onReset={vi.fn()} />);
+      expect(
+        await screen.findByText('쿠폰을 불러오지 못했어요'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/사용할 수 있는 쿠폰이 없어요/)).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+      expect(await screen.findByLabelText('쿠폰 선택')).toBeInTheDocument();
+    });
   });
 });
