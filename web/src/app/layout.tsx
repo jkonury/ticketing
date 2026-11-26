@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { getCurrentUser } from '@/server/auth/current-user';
 import { logoutAction } from '@/features/auth/actions';
+import { Toaster } from '@/components/ui/toast';
 import { pretendard } from './fonts/pretendard';
 import './globals.css';
 
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         {children}
+        <Toaster />
       </body>
     </html>
   );
