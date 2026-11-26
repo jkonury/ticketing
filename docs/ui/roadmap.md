@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0049](../adr/0049-ui-redesign-direction.md), [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 - 작성일: 2026-11-26
-- 상태: U0·U1 완료. 다음은 U2(사용자 흐름)
+- 상태: U0·U1·U2 완료. U3 진행 중
 
 web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)(M 트랙), 워크플로 로드맵 [workflow/roadmap.md](../workflow/roadmap.md)(W 트랙)와 병행한다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 시각 규칙의 기준은 [UI 가이드](../ui-guide.md)다.
 
@@ -49,7 +49,7 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 - [x] 예매 완료: 티켓 카드
 - [x] 마이페이지·쿠폰: 카드 목록, 상태 배지, 취소 확인 다이얼로그, 쿠폰 카드
 - [x] 로그인·회원 가입: 해요체 문구, 제출 실패 시 입력한 이메일·이름 유지(지금은 React 폼 액션이 폼을 초기화)
-- [ ] web E2E 선택자·문구 갱신, `@axe-core/playwright` 검사 추가
+- [x] web E2E 선택자·문구 갱신, `@axe-core/playwright` 검사 추가
 
 **완료 기준**: 모바일(390px)과 데스크톱(1440px)에서 목록 → 대기열 → 좌석 → 결제 → 완료 → 취소를 완주한다. `./scripts/e2e/run.sh --web`과 axe 검사가 통과한다.
 
