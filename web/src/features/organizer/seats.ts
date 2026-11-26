@@ -36,3 +36,56 @@ export function makeSeats(
     ),
   );
 }
+
+export function parseSections(text: string) {
+  return text
+    .split(',')
+    .map((section) => section.trim())
+    .filter(Boolean);
+}
+
+export type LayoutError =
+  'INVALID_SEATS' | 'ROW_COUNT_MISMATCH' | 'TOO_MANY_SEATS';
+
+export type LayoutPreview =
+  | {
+      error: null;
+      sections: string[];
+      perRow: number;
+      /** 앞 열부터의 등급. 모든 구역이 같다. */
+      rowGrades: Grade[];
+      total: number;
+    }
+  | { error: LayoutError };
+
+/** 입력 중인 구역·열·좌석 수로 배치를 만든다. 서버 등록과 같은 makeSeats 규칙을 쓴다. */
+export function previewLayout(input: {
+  sections: string;
+  rows: number;
+  perRow: number;
+  counts: Record<Grade, number>;
+}): LayoutPreview {
+  const sections = parseSections(input.sections);
+  try {
+    const seats = makeSeats(sections, input.rows, input.perRow, input.counts);
+    const first = sections[0];
+    const rowGrades = seats
+      .filter((seat) => seat.section === first && seat.number === 1)
+      .map((seat) => seat.grade);
+    return {
+      error: null,
+      sections,
+      perRow: input.perRow,
+      rowGrades,
+      total: seats.length,
+    };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    return {
+      error:
+        code === 'ROW_COUNT_MISMATCH' || code === 'TOO_MANY_SEATS'
+          ? code
+          : 'INVALID_SEATS',
+    };
+  }
+}
