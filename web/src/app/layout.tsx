@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { getCurrentUser } from '@/server/auth/current-user';
 import { logoutAction } from '@/features/auth/actions';
+import { pretendard } from './fonts/pretendard';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -42,7 +43,7 @@ async function UserMenu() {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ko">
+    <html lang="ko" className={pretendard.variable}>
       <body>
         <header className="site-header">
           <div className="header-inner">
