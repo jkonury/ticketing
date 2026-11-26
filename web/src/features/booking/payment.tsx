@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { InlineError } from '@/components/ui/feedback';
 import { call, codeOf, type Booking } from './booking-shared';
 import { bookingError } from './error-messages';
 import { CouponPanel } from './coupon-panel';
@@ -104,8 +107,8 @@ export function Payment({
     }
   }
   return (
-    <section>
-      <h2>결제</h2>
+    <Card padding="lg" className="grid gap-4">
+      <h2 className="text-heading font-bold text-fg">결제</h2>
       <p>선택한 좌석: {booking.seats.map((seat) => seat.label).join(', ')}</p>
       <p>남은 시간: {remaining}초</p>
       <p>
@@ -120,23 +123,32 @@ export function Payment({
         onSessionExpired={() => router.push('/login')}
         disabled={pending || remaining === 0}
       />
-      {remaining === 0 && <p>선점이 만료되었습니다.</p>}
+      {remaining === 0 && <InlineError>선점이 만료되었습니다.</InlineError>}
       {notice && (
-        <p role="alert">
-          {notice} <Link href="/my">마이페이지</Link>
-        </p>
+        <InlineError role="alert">
+          {notice}{' '}
+          <Link href="/my" className="underline">
+            마이페이지
+          </Link>
+        </InlineError>
       )}
-      <button
-        disabled={
-          pending || remaining === 0 || amount.coupon?.state === 'RESERVING'
-        }
-        onClick={() => void pay()}
-      >
-        결제하기
-      </button>
-      <button disabled={pending} onClick={() => void cancel()}>
-        취소
-      </button>
-    </section>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={
+            pending || remaining === 0 || amount.coupon?.state === 'RESERVING'
+          }
+          onClick={() => void pay()}
+        >
+          결제하기
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={pending}
+          onClick={() => void cancel()}
+        >
+          취소
+        </Button>
+      </div>
+    </Card>
   );
 }

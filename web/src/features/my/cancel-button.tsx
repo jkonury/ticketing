@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { InlineError } from '@/components/ui/feedback';
 export function CancelButton({ id }: { id: number }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -22,10 +24,14 @@ export function CancelButton({ id }: { id: number }) {
   }
   return (
     <>
-      <button type="button" disabled={pending} onClick={cancel}>
+      <Button variant="secondary" disabled={pending} onClick={cancel}>
         {pending ? '취소 중' : '예매 취소'}
-      </button>
-      {error && <p role="alert">취소하지 못했습니다. 다시 시도해 주세요.</p>}
+      </Button>
+      {error && (
+        <InlineError role="alert" className="mt-2">
+          취소하지 못했습니다. 다시 시도해 주세요.
+        </InlineError>
+      )}
     </>
   );
 }

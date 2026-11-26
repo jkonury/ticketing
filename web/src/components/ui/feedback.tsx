@@ -63,12 +63,15 @@ export function ErrorState(props: StateProps) {
 export function InlineError({
   children,
   className,
+  role,
 }: {
   children: ReactNode;
   className?: string;
+  role?: 'alert' | 'status';
 }) {
   return (
     <p
+      role={role}
       className={cx(
         'flex items-center gap-2 rounded-control bg-danger-soft px-3 py-2 text-caption text-danger-strong',
         className,

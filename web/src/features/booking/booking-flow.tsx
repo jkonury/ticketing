@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Page, PageHeader } from '@/components/layout/page';
+import { buttonClassName } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { formatSeoul } from '@/lib/datetime';
 import {
   call,
@@ -41,17 +44,23 @@ export function BookingFlow({
     setQueueVersion((value) => value + 1);
   };
   return (
-    <main className="booking-page">
-      <h1>{schedule.performanceTitle}</h1>
-      <p>{formatSeoul(schedule.startsAt)}</p>
+    <Page>
+      <PageHeader
+        title={schedule.performanceTitle}
+        description={formatSeoul(schedule.startsAt)}
+      />
       {done && booking ? (
-        <section>
-          <h2>예매 완료</h2>
+        <Card padding="lg" className="grid gap-4">
+          <h2 className="text-heading font-bold text-fg">예매 완료</h2>
           <p>예매 번호: {booking.bookingId}</p>
           <p>{booking.seats.map((seat) => seat.label).join(', ')}</p>
           <p>{booking.totalAmount.toLocaleString('ko-KR')}원</p>
-          <Link href="/my">마이페이지</Link>
-        </section>
+          <div>
+            <Link href="/my" className={buttonClassName()}>
+              마이페이지
+            </Link>
+          </div>
+        </Card>
       ) : booking ? (
         <Payment
           booking={booking}
@@ -73,6 +82,6 @@ export function BookingFlow({
           onAdmitted={setAdmission}
         />
       )}
-    </main>
+    </Page>
   );
 }

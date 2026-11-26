@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { InlineError } from '@/components/ui/feedback';
+import { Select } from '@/components/ui/input';
 import { call, codeOf } from './booking-shared';
 import { couponError, couponRejectReason } from './error-messages';
 import {
@@ -116,8 +119,8 @@ export function CouponPanel({
   const locked = disabled || busy;
   const applyLocked = locked || coupon?.state === 'RESERVING';
   return (
-    <fieldset>
-      <legend>쿠폰</legend>
+    <fieldset className="grid min-w-0 gap-3 rounded-control border border-line p-4">
+      <legend className="px-1 text-body font-semibold text-fg">쿠폰</legend>
       {coupon?.state === 'RESERVING' && <p>쿠폰 적용 중입니다.</p>}
       {coupon?.state === 'RESERVED' && (
         <p>
@@ -125,14 +128,15 @@ export function CouponPanel({
         </p>
       )}
       {coupon?.state === 'REJECTED' && (
-        <p role="alert">
+        <InlineError role="alert">
           쿠폰을 적용하지 못했습니다. {couponRejectReason(coupon.rejectReason)}{' '}
           정가로 결제할 수 있습니다.
-        </p>
+        </InlineError>
       )}
       {coupons.length > 0 ? (
-        <>
-          <select
+        <div className="flex flex-wrap gap-2">
+          <Select
+            className="min-w-0 flex-1"
             aria-label="쿠폰 선택"
             value={selected}
             disabled={applyLocked}
@@ -144,24 +148,30 @@ export function CouponPanel({
                 {item.definition.name}
               </option>
             ))}
-          </select>
-          <button
-            type="button"
+          </Select>
+          <Button
+            variant="secondary"
             disabled={applyLocked || !selected}
             onClick={() => void apply()}
           >
             쿠폰 적용
-          </button>
-        </>
+          </Button>
+        </div>
       ) : (
         <p>사용할 수 있는 쿠폰이 없습니다.</p>
       )}
       {coupon && (
-        <button type="button" disabled={locked} onClick={() => void remove()}>
-          쿠폰 해제
-        </button>
+        <div>
+          <Button
+            variant="secondary"
+            disabled={locked}
+            onClick={() => void remove()}
+          >
+            쿠폰 해제
+          </Button>
+        </div>
       )}
-      {message && <p role="alert">{message}</p>}
+      {message && <InlineError role="alert">{message}</InlineError>}
     </fieldset>
   );
 }
