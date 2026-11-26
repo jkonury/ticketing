@@ -149,7 +149,7 @@ export function SeatGrid({
     <div className="grid gap-3">
       <div
         aria-hidden="true"
-        className="mx-auto w-4/5 rounded-b-card border border-line bg-disabled py-1 text-center text-caption font-semibold text-on-disabled"
+        className="mx-auto w-4/5 rounded-b-card border border-line bg-disabled py-1 text-center text-caption font-semibold text-fg-muted"
       >
         무대
       </div>
