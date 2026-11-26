@@ -68,7 +68,8 @@ jobs:
         env:
           CAPTURE_BASE_URL: http://localhost:13000
           VISUAL: '1'
-        run: pnpm capture --update-snapshots
+        # 비교 실패의 actual/diff(test-results)를 지우지 않도록 출력 디렉터리를 분리한다.
+        run: pnpm capture --update-snapshots --output=test-results-baseline
       - name: 기준 이미지 후보 업로드
         if: ${{ failure() && steps.capture.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
