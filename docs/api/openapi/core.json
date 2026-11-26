@@ -1,0 +1,2422 @@
+{
+  "components" : {
+    "schemas" : {
+      "AdminCouponPageResponse" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminCouponResponse"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "AdminCouponResponse" : {
+        "properties" : {
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "discountType" : {
+            "enum" : [ "FIXED", "RATE" ],
+            "type" : "string"
+          },
+          "discountValue" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "issueMode" : {
+            "enum" : [ "UNLIMITED", "LIMITED", "DIRECT" ],
+            "type" : "string"
+          },
+          "issueStartedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "maxDiscount" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "minOrderAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "stats" : {
+            "$ref" : "#/components/schemas/CouponStats"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "STOPPED" ],
+            "type" : "string"
+          },
+          "totalQuantity" : {
+            "format" : "int32",
+            "type" : [ "integer", "null" ]
+          },
+          "validFrom" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "validUntil" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "discountType", "discountValue", "id", "issueMode", "minOrderAmount", "name", "stats", "status", "validFrom", "validUntil" ],
+        "type" : "object"
+      },
+      "ApplyCouponRequest" : {
+        "properties" : {
+          "issuedCouponId" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "issuedCouponId" ],
+        "type" : "object"
+      },
+      "AuditLogItem" : {
+        "properties" : {
+          "action" : {
+            "type" : "string"
+          },
+          "actorId" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "detail" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "occurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "targetId" : {
+            "type" : "string"
+          },
+          "targetType" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "action", "detail", "id", "occurredAt", "targetId", "targetType" ],
+        "type" : "object"
+      },
+      "AuditLogPage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AuditLogItem"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "AvailabilityResponse" : {
+        "properties" : {
+          "availableSeats" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "scheduleId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalSeats" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "availableSeats", "scheduleId", "totalSeats" ],
+        "type" : "object"
+      },
+      "BookingCouponView" : {
+        "properties" : {
+          "discountAmount" : {
+            "type" : [ "number", "null" ]
+          },
+          "issuedCouponId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "rejectReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "state" : {
+            "enum" : [ "RESERVING", "RESERVED", "REJECTED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "issuedCouponId", "state" ],
+        "type" : "object"
+      },
+      "BookingDetailResponse" : {
+        "properties" : {
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "coupon" : {
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/BookingCouponView"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "discountAmount" : {
+            "type" : "number"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "listAmount" : {
+            "type" : "number"
+          },
+          "payableAmount" : {
+            "type" : "number"
+          },
+          "performanceTitle" : {
+            "type" : "string"
+          },
+          "seats" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BookingSeatResponse"
+            },
+            "type" : "array"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "bookingId", "createdAt", "discountAmount", "expiresAt", "listAmount", "payableAmount", "performanceTitle", "seats", "startsAt", "status", "totalAmount" ],
+        "type" : "object"
+      },
+      "BookingPageResponse" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BookingSummaryResponse"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "BookingResponse" : {
+        "properties" : {
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "seats" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BookingSeatResponse"
+            },
+            "type" : "array"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "bookingId", "expiresAt", "seats", "status", "totalAmount" ],
+        "type" : "object"
+      },
+      "BookingSeatResponse" : {
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "price" : {
+            "type" : "number"
+          },
+          "seatId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "label", "price", "seatId" ],
+        "type" : "object"
+      },
+      "BookingSummaryResponse" : {
+        "properties" : {
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "performanceTitle" : {
+            "type" : "string"
+          },
+          "seatCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "bookingId", "createdAt", "performanceId", "performanceTitle", "seatCount", "startsAt", "status", "totalAmount" ],
+        "type" : "object"
+      },
+      "ChangeRoleRequest" : {
+        "properties" : {
+          "role" : {
+            "enum" : [ "USER", "ORGANIZER", "ADMIN" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "role" ],
+        "type" : "object"
+      },
+      "ClaimableCouponResponse" : {
+        "properties" : {
+          "claimed" : {
+            "type" : "boolean"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "discountType" : {
+            "enum" : [ "FIXED", "RATE" ],
+            "type" : "string"
+          },
+          "discountValue" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "issueMode" : {
+            "enum" : [ "UNLIMITED", "LIMITED", "DIRECT" ],
+            "type" : "string"
+          },
+          "issueStartedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "maxDiscount" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "minOrderAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "STOPPED" ],
+            "type" : "string"
+          },
+          "totalQuantity" : {
+            "format" : "int32",
+            "type" : [ "integer", "null" ]
+          },
+          "validFrom" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "validUntil" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "claimed", "discountType", "discountValue", "id", "issueMode", "minOrderAmount", "name", "status", "validFrom", "validUntil" ],
+        "type" : "object"
+      },
+      "CouponDefinitionView" : {
+        "properties" : {
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "discountType" : {
+            "enum" : [ "FIXED", "RATE" ],
+            "type" : "string"
+          },
+          "discountValue" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "issueMode" : {
+            "enum" : [ "UNLIMITED", "LIMITED", "DIRECT" ],
+            "type" : "string"
+          },
+          "issueStartedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "maxDiscount" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "minOrderAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "STOPPED" ],
+            "type" : "string"
+          },
+          "totalQuantity" : {
+            "format" : "int32",
+            "type" : [ "integer", "null" ]
+          },
+          "validFrom" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "validUntil" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "discountType", "discountValue", "id", "issueMode", "minOrderAmount", "name", "status", "validFrom", "validUntil" ],
+        "type" : "object"
+      },
+      "CouponStats" : {
+        "properties" : {
+          "issued" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reserved" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "revoked" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "used" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "issued", "reserved", "revoked", "used" ],
+        "type" : "object"
+      },
+      "CreateBookingRequest" : {
+        "properties" : {
+          "scheduleId" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "seatIds" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "maxItems" : 4,
+            "minItems" : 1,
+            "type" : "array"
+          }
+        },
+        "required" : [ "scheduleId", "seatIds" ],
+        "type" : "object"
+      },
+      "CreateCouponRequest" : {
+        "properties" : {
+          "description" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "discountType" : {
+            "enum" : [ "FIXED", "RATE" ],
+            "type" : [ "string", "null" ]
+          },
+          "discountValue" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "issueMode" : {
+            "enum" : [ "UNLIMITED", "LIMITED", "DIRECT" ],
+            "type" : [ "string", "null" ]
+          },
+          "maxDiscount" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "minOrderAmount" : {
+            "format" : "int64",
+            "minimum" : 0,
+            "type" : [ "integer", "null" ]
+          },
+          "name" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "performanceId" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "totalQuantity" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int32",
+            "type" : [ "integer", "null" ]
+          },
+          "validFrom" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "validUntil" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "discountType", "discountValue", "issueMode", "minOrderAmount", "name", "validFrom", "validUntil" ],
+        "type" : "object"
+      },
+      "CursorPageIssuedCouponView" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/IssuedCouponView"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "DailySettlementResponse" : {
+        "properties" : {
+          "feeAmount" : {
+            "type" : "number"
+          },
+          "feeRate" : {
+            "type" : "number"
+          },
+          "netAmount" : {
+            "type" : "number"
+          },
+          "payoutAmount" : {
+            "type" : "number"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundAmount" : {
+            "type" : "number"
+          },
+          "refundCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "saleAmount" : {
+            "type" : "number"
+          },
+          "saleCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "settlementDate" : {
+            "format" : "date",
+            "type" : "string"
+          }
+        },
+        "required" : [ "feeAmount", "feeRate", "netAmount", "payoutAmount", "performanceId", "refundAmount", "refundCount", "saleAmount", "saleCount", "settlementDate" ],
+        "type" : "object"
+      },
+      "GradePrice" : {
+        "properties" : {
+          "grade" : {
+            "type" : "string"
+          },
+          "price" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "grade", "price" ],
+        "type" : "object"
+      },
+      "GrantCouponRequest" : {
+        "properties" : {
+          "memberIds" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "maxItems" : 100,
+            "minItems" : 0,
+            "type" : [ "array", "null" ]
+          }
+        },
+        "required" : [ "memberIds" ],
+        "type" : "object"
+      },
+      "GrantResult" : {
+        "properties" : {
+          "alreadyClaimed" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "array"
+          },
+          "granted" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [ "alreadyClaimed", "granted" ],
+        "type" : "object"
+      },
+      "IdResponse" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "id" ],
+        "type" : "object"
+      },
+      "IssuedCouponView" : {
+        "properties" : {
+          "definitionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "issuedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "memberId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "orderId" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "status" : {
+            "enum" : [ "ISSUED", "RESERVED", "USED", "REVOKED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "usedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "definitionId", "id", "issuedAt", "memberId", "status" ],
+        "type" : "object"
+      },
+      "LoginRequest" : {
+        "properties" : {
+          "email" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "password" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "password" ],
+        "type" : "object"
+      },
+      "MemberPage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/MemberSummary"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "MemberResponse" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "role" : {
+            "enum" : [ "USER", "ORGANIZER", "ADMIN" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "id", "name", "role" ],
+        "type" : "object"
+      },
+      "MemberSummary" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "role" : {
+            "enum" : [ "USER", "ORGANIZER", "ADMIN" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "createdAt", "email", "id", "name", "role" ],
+        "type" : "object"
+      },
+      "MyCouponResponse" : {
+        "properties" : {
+          "definition" : {
+            "$ref" : "#/components/schemas/CouponDefinitionView"
+          },
+          "definitionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "issuedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "memberId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "orderId" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "status" : {
+            "enum" : [ "ISSUED", "RESERVED", "USED", "REVOKED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "usedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "definition", "definitionId", "id", "issuedAt", "memberId", "status" ],
+        "type" : "object"
+      },
+      "PaymentRequestResponse" : {
+        "properties" : {
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "bookingId", "status" ],
+        "type" : "object"
+      },
+      "PerformanceDetail" : {
+        "properties" : {
+          "description" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "prices" : {
+            "items" : {
+              "$ref" : "#/components/schemas/GradePrice"
+            },
+            "type" : "array"
+          },
+          "schedules" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ScheduleSummary"
+            },
+            "type" : "array"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "venueId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "venueName" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "description", "id", "prices", "schedules", "title", "venueId", "venueName" ],
+        "type" : "object"
+      },
+      "PerformancePage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PerformanceSummary"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "PerformanceSummary" : {
+        "properties" : {
+          "firstStartsAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "venueName" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "title", "venueName" ],
+        "type" : "object"
+      },
+      "PriceRequest" : {
+        "properties" : {
+          "grade" : {
+            "enum" : [ "VIP", "R", "S", "A" ],
+            "type" : "string"
+          },
+          "price" : {
+            "minimum" : 0,
+            "type" : "number"
+          }
+        },
+        "required" : [ "grade", "price" ],
+        "type" : "object"
+      },
+      "RefreshRequest" : {
+        "properties" : {
+          "refreshToken" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "refreshToken" ],
+        "type" : "object"
+      },
+      "RegisterPerformanceRequest" : {
+        "properties" : {
+          "description" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "prices" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PriceRequest"
+            },
+            "minItems" : 1,
+            "type" : "array"
+          },
+          "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "venueId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "description", "prices", "title", "venueId" ],
+        "type" : "object"
+      },
+      "RegisterScheduleRequest" : {
+        "properties" : {
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "startsAt" ],
+        "type" : "object"
+      },
+      "RegisterVenueRequest" : {
+        "properties" : {
+          "name" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "seats" : {
+            "items" : {
+              "$ref" : "#/components/schemas/VenueSeatRequest"
+            },
+            "maxItems" : 5000,
+            "minItems" : 1,
+            "type" : "array"
+          }
+        },
+        "required" : [ "name", "seats" ],
+        "type" : "object"
+      },
+      "SalesResponse" : {
+        "properties" : {
+          "confirmedAmount" : {
+            "type" : "number"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "performanceTitle" : {
+            "type" : "string"
+          },
+          "scheduleId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "soldSeats" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "totalSeats" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "confirmedAmount", "performanceId", "performanceTitle", "scheduleId", "soldSeats", "startsAt", "totalSeats" ],
+        "type" : "object"
+      },
+      "ScheduleDetail" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "performanceTitle" : {
+            "type" : "string"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "performanceId", "performanceTitle", "startsAt" ],
+        "type" : "object"
+      },
+      "ScheduleSummary" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "startsAt" ],
+        "type" : "object"
+      },
+      "SeatView" : {
+        "properties" : {
+          "grade" : {
+            "type" : "string"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "price" : {
+            "type" : "number"
+          },
+          "row" : {
+            "type" : "string"
+          },
+          "seatId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "section" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "grade", "number", "price", "row", "seatId", "section" ],
+        "type" : "object"
+      },
+      "SignUpRequest" : {
+        "properties" : {
+          "email" : {
+            "format" : "email",
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "name" : {
+            "maxLength" : 50,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "password" : {
+            "maxLength" : 64,
+            "minLength" : 8,
+            "type" : "string"
+          },
+          "role" : {
+            "default" : "USER",
+            "enum" : [ "USER", "ORGANIZER", "ADMIN" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "name", "password" ],
+        "type" : "object"
+      },
+      "SseTicketResponse" : {
+        "properties" : {
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "ticket" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "expiresAt", "ticket" ],
+        "type" : "object"
+      },
+      "TokenResponse" : {
+        "properties" : {
+          "accessExpiresIn" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "accessToken" : {
+            "type" : "string"
+          },
+          "refreshExpiresIn" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refreshToken" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "accessExpiresIn", "accessToken", "refreshExpiresIn", "refreshToken" ],
+        "type" : "object"
+      },
+      "UpdateCouponRequest" : {
+        "properties" : {
+          "description" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "discountType" : {
+            "enum" : [ "FIXED", "RATE" ],
+            "type" : [ "string", "null" ]
+          },
+          "discountValue" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "issueMode" : {
+            "enum" : [ "UNLIMITED", "LIMITED", "DIRECT" ],
+            "type" : [ "string", "null" ]
+          },
+          "maxDiscount" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "minOrderAmount" : {
+            "format" : "int64",
+            "minimum" : 0,
+            "type" : [ "integer", "null" ]
+          },
+          "name" : {
+            "maxLength" : 100,
+            "minLength" : 1,
+            "type" : [ "string", "null" ]
+          },
+          "performanceId" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "totalQuantity" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int32",
+            "type" : [ "integer", "null" ]
+          },
+          "validFrom" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "validUntil" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "type" : "object"
+      },
+      "VenueRegisteredResponse" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "seatCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "id", "seatCount" ],
+        "type" : "object"
+      },
+      "VenueSeatRequest" : {
+        "properties" : {
+          "grade" : {
+            "enum" : [ "VIP", "R", "S", "A" ],
+            "type" : "string"
+          },
+          "number" : {
+            "format" : "int32",
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "row" : {
+            "maxLength" : 10,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "section" : {
+            "maxLength" : 20,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "grade", "number", "row", "section" ],
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/admin/audit-logs" : {
+      "get" : {
+        "operationId" : "list_2",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "action",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "actorId",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuditLogPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-audit-log-controller" ]
+      }
+    },
+    "/api/v1/admin/coupons" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminCouponPageResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      },
+      "post" : {
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateCouponRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CouponDefinitionView"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      }
+    },
+    "/api/v1/admin/coupons/{id}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminCouponResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      },
+      "patch" : {
+        "operationId" : "update",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateCouponRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CouponDefinitionView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      }
+    },
+    "/api/v1/admin/coupons/{id}/grants" : {
+      "post" : {
+        "operationId" : "grant",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GrantCouponRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GrantResult"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      }
+    },
+    "/api/v1/admin/coupons/{id}/issued" : {
+      "get" : {
+        "operationId" : "issued",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ISSUED", "RESERVED", "USED", "REVOKED", "EXPIRED" ],
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CursorPageIssuedCouponView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      }
+    },
+    "/api/v1/admin/coupons/{id}/stop" : {
+      "post" : {
+        "operationId" : "stop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CouponDefinitionView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-coupon-controller" ]
+      }
+    },
+    "/api/v1/admin/issued-coupons/{issuedCouponId}/revoke" : {
+      "post" : {
+        "operationId" : "revoke_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "issuedCouponId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IssuedCouponView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-issued-coupon-controller" ]
+      }
+    },
+    "/api/v1/admin/members" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "email",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-member-controller" ]
+      }
+    },
+    "/api/v1/admin/members/{id}/role" : {
+      "put" : {
+        "operationId" : "changeRole",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChangeRoleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-member-controller" ]
+      }
+    },
+    "/api/v1/auth/tokens" : {
+      "post" : {
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/tokens/refresh" : {
+      "post" : {
+        "operationId" : "refresh",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/tokens/revoke" : {
+      "post" : {
+        "operationId" : "revoke",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/bookings" : {
+      "post" : {
+        "operationId" : "create",
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : true,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 1,
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateBookingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingResponse"
+                }
+              }
+            },
+            "description" : "기존 예매 재반환"
+          },
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingResponse"
+                }
+              }
+            },
+            "description" : "예매 생성"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      }
+    },
+    "/api/v1/bookings/me" : {
+      "get" : {
+        "operationId" : "mine",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "performanceId",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingPageResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      }
+    },
+    "/api/v1/bookings/{id}" : {
+      "get" : {
+        "operationId" : "detail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      }
+    },
+    "/api/v1/bookings/{id}/cancel" : {
+      "post" : {
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      }
+    },
+    "/api/v1/bookings/{id}/coupon" : {
+      "delete" : {
+        "operationId" : "removeCoupon",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      },
+      "put" : {
+        "operationId" : "applyCoupon",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApplyCouponRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      }
+    },
+    "/api/v1/bookings/{id}/payments" : {
+      "post" : {
+        "operationId" : "pay",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : true,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 1,
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentRequestResponse"
+                }
+              }
+            },
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "booking-controller" ]
+      }
+    },
+    "/api/v1/coupons" : {
+      "get" : {
+        "operationId" : "claimable",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ClaimableCouponResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "coupon-controller" ]
+      }
+    },
+    "/api/v1/coupons/{definitionId}/claims" : {
+      "post" : {
+        "operationId" : "claim",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "definitionId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IssuedCouponView"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "coupon-controller" ]
+      }
+    },
+    "/api/v1/me/coupons" : {
+      "get" : {
+        "operationId" : "myCoupons",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/MyCouponResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "coupon-controller" ]
+      }
+    },
+    "/api/v1/members" : {
+      "post" : {
+        "operationId" : "signUp",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/members/me" : {
+      "get" : {
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/organizer/sales" : {
+      "get" : {
+        "operationId" : "getScheduleSales",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SalesResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "schedule-read-controller" ]
+      }
+    },
+    "/api/v1/performances" : {
+      "get" : {
+        "operationId" : "performances",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerformancePage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-query-controller" ]
+      },
+      "post" : {
+        "operationId" : "registerPerformance",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterPerformanceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IdResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "catalog-registration-controller" ]
+      }
+    },
+    "/api/v1/performances/{id}" : {
+      "get" : {
+        "operationId" : "performance",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerformanceDetail"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-query-controller" ]
+      }
+    },
+    "/api/v1/performances/{performanceId}/schedules" : {
+      "post" : {
+        "operationId" : "registerSchedule",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "performanceId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterScheduleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IdResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "catalog-registration-controller" ]
+      }
+    },
+    "/api/v1/schedules/availability" : {
+      "get" : {
+        "operationId" : "getScheduleAvailability",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "scheduleIds",
+          "required" : true,
+          "schema" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "maxItems" : 50,
+            "minItems" : 1,
+            "type" : "array"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AvailabilityResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "schedule-read-controller" ]
+      }
+    },
+    "/api/v1/schedules/{id}" : {
+      "get" : {
+        "operationId" : "schedule",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ScheduleDetail"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-query-controller" ]
+      }
+    },
+    "/api/v1/schedules/{id}/seats" : {
+      "get" : {
+        "operationId" : "seats",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SeatView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-query-controller" ]
+      }
+    },
+    "/api/v1/settlements" : {
+      "get" : {
+        "operationId" : "find",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DailySettlementResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/sse-tickets" : {
+      "post" : {
+        "operationId" : "issue",
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseTicketResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "sse-ticket-controller" ]
+      }
+    },
+    "/api/v1/venues" : {
+      "post" : {
+        "operationId" : "registerVenue",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterVenueRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VenueRegisteredResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "catalog-registration-controller" ]
+      }
+    }
+  }
+}

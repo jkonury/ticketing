@@ -30,9 +30,16 @@ class QueueController(private val service: QueueService) {
     }
 }
 
-data class QueueResponse(val status: String, val position: Long? = null, val admissionToken: String? = null, val expiresAt: Instant? = null)
+enum class QueueResponseStatus { WAITING, ADMITTED }
+
+data class QueueResponse(
+    val status: QueueResponseStatus,
+    val position: Long? = null,
+    val admissionToken: String? = null,
+    val expiresAt: Instant? = null,
+)
 
 private fun QueueStatus.toResponse(): QueueResponse = when (this) {
-    is QueueStatus.Waiting -> QueueResponse(status = "WAITING", position = position)
-    is QueueStatus.Admitted -> QueueResponse(status = "ADMITTED", admissionToken = admissionToken, expiresAt = expiresAt)
+    is QueueStatus.Waiting -> QueueResponse(status = QueueResponseStatus.WAITING, position = position)
+    is QueueStatus.Admitted -> QueueResponse(status = QueueResponseStatus.ADMITTED, admissionToken = admissionToken, expiresAt = expiresAt)
 }

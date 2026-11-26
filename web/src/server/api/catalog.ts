@@ -1,53 +1,38 @@
 import 'server-only';
 import { z } from 'zod';
-import {
-  performanceGenre,
-  type PerformanceGenre,
-} from '@/lib/performance-genre';
+import type { PerformanceGenre } from '@/lib/performance-genre';
 import { gateway } from './gateway-client';
+import {
+  zIdResponse,
+  zPerformanceDetailResponse,
+  zPerformancePageResponse,
+  zPerformanceSummaryResponse,
+  zPosterUploadedResponse,
+  zPosterUploadRequest,
+  zRegisterPerformanceRequest,
+  zRegisterScheduleRequest,
+  zRegisterVenueRequest,
+  zScheduleDetail,
+  zSeatsResponse,
+  zUpload,
+  zVenueRegisteredResponse,
+} from './generated/core/zod.gen';
 
-const price = z.object({ grade: z.string(), price: z.number() });
-const schedule = z.object({ id: z.number(), startsAt: z.string() });
+const posterUrl = z.url({ protocol: /^https?$/ });
 const posterFields = {
-  genre: performanceGenre.nullish(),
-  posterUrl: z.url({ protocol: /^https?$/ }).nullish(),
+  posterUrl: posterUrl.nullish(),
+  // 생성기가 nullable 열거형을 optional로 만들므로 기존 null 응답도 허용한다.
+  genre: zPerformanceSummaryResponse.shape.genre.nullish(),
 };
-export const performanceSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  description: z.string(),
-  venueId: z.number(),
-  venueName: z.string(),
-  prices: z.array(price),
-  schedules: z.array(schedule),
-  ...posterFields,
+export const performanceSchema =
+  zPerformanceDetailResponse.extend(posterFields);
+const pageSchema = zPerformancePageResponse.extend({
+  items: z.array(zPerformanceSummaryResponse.extend(posterFields)),
 });
-const pageSchema = z.object({
-  items: z.array(
-    z.object({
-      id: z.number(),
-      title: z.string(),
-      venueName: z.string(),
-      firstStartsAt: z.string().nullish(),
-      ...posterFields,
-    }),
-  ),
-  nextCursor: z.number().nullish(),
+const registerPerformanceSchema = zRegisterPerformanceRequest.extend({
+  genre: zRegisterPerformanceRequest.shape.genre.nullish(),
 });
-const seatsSchema = z.array(
-  z.object({
-    seatId: z.number(),
-    section: z.string(),
-    row: z.string(),
-    number: z.number(),
-    grade: z.string(),
-    price: z.number(),
-  }),
-);
-const registeredSchema = z.object({
-  id: z.number(),
-  seatCount: z.number().optional(),
-});
+
 export function getPerformances(
   cursor?: number,
   size?: number,
@@ -76,19 +61,14 @@ export function getPerformance(id: number) {
 export function getSeats(id: number) {
   return gateway.call({
     path: `/api/v1/schedules/${id}/seats`,
-    schema: seatsSchema,
+    schema: zSeatsResponse,
     auth: 'none',
   });
 }
 export function getSchedule(id: number) {
   return gateway.call({
     path: `/api/v1/schedules/${id}`,
-    schema: z.object({
-      id: z.number(),
-      performanceId: z.number(),
-      performanceTitle: z.string(),
-      startsAt: z.string(),
-    }),
+    schema: zScheduleDetail,
     auth: 'none',
   });
 }
@@ -97,7 +77,8 @@ export function createVenue(body: unknown) {
     path: '/api/v1/venues',
     method: 'POST',
     body,
-    schema: registeredSchema,
+    bodySchema: zRegisterVenueRequest,
+    schema: zVenueRegisteredResponse,
     auth: 'required',
   });
 }
@@ -106,7 +87,8 @@ export function createPerformance(body: unknown) {
     path: '/api/v1/performances',
     method: 'POST',
     body,
-    schema: registeredSchema,
+    bodySchema: registerPerformanceSchema,
+    schema: zIdResponse,
     auth: 'required',
   });
 }
@@ -115,7 +97,8 @@ export function createSchedule(id: number, body: unknown) {
     path: `/api/v1/performances/${id}/schedules`,
     method: 'POST',
     body,
-    schema: registeredSchema,
+    bodySchema: zRegisterScheduleRequest,
+    schema: zIdResponse,
     auth: 'required',
   });
 }
@@ -125,11 +108,8 @@ export function issuePosterUpload(id: number, contentType: string) {
     path: `/api/v1/performances/${id}/poster-uploads`,
     method: 'POST',
     body: { contentType },
-    schema: z.object({
-      uploadId: z.uuid(),
-      url: z.url({ protocol: /^https?$/ }),
-      headers: z.record(z.string(), z.string()),
-    }),
+    bodySchema: zPosterUploadRequest,
+    schema: zUpload.extend({ url: posterUrl }),
     auth: 'required',
   });
 }
@@ -138,7 +118,7 @@ export function completePosterUpload(id: number, uploadId: string) {
   return gateway.call({
     path: `/api/v1/performances/${id}/poster-uploads/${uploadId}/complete`,
     method: 'POST',
-    schema: z.object({ posterUrl: z.url({ protocol: /^https?$/ }) }),
+    schema: zPosterUploadedResponse.extend({ posterUrl }),
     auth: 'required',
     timeoutMs: 10000,
   });

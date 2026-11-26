@@ -1,30 +1,25 @@
 import 'server-only';
 
-import { z } from 'zod';
+import type { z } from 'zod';
 import { ApiError, problemSchema } from '@/lib/problem';
 import { env } from '@/server/env';
 import { sessions } from '@/server/auth/redis';
 import { readSessionId } from '@/server/auth/session-cookie';
 import type { SessionData, SessionStore } from '@/server/auth/session-store';
 import { requestIngressHeaders } from './ingress-address';
+import {
+  zMemberResponse,
+  zRefreshRequest,
+  zTokenResponse,
+} from './generated/core/zod.gen';
 
-const tokenSchema = z.object({
-  accessToken: z.string(),
-  accessExpiresIn: z.number(),
-  refreshToken: z.string(),
-  refreshExpiresIn: z.number(),
-});
 export class SessionExpiredError extends Error {}
-export const memberSchema = z.object({
-  id: z.number(),
-  email: z.string(),
-  name: z.string(),
-  role: z.enum(['USER', 'ORGANIZER', 'ADMIN']),
-});
+export { zMemberResponse as memberSchema };
 export type CallOptions<T> = {
   method?: string;
   path: string;
   body?: unknown;
+  bodySchema?: z.ZodType;
   schema: z.ZodType<T> | null;
   auth: 'required' | 'optional' | 'none';
   timeoutMs?: number;
@@ -102,7 +97,9 @@ export function createGatewayClient(deps: Dependencies) {
           const response = await request('/api/v1/auth/tokens/refresh', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: latest.refreshToken }),
+            body: JSON.stringify(
+              zRefreshRequest.parse({ refreshToken: latest.refreshToken }),
+            ),
             cache: 'no-store',
           });
           if (response.status === 401) {
@@ -110,7 +107,7 @@ export function createGatewayClient(deps: Dependencies) {
             throw new SessionExpiredError();
           }
           if (!response.ok) return await readError(response);
-          const result = tokenSchema.safeParse(
+          const result = zTokenResponse.safeParse(
             await response.json().catch(() => null),
           );
           if (!result.success) throw new ApiError(502, 'BAD_UPSTREAM_RESPONSE');
@@ -156,6 +153,8 @@ export function createGatewayClient(deps: Dependencies) {
     const id = opts.auth === 'none' ? null : await deps.sessionId();
     let session = id ? await deps.sessions.get(id) : null;
     if (!session && opts.auth === 'required') throw new SessionExpiredError();
+    if (opts.bodySchema && !opts.bodySchema.safeParse(opts.body).success)
+      throw new ApiError(400, 'INVALID_REQUEST');
     if (session && id && session.accessExpiresAt <= deps.clock() + 30000)
       session = await refresh(id, session);
     const send = (current: SessionData | null) => {
@@ -211,7 +210,7 @@ export async function getMemberForLogin(token: string) {
     cache: 'no-store',
     signal: AbortSignal.timeout(3000),
   });
-  const result = memberSchema.safeParse(
+  const result = zMemberResponse.safeParse(
     await response.json().catch(() => null),
   );
   if (!response.ok) throw new ApiError(response.status);

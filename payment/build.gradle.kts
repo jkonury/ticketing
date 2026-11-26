@@ -6,6 +6,7 @@ plugins {
 val jooqGenerator = sourceSets.create("jooqGenerator")
 
 dependencies {
+    implementation(libs.springdoc.webmvc.api)
     implementation(project(":common"))
     implementation(project(":contract"))
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
@@ -77,6 +78,14 @@ val generateJooq = tasks.register<JavaExec>("generateJooq") {
 
 sourceSets.main {
     kotlin.srcDir(jooqOutputDir)
+}
+
+tasks.test {
+    val updateOpenApi = providers.environmentVariable("UPDATE_OPENAPI").map { it == "1" }.orElse(false)
+    inputs.property("updateOpenApi", updateOpenApi)
+    inputs.files(rootProject.file("docs/api/openapi/payment.json"))
+    outputs.upToDateWhen { !updateOpenApi.get() }
+    outputs.doNotCacheIf("OpenAPI 스펙을 갱신할 때") { updateOpenApi.get() }
 }
 
 tasks.compileKotlin {

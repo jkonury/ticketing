@@ -41,20 +41,27 @@ declare -A GRADLE_PROJECT=(
   [fake-pg]=:fake-pg [e2e]=:e2e [loadtest/gatling]=:loadtest-gatling
 )
 declare -A DEPENDENTS=(
-  [common]="core core-batch payment payment-batch"
+  [common]="core core-batch payment payment-batch realtime"
   [contract]="core core-batch payment payment-batch"
   [core]="core-batch"
   [payment]="payment-batch"
 )
 
 declare -A modules=()
-full_check=0 web=0 web_build=0 docs=0 skills=0 hook=0 loadtest_py=0 e2e=0 modulith=0
+full_check=0 web=0 web_build=0 api_contract=0 docs=0 skills=0 hook=0 loadtest_py=0 e2e=0 modulith=0
 unmapped=() sh_files=()
 
 for f in "${files[@]}"; do
   case "$f" in
+    core/src/main/*|payment/src/main/*|realtime/src/main/*|docs/api/openapi/*|web/openapi-ts.config.ts|web/scripts/api-contracts.mjs|web/package.json|web/pnpm-lock.yaml|web/src/server/api/generated/*)
+      api_contract=1 ;;
+  esac
+  case "$f" in
     build-logic/*|gradle/*|build.gradle.kts|settings.gradle.kts|gradle.properties|config/*) full_check=1 ;;
     loadtest/gatling/*) modules[loadtest/gatling]=1 ;;
+    docs/api/openapi/core.json) modules[core]=1 ;;
+    docs/api/openapi/payment.json) modules[payment]=1 ;;
+    docs/api/openapi/realtime.json) modules[realtime]=1 ;;
     docs/*.md|*AGENTS.md|*CLAUDE.md|README.md) docs=1 ;;
     web/package.json|web/pnpm-lock.yaml|web/next.config.ts|web/tsconfig.json) web=1; web_build=1 ;;
     web/*) web=1 ;;
@@ -89,6 +96,7 @@ fi
 
 checks=()
 [ "${#gradle_tasks[@]}" -gt 0 ] && checks+=("./scripts/agent/test/check-summary.sh ${gradle_tasks[*]}")
+[ "$api_contract" = 1 ] && checks+=("pnpm --dir web run api:check")
 if [ "$web" = 1 ]; then
   if [ "$web_build" = 1 ]; then checks+=("./scripts/agent/test/web-check.sh --build"); else checks+=("./scripts/agent/test/web-check.sh"); fi
 fi

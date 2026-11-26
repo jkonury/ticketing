@@ -8,6 +8,9 @@ import io.github.ticketing.coupon.application.port.provided.CursorPage
 import io.github.ticketing.coupon.application.port.provided.IssuedCouponView
 import io.github.ticketing.coupon.application.port.provided.MyCouponView
 import io.github.ticketing.coupon.application.port.required.CouponQueryPort
+import io.github.ticketing.coupon.domain.DefinitionStatus
+import io.github.ticketing.coupon.domain.DiscountType
+import io.github.ticketing.coupon.domain.IssueMode
 import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import org.jooq.Condition
 import org.jooq.DSLContext
@@ -136,27 +139,27 @@ internal class CouponQueryJooqAdapter(private val dsl: DSLContext) : CouponQuery
         id = requireNotNull(this[COUPON_DEFINITION.ID]),
         name = requireNotNull(this[COUPON_DEFINITION.NAME]),
         description = this[COUPON_DEFINITION.DESCRIPTION],
-        discountType = requireNotNull(this[COUPON_DEFINITION.DISCOUNT_TYPE]),
+        discountType = DiscountType.valueOf(requireNotNull(this[COUPON_DEFINITION.DISCOUNT_TYPE])),
         discountValue = requireNotNull(this[COUPON_DEFINITION.DISCOUNT_VALUE]),
         maxDiscount = this[COUPON_DEFINITION.MAX_DISCOUNT],
         minOrderAmount = requireNotNull(this[COUPON_DEFINITION.MIN_ORDER_AMOUNT]),
         performanceId = this[COUPON_DEFINITION.PERFORMANCE_ID],
         validFrom = requireNotNull(this[COUPON_DEFINITION.VALID_FROM]).toInstant(),
         validUntil = requireNotNull(this[COUPON_DEFINITION.VALID_UNTIL]).toInstant(),
-        issueMode = requireNotNull(this[COUPON_DEFINITION.ISSUE_MODE]),
+        issueMode = IssueMode.valueOf(requireNotNull(this[COUPON_DEFINITION.ISSUE_MODE])),
         totalQuantity = this[COUPON_DEFINITION.TOTAL_QUANTITY],
-        status = requireNotNull(this[COUPON_DEFINITION.STATUS]),
+        status = DefinitionStatus.valueOf(requireNotNull(this[COUPON_DEFINITION.STATUS])),
         issueStartedAt = this[COUPON_DEFINITION.ISSUE_STARTED_AT]?.toInstant(),
     )
 
     private fun Record.toIssuedView(now: Instant): IssuedCouponView {
-        val stored = requireNotNull(this[ISSUED_COUPON.STATUS])
+        val stored = IssuedCouponStatus.valueOf(requireNotNull(this[ISSUED_COUPON.STATUS]))
         val validUntil = requireNotNull(this[COUPON_DEFINITION.VALID_UNTIL]).toInstant()
         return IssuedCouponView(
             id = requireNotNull(this[ISSUED_COUPON.ID]),
             definitionId = requireNotNull(this[ISSUED_COUPON.DEFINITION_ID]),
             memberId = requireNotNull(this[ISSUED_COUPON.MEMBER_ID]),
-            status = if (stored == "ISSUED" && validUntil.isBefore(now)) "EXPIRED" else stored,
+            status = if (stored == IssuedCouponStatus.ISSUED && validUntil.isBefore(now)) IssuedCouponStatus.EXPIRED else stored,
             orderId = this[ISSUED_COUPON.ORDER_ID],
             discountAmount = this[ISSUED_COUPON.DISCOUNT_AMOUNT],
             issuedAt = requireNotNull(this[ISSUED_COUPON.ISSUED_AT]).toInstant(),

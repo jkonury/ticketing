@@ -7,6 +7,7 @@ spring-boot = "4.1.2"
 spring-dependency-management = "1.1.7"
 spring-modulith = "2.1.1"
 spring-cloud = "2025.1.4"
+springdoc = "3.2.1"
 archunit = "1.5.1"
 aws-sdk = "2.58.0"
 ktlint = "1.8.0"
@@ -28,6 +29,8 @@ spring-dependency-management-plugin = { module = "io.spring.gradle:dependency-ma
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
 spring-cloud-dependencies = { module = "org.springframework.cloud:spring-cloud-dependencies", version.ref = "spring-cloud" }
+springdoc-webmvc-api = { module = "org.springdoc:springdoc-openapi-starter-webmvc-api", version.ref = "springdoc" }
+springdoc-webflux-api = { module = "org.springdoc:springdoc-openapi-starter-webflux-api", version.ref = "springdoc" }
 
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 aws-s3 = { module = "software.amazon.awssdk:s3", version.ref = "aws-sdk" }

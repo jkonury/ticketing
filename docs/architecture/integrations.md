@@ -22,6 +22,7 @@
 ## 8. BFF (Next.js)
 
 - 일반 API 요청은 전부 BFF를 거친다.
+- BFF는 core·payment·realtime의 OpenAPI 스펙에서 생성한 Zod 스키마로 HTTP 요청 본문과 JSON 응답을 검증한다. 각 앱은 로컬 프로필과 통합 테스트에서만 스펙을 제공한다. SSE 본문은 이벤트 카탈로그를 따른다. [ADR 0047](../adr/0047-openapi-codegen-for-bff-boundary.md)
 - 세션은 Redis `bff:session:<sessionId>`에 회원 ID, 이름, 역할, access·refresh 토큰과 access 만료 시각을 저장하며 TTL은 14일이다. 쿠키 `ticketing_session`에는 불투명 세션 ID만 담고 `HttpOnly`, `SameSite=Lax`, `Path=/`, 14일 만료를 설정한다. `SESSION_COOKIE_SECURE` 환경 변수로 `Secure`를 켜며 로컬 HTTP에서는 끈다.
 - access 토큰은 만료 30초 전 또는 하위 API가 401을 반환하면 갱신한다. 세션당 한 번만 갱신하도록 프로세스 안 single-flight와 Redis 락을 사용하며, 갱신 실패 시 세션을 파기하고 로그인으로 보낸다.
 - 상태를 바꾸는 Route Handler는 `Origin`(없으면 `Referer`)이 web origin과 같은지 검사한다. Server Action도 Next 내장 검사에 더해 같은 검사를 적용한다.

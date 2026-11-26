@@ -46,6 +46,7 @@ class SecurityConfig {
                     "/api/v1/auth/tokens/revoke",
                 ).permitAll()
                     .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml").permitAll()
                     // 공연·회차 조회는 공개 API다 (catalog 모듈의 경로)
                     .requestMatchers(HttpMethod.GET, "/api/v1/performances/**", "/api/v1/schedules/**").permitAll()
                     .anyRequest().authenticated()

@@ -19,6 +19,7 @@ dependencies {
     compileOnly("org.slf4j:slf4j-api")
 
     testFixturesApi("org.testcontainers:testcontainers-kafka")
+    testFixturesImplementation("tools.jackson.core:jackson-databind")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.batch:spring-batch-infrastructure")

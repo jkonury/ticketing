@@ -1,21 +1,25 @@
 package io.github.ticketing.coupon.application.port.provided
 
+import io.github.ticketing.coupon.domain.DefinitionStatus
+import io.github.ticketing.coupon.domain.DiscountType
+import io.github.ticketing.coupon.domain.IssueMode
+import io.github.ticketing.coupon.domain.IssuedCouponStatus
 import java.time.Instant
 
 data class CouponDefinitionView(
     val id: Long,
     val name: String,
     val description: String?,
-    val discountType: String,
+    val discountType: DiscountType,
     val discountValue: Long,
     val maxDiscount: Long?,
     val minOrderAmount: Long,
     val performanceId: Long?,
     val validFrom: Instant,
     val validUntil: Instant,
-    val issueMode: String,
+    val issueMode: IssueMode,
     val totalQuantity: Int?,
-    val status: String,
+    val status: DefinitionStatus,
     val issueStartedAt: Instant?,
 )
 
@@ -27,7 +31,7 @@ data class IssuedCouponView(
     val id: Long,
     val definitionId: Long,
     val memberId: Long,
-    val status: String,
+    val status: IssuedCouponStatus,
     val orderId: Long?,
     val discountAmount: Long?,
     val issuedAt: Instant,

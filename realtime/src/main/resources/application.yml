@@ -1,3 +1,10 @@
+springdoc:
+  api-docs:
+    enabled: false
+  paths-to-match: /api/v1/**
+  paths-to-exclude: /api/v1/streams/**
+  override-with-generic-response: false
+
 spring:
   reactor:
     context-propagation: auto
@@ -41,3 +48,13 @@ management:
 
 server:
   port: 18081
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+springdoc:
+  api-docs:
+    enabled: true

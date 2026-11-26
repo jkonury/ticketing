@@ -1,21 +1,22 @@
 import 'server-only';
-import { z } from 'zod';
 import { gateway } from './gateway-client';
-import { couponDefinitionSchema, issuedCouponSchema } from './admin-coupons';
-import { bookingCouponSchema, bookingDetailSchema } from './booking';
-
-export const claimableCouponSchema = couponDefinitionSchema.extend({
-  claimed: z.boolean(),
-});
-export const myCouponSchema = issuedCouponSchema.extend({
-  definition: couponDefinitionSchema,
-});
-export { bookingCouponSchema, bookingDetailSchema };
+import {
+  zApplyCouponRequest,
+  zBookingDetailResponse,
+  zClaimableResponse,
+  zIssuedCouponView,
+  zMyCouponsResponse,
+} from './generated/core/zod.gen';
+export {
+  zClaimableCouponResponse as claimableCouponSchema,
+  zMyCouponResponse as myCouponSchema,
+} from './generated/core/zod.gen';
+export { bookingCouponSchema, bookingDetailSchema } from './booking';
 
 export function listClaimableCoupons() {
   return gateway.call({
     path: '/api/v1/coupons',
-    schema: z.array(claimableCouponSchema),
+    schema: zClaimableResponse,
     auth: 'required',
   });
 }
@@ -23,14 +24,14 @@ export function claimCoupon(definitionId: number) {
   return gateway.call({
     method: 'POST',
     path: `/api/v1/coupons/${definitionId}/claims`,
-    schema: issuedCouponSchema,
+    schema: zIssuedCouponView,
     auth: 'required',
   });
 }
 export function listMyCoupons(timeoutMs?: number) {
   return gateway.call({
     path: '/api/v1/me/coupons',
-    schema: z.array(myCouponSchema),
+    schema: zMyCouponsResponse,
     auth: 'required',
     ...(timeoutMs ? { timeoutMs } : {}),
   });
@@ -40,7 +41,8 @@ export function applyBookingCoupon(bookingId: number, issuedCouponId: number) {
     method: 'PUT',
     path: `/api/v1/bookings/${bookingId}/coupon`,
     body: { issuedCouponId },
-    schema: bookingDetailSchema,
+    bodySchema: zApplyCouponRequest,
+    schema: zBookingDetailResponse,
     auth: 'required',
   });
 }
@@ -48,7 +50,7 @@ export function removeBookingCoupon(bookingId: number) {
   return gateway.call({
     method: 'DELETE',
     path: `/api/v1/bookings/${bookingId}/coupon`,
-    schema: bookingDetailSchema,
+    schema: zBookingDetailResponse,
     auth: 'required',
   });
 }
