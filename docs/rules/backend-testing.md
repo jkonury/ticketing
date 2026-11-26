@@ -83,4 +83,4 @@ E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Grad
   - 스크립트가 실행마다 관리자(ADMIN) 계정을 가입시킨 뒤 DB에서 승격하고, `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다. 앱 코드에는 E2E 전용 경로가 없다.
   - 로그는 `build/e2e/logs/`에 저장한다.
 - 부하 테스트: `scripts/loadtest/run.sh`(k6)와 Gatling(`loadtest/gatling/README.md`). 프로세스는 fake-pg, core, realtime, Gateway, payment(18085)이며 실행마다 `ensure-payment-db.sh`로 `payment_db`를 준비한다. 결과는 `build/loadtest/runs/`에 저장한다. 절차는 [부하 테스트 런북](../performance/loadtest-runbook.md)을 따른다.
-- CI: `.github/workflows/ci.yml`. E2E·부하 테스트는 포함하지 않는다.
+- CI: `.github/workflows/ci.yml`(빌드·검사)과 `.github/workflows/web-e2e.yml`(PR마다 `run.sh --web --keep` → `seed-demo.sh` → `pnpm capture`, 캡처는 artifact `ui-capture`). 백엔드 E2E·부하 테스트는 포함하지 않는다.
