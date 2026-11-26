@@ -72,6 +72,7 @@ docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 �
 ./scripts/loadtest/run.sh --scenario <smoke|queue-surge|hot-seats|seat-conflict-refund|coupon-drop>  # k6 부하 테스트 (Gateway 18000 호출)
 ./gradlew :loadtest-gatling:gatlingRun --simulation io.github.ticketing.loadtest.<Simulation>  # Gatling 부하 시나리오 (loadtest/gatling/README.md)
 ./gradlew build                      # 전체 빌드 + 테스트
+./scripts/dev/seed-demo.sh [--reset [--yes]]  # 화면 시연 데이터
 ./gradlew :core:bootRun
 ./gradlew :payment:bootRun          # 결제 앱(18085). fake-pg 웹훅이 직접 호출. scripts/dev/run.sh --payment
 ./gradlew :realtime:bootRun
