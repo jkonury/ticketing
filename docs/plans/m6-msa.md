@@ -57,7 +57,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 |---|---|---|---|
 | 1 ✅ | contract·common 추출 마무리(P3·P4 결과 반영), 이벤트별 외부화 대상 표 확정([events.md](../architecture/events.md#kafka-외부화-대상-m6)) | core 빌드와 기존 테스트 통과. 이벤트 JSON 스키마 예시가 문서에 있다 | `./scripts/agent/test/run-tests.sh`, Modulith 검증 |
 | 2 ✅ | Kafka 외부화([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md))를 **모놀리스 상태에서** 먼저 적용: 외부화 설정, payment 리스너가 Kafka로 결제 계약 이벤트(`PaymentRequested`·`RefundRequested`)를 받고 결제 결과 3종을 Kafka로 발행, 소비자 멱등, `serialize-externalization`·outbox 모드 검토 | core 안에서 결제 계약 이벤트 5종이 Kafka를 거쳐도 core E2E 7개와 별도 E2E 9개가 통과한다. 같은 이벤트를 두 번 받아도 결과가 같다. 브로커 중단·복구 후 미완료 이벤트가 재전달된다. 결제 확정 지연(`ticketing_booking_payment_confirmation_lag`) p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 결과 문서에 기록한다(회귀 허용 폭은 정하지 않고 기록·비교까지만). | 소비자 멱등 테스트, 브로커 장애 주입, Testcontainers Kafka, `./scripts/e2e/run.sh`, Gatling `hot-seats` 콜드 3회(01과 같은 조건)로 확정 지연 p95 측정 |
-| 3 | `payment` 분리: 별도 Gradle 앱, 별도 DB 이전([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)), **fake-pg 웹훅 수신 경로 이전**(아래 상세) | payment 앱이 독립 기동하고 자기 DB와 `event_publication`을 쓴다. 이전 후 건수·체크섬 일치. 웹훅 멱등 키(`webhook_event.event_id`) 처리가 유지되고 기존 E2E(웹훅 멱등, 만료 후 환불)가 통과한다. 결제 확정 지연(`ticketing_booking_payment_confirmation_lag`) p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 결과 문서에 기록한다(회귀 허용 폭은 정하지 않고 기록·비교까지만). | 이전 절차 체크, 결제 E2E, 웹훅 중복 전송, Gatling `hot-seats` 콜드 3회(01과 같은 조건)로 확정 지연 p95 측정 |
+| 3 ✅ | `payment` 분리: 별도 Gradle 앱, 별도 DB 이전([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)), **fake-pg 웹훅 수신 경로 이전**(아래 상세) | payment 앱이 독립 기동하고 자기 DB와 `event_publication`을 쓴다. 이전 후 건수·체크섬 일치. 웹훅 멱등 키(`webhook_event.event_id`) 처리가 유지되고 기존 E2E(웹훅 멱등, 만료 후 환불)가 통과한다. 결제 확정 지연(`ticketing_booking_payment_confirmation_lag`) p95를 [01 기준선](../performance/m6/01-pre-split-baseline-gatling.md)과 비교해 결과 문서에 기록한다(회귀 허용 폭은 정하지 않고 기록·비교까지만). | 이전 절차 체크, 결제 E2E, 웹훅 중복 전송, Gatling `hot-seats` 콜드 3회(01과 같은 조건)로 확정 지연 p95 측정 |
 | 4 | `settlement` 분리: `BookingConfirmed`·`BookingCancelled` 소비, 정산 Batch 구성 | 분리 후 정산 결과가 P2 기준선과 같다 | Batch E2E 비교 |
 | 5 | 예매–결제·쿠폰 Saga 재검증: 결제 실패·웹훅 중복·만료 후 환불·쿠폰 예약 해제·사용 확정 | 기존 E2E 13개가 분리 환경에서 통과하고, 브로커·앱 중단 시나리오에서 보상 흐름이 완료된다 | `./scripts/e2e/run.sh` 확장, 장애 주입 |
 | 6 | 컨테이너 이미지: 모듈별 Dockerfile, 이미지 빌드 | 모든 앱 이미지가 빌드되고 compose로 기동한다 | compose 기동 + E2E |
@@ -131,7 +131,7 @@ P3·P4는 모듈 의존이 바뀌므로 Modulith 구조 검증(`ApplicationModul
 - [x] **3-5 core에서 payment 제거** — core·core-batch에서 payment 코드를 제거하고 core 테스트에 Kafka 결제 대역을 적용한다
 - [x] **3-6 연결 경로 이전** — fake-pg 웹훅 URL, Gateway `/api/v1/payments/**` 라우트, `scripts/e2e`·`scripts/dev`·`scripts/loadtest` 프로세스 구성을 갱신하고 웹훅 E2E를 `e2e` 모듈로 옮긴다
 - [x] **3-7 데이터 이전·문서** — `pg_dump` 이전 스크립트(`scripts/db/migrate-payment-data.sh`)와 건수·체크섬 대조, runbook(§9), architecture·data-ownership·erd·events 등·AGENTS.md 반영
-- [ ] **3-8 측정**(후속) — Gatling `hot-seats` 콜드 3회 확정 지연 p95를 01 기준선과 비교한다
+- [x] **3-8 측정** — Gatling `hot-seats` 콜드 3회 확정 지연 p95를 01 기준선과 비교했다. [03 측정 결과](../performance/m6/03-payment-split-gatling.md)
 
 각 단계의 세부 체크리스트는 단계를 시작할 때 이 문서에 추가한다. 한 단계의 완료 기준을 만족하기 전에는 다음 단계를 시작하지 않는다.
 
