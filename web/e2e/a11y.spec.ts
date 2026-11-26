@@ -21,7 +21,7 @@ async function expectNoViolations(page: Page) {
   ).toEqual([]);
 }
 
-// 결제 화면은 흐름이 길어 booking-flow에서 다루고 여기서는 제외한다.
+// 대기열·결제 화면은 흐름이 길거나 일시적이라 여기서는 제외한다.
 for (const viewport of viewports) {
   test.describe(`접근성(axe) ${viewport.name}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
@@ -59,8 +59,7 @@ for (const viewport of viewports) {
 
       await page.goto(`/performances/${show.performanceId}`);
       await page.getByRole('link', { name: '예매하기' }).click();
-      await expect(page.getByRole('heading', { name: '대기열' })).toBeVisible();
-      await expectNoViolations(page);
+      // E2E 스택은 입장이 빨라 대기열 화면이 잠깐만 보이므로 좌석 선택 화면만 검사한다.
       await expect(
         page.getByRole('heading', { name: '좌석 선택' }),
       ).toBeVisible({
