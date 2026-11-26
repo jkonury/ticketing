@@ -62,3 +62,5 @@
 | [0046](0046-attested-client-ip.md) | 비회원 요청의 클라이언트 IP 신뢰 경계 | 수락 |
 | [0047](0047-openapi-codegen-for-bff-boundary.md) | HTTP API 계약을 OpenAPI 스펙으로 추출하고 BFF 경계 zod 스키마를 생성 | 제안 |
 | [0048](0048-ai-dev-workflow-pipeline.md) | Claude Code·Codex 공용 반자율 개발 파이프라인 | 합의 |
+| [0049](0049-ui-redesign-direction.md) | web UI 개편 방향과 디자인 시스템 구성 | 합의 |
+| [0050](0050-poster-storage-minio-presigned.md) | 공연 포스터 저장소와 presigned URL 업로드 | 합의 |
