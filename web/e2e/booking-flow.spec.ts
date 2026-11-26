@@ -97,8 +97,8 @@ test('브라우저 예매와 좌석 전파 및 JWT 비노출', async ({
       { timeout: 45_000 },
     );
     await buyer.getByRole('link', { name: '마이페이지' }).last().click();
-    const row = buyer.getByRole('row').filter({ hasText: show.title });
-    await expect(row).toContainText('확정');
+    const row = buyer.getByRole('listitem').filter({ hasText: show.title });
+    await expect(row).toContainText('예매 확정');
     await expect(row).toContainText('결제 완료');
     await buyer.goto(`/performances/${show.performanceId}`);
     await expect(

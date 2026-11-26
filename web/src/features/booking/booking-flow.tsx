@@ -1,10 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { Page, PageHeader } from '@/components/layout/page';
-import { buttonClassName } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { formatSeoul } from '@/lib/datetime';
 import {
   call,
@@ -13,6 +10,7 @@ import {
   type Schedule,
   type Seat,
 } from './booking-shared';
+import { BookingDone } from './booking-done';
 import { Queue } from './queue';
 import { Seats } from './seats';
 import { Payment } from './payment';
@@ -50,17 +48,7 @@ export function BookingFlow({
         description={formatSeoul(schedule.startsAt)}
       />
       {done && booking ? (
-        <Card padding="lg" className="grid gap-4">
-          <h2 className="text-heading font-bold text-fg">예매 완료</h2>
-          <p>예매 번호: {booking.bookingId}</p>
-          <p>{booking.seats.map((seat) => seat.label).join(', ')}</p>
-          <p>{booking.totalAmount.toLocaleString('ko-KR')}원</p>
-          <div>
-            <Link href="/my" className={buttonClassName()}>
-              마이페이지
-            </Link>
-          </div>
-        </Card>
+        <BookingDone schedule={schedule} booking={booking} />
       ) : booking ? (
         <Payment
           booking={booking}

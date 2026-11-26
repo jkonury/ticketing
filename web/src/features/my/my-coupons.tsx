@@ -1,5 +1,6 @@
 import type { MyPageView } from '@/server/aggregate/my-page';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { EmptyState, InlineError } from '@/components/ui/feedback';
 import { formatSeoul } from '@/lib/datetime';
 
@@ -29,15 +30,25 @@ export function MyCoupons({ view }: { view: MyPageView }) {
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {view.coupons.map((coupon) => (
-            <li
-              key={coupon.id}
-              className="rounded-card border border-line bg-surface p-4"
-            >
-              {coupon.definition.name} · {discountText(coupon.definition)} ·{' '}
-              {formatSeoul(coupon.definition.validUntil)}까지 ·{' '}
-              <Badge tone={coupon.status === 'ISSUED' ? 'success' : 'neutral'}>
-                {statusLabels[coupon.status] ?? coupon.status}
-              </Badge>
+            <li key={coupon.id}>
+              <Card className="flex flex-wrap items-center justify-between gap-3">
+                <div className="grid min-w-0 gap-1">
+                  <strong className="break-words text-body text-fg">
+                    {coupon.definition.name}
+                  </strong>
+                  <span className="text-heading font-bold text-brand-strong">
+                    {discountText(coupon.definition)}
+                  </span>
+                  <span className="text-caption text-fg-muted">
+                    {formatSeoul(coupon.definition.validUntil)}까지
+                  </span>
+                </div>
+                <Badge
+                  tone={coupon.status === 'ISSUED' ? 'success' : 'neutral'}
+                >
+                  {statusLabels[coupon.status] ?? coupon.status}
+                </Badge>
+              </Card>
             </li>
           ))}
         </ul>
