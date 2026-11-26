@@ -40,6 +40,16 @@
   --color-seat-sold: #cbd0da;
   --color-on-seat-sold: #6b7385;
 
+  /* 생성형 포스터 배경. 흰 글자가 읽히는 짙은 색만 둔다. */
+  --color-poster-1: #3730a3;
+  --color-poster-2: #9d174d;
+  --color-poster-3: #115e59;
+  --color-poster-4: #9a3412;
+  --color-poster-5: #1e3a8a;
+  --color-poster-6: #6b21a8;
+  --color-poster-7: #166534;
+  --color-poster-8: #7f1d1d;
+
   --font-sans:
     var(--font-pretendard), 'Pretendard Variable', Pretendard, system-ui,
     -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
