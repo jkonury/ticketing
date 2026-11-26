@@ -6,17 +6,18 @@ cd "$ROOT"
 source "$ROOT/scripts/lib/scouter.sh"
 usage() {
   cat <<'HELP'
-사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--payment] [--realtime] [--gateway] [--web]
+사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--payment] [--realtime] [--gateway] [--web] [--slow-queue]
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
 --infra: PostgreSQL, Redis, Kafka(기동 뒤 payment_db 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
 --payment: 결제 앱(18085, 웹훅은 fake-pg가 직접 호출). 결제 흐름에는 --core와 --payment를 함께 띄운다
+--slow-queue: 대기열 입장을 5초에 1명으로 늦춘다(대기 순번 화면 확인용, realtime에 적용. 예: --all --slow-queue)
 앱 옵션은 조합할 수 있습니다. 의존 인프라는 별도로 선택해야 합니다.
 Java 앱은 Scouter를 기본으로 연결합니다. .env 또는 환경 변수에 SCOUTER_AGENT_DIR을 지정하세요.
 SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 앱은 이 터미널에서 관리하며 Ctrl+C로 종료합니다. Docker 컨테이너는 유지됩니다.
 HELP
 }
-infra=false; fakepg=false; observability=false; core=false; payment=false; realtime=false; gateway=false; web=false
+infra=false; fakepg=false; observability=false; core=false; payment=false; realtime=false; gateway=false; web=false; slow_queue=false
 if (($# == 0)); then set -- --all; fi
 for arg in "$@"; do
   case "$arg" in
@@ -29,6 +30,7 @@ for arg in "$@"; do
     --realtime) realtime=true ;;
     --gateway) gateway=true ;;
     --web) web=true ;;
+    --slow-queue) slow_queue=true ;;
     -h|--help) usage; exit 0 ;;
     *) printf '알 수 없는 옵션: %s\n' "$arg" >&2; usage >&2; exit 1 ;;
   esac
@@ -99,6 +101,11 @@ start_java() {
 $fakepg && start fake-pg java -jar fake-pg/build/libs/fake-pg.jar
 $core && start_java core
 $payment && start_java payment
+if $realtime && $slow_queue; then
+  # QueueProperties(ticketing.realtime.queue)의 relaxed binding. .env보다 우선한다
+  export TICKETING_REALTIME_QUEUE_ADMISSIONINTERVAL=5s TICKETING_REALTIME_QUEUE_ADMISSIONBATCHSIZE=1
+  echo "대기열 입장 속도: 5초에 1명(--slow-queue)" >&2
+fi
 $realtime && start_java realtime
 $gateway && start_java gateway
 $web && start web bash -c 'cd "$1/web" && exec pnpm dev' _ "$ROOT"
