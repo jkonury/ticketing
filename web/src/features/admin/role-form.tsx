@@ -23,7 +23,7 @@ export function RoleForm({
         name="role"
         defaultValue={role}
         aria-label="역할"
-        className="w-auto min-w-36"
+        className="w-auto min-w-28 md:min-w-36"
       >
         <option value="USER">일반 회원</option>
         <option value="ORGANIZER">주최자</option>

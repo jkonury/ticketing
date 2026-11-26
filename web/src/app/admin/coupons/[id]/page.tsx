@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { RouteLoading } from '@/components/route-loading';
 import { notFound } from 'next/navigation';
 import { Page, PageHeader } from '@/components/layout/page';
 import { Button, buttonClassName } from '@/components/ui/button';
@@ -20,13 +22,20 @@ import { withSessionRedirect } from '@/server/auth/require-user';
 
 const STATUSES = ['ISSUED', 'RESERVED', 'USED', 'REVOKED', 'EXPIRED'];
 
-export default async function Route({
-  params,
-  searchParams,
-}: {
+type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ status?: string; cursor?: string }>;
-}) {
+};
+
+export default function Route(props: Props) {
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <CouponDetail {...props} />
+    </Suspense>
+  );
+}
+
+async function CouponDetail({ params, searchParams }: Props) {
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const query = await searchParams;

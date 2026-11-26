@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0049](../adr/0049-ui-redesign-direction.md), [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 - 작성일: 2026-11-26
-- 상태: U0·U1·U2 완료. U3 진행 중
+- 상태: U0·U1·U2·U3 완료. 다음은 U4(포스터·장르 백엔드)
 
 web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)(M 트랙), 워크플로 로드맵 [workflow/roadmap.md](../workflow/roadmap.md)(W 트랙)와 병행한다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다. 시각 규칙의 기준은 [UI 가이드](../ui-guide.md)다.
 
@@ -57,7 +57,7 @@ web 화면 개편 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap
 
 - [x] 주최자 대시보드: 지표 카드, 전체 폭 표, 빈 상태
 - [x] 공연 등록: 2열 폼, 좌석 배치 미리보기
-- [ ] 관리자 화면(쿠폰 관리 등): 개발 모드에서 `/admin/members`·`/admin/coupons`가 내는 "uncached data during prerendering" 콘솔 오류 해소(지금은 캡처 스크립트가 거름)
+- [x] 관리자 화면(쿠폰 관리 등): 개발 모드에서 `/admin/members`·`/admin/coupons`가 내는 "uncached data during prerendering" 콘솔 오류 해소(지금은 캡처 스크립트가 거름)
 
 **완료 기준**: 백오피스 화면이 U1의 토큰·프리미티브만으로 구성되고, 모바일에서 잘리는 표가 없다.
 

@@ -1,9 +1,16 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { RouteLoading } from '@/components/route-loading';
 import { Page, PageHeader } from '@/components/layout/page';
 import { Button, buttonClassName } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';
+import {
+  tableClass,
+  thClass,
+  tdClass,
+  secondaryCol,
+} from '@/components/ui/table-styles';
 import { formatSeoul, seoulLocalToInstant } from '@/lib/datetime';
 import { listAuditLogs } from '@/server/api/admin';
 import { withSessionRedirect } from '@/server/auth/require-user';
@@ -29,11 +36,19 @@ function toInstant(value?: string) {
   }
 }
 
-export default async function Route({
+export default function Route({
   searchParams,
 }: {
   searchParams: Promise<Query>;
 }) {
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <AuditLogs searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function AuditLogs({ searchParams }: { searchParams: Promise<Query> }) {
   const query = await searchParams;
   const page = await withSessionRedirect(() =>
     listAuditLogs({
@@ -90,22 +105,24 @@ export default async function Route({
         <thead>
           <tr>
             <th className={thClass}>일시</th>
-            <th className={thClass}>행위자</th>
+            <th className={`${thClass} ${secondaryCol}`}>행위자</th>
             <th className={thClass}>액션</th>
-            <th className={thClass}>대상</th>
-            <th className={thClass}>상세</th>
+            <th className={`${thClass} ${secondaryCol}`}>대상</th>
+            <th className={`${thClass} ${secondaryCol}`}>상세</th>
           </tr>
         </thead>
         <tbody>
           {page.items.map((log) => (
             <tr key={log.id}>
               <td className={tdClass}>{formatSeoul(log.occurredAt)}</td>
-              <td className={tdClass}>{log.actorId ?? '-'}</td>
-              <td className={tdClass}>{log.action}</td>
-              <td className={tdClass}>
+              <td className={`${tdClass} ${secondaryCol}`}>
+                {log.actorId ?? '-'}
+              </td>
+              <td className={`${tdClass} break-all`}>{log.action}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>
                 {log.targetType} {log.targetId}
               </td>
-              <td className={tdClass}>
+              <td className={`${tdClass} ${secondaryCol}`}>
                 <code>{JSON.stringify(log.detail ?? {})}</code>
               </td>
             </tr>

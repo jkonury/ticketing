@@ -1,16 +1,33 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { RouteLoading } from '@/components/route-loading';
 import { Page, PageHeader } from '@/components/layout/page';
 import { buttonClassName } from '@/components/ui/button';
-import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';
+import {
+  tableClass,
+  thClass,
+  tdClass,
+  secondaryCol,
+} from '@/components/ui/table-styles';
 import { formatSeoul } from '@/lib/datetime';
 import { listAdminCoupons } from '@/server/api/admin-coupons';
 import { withSessionRedirect } from '@/server/auth/require-user';
 
-export default async function Route({
+type SearchParams = Promise<{ cursor?: string }>;
+
+export default function Route({
   searchParams,
 }: {
-  searchParams: Promise<{ cursor?: string }>;
+  searchParams: SearchParams;
 }) {
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <Coupons searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function Coupons({ searchParams }: { searchParams: SearchParams }) {
   const { cursor } = await searchParams;
   const parsed = cursor ? Number(cursor) : NaN;
   const page = await withSessionRedirect(() =>
@@ -29,13 +46,13 @@ export default async function Route({
       <table className={tableClass}>
         <thead>
           <tr>
-            <th className={thClass}>ID</th>
+            <th className={`${thClass} ${secondaryCol}`}>ID</th>
             <th className={thClass}>이름</th>
             <th className={thClass}>할인</th>
-            <th className={thClass}>발급 방식</th>
-            <th className={thClass}>기간</th>
+            <th className={`${thClass} ${secondaryCol}`}>발급 방식</th>
+            <th className={`${thClass} ${secondaryCol}`}>기간</th>
             <th className={thClass}>상태</th>
-            <th className={thClass}>
+            <th className={`${thClass} ${secondaryCol}`}>
               현재 상태별 건수: 발급(미사용)/예약/사용/회수
             </th>
           </tr>
@@ -43,7 +60,7 @@ export default async function Route({
         <tbody>
           {page.items.map((c) => (
             <tr key={c.id}>
-              <td className={tdClass}>{c.id}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>{c.id}</td>
               <td className={tdClass}>
                 <Link href={`/admin/coupons/${c.id}`} className="font-semibold">
                   {c.name}
@@ -54,12 +71,12 @@ export default async function Route({
                   ? `${c.discountValue}%`
                   : `${c.discountValue.toLocaleString('ko-KR')}원`}
               </td>
-              <td className={tdClass}>{c.issueMode}</td>
-              <td className={tdClass}>
+              <td className={`${tdClass} ${secondaryCol}`}>{c.issueMode}</td>
+              <td className={`${tdClass} ${secondaryCol}`}>
                 {formatSeoul(c.validFrom)} ~ {formatSeoul(c.validUntil)}
               </td>
               <td className={tdClass}>{c.status}</td>
-              <td className={tdClass}>
+              <td className={`${tdClass} ${secondaryCol}`}>
                 {c.stats.issued}/{c.stats.reserved}/{c.stats.used}/
                 {c.stats.revoked}
               </td>
