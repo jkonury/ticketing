@@ -84,10 +84,13 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
     // 쿠폰 패널은 마운트 후 목록을 불러오고, 불러오기 전에도 "없습니다"를 보여 준다.
     // 시드 관람객은 미사용 쿠폰이 있으므로 선택 상자가 뜰 때까지 기다린다.
     await expect(page.getByRole('button', { name: '쿠폰 적용' })).toBeVisible();
-    // 시각 비교: 남은 시간은 시간 기반, 좌석·쿠폰·금액은 누적 데이터라 가린다.
+    // 시각 비교: 남은 시간은 시간 기반, 좌석·쿠폰·금액은 누적 데이터, 머리글의 공연명·일시는
+    // 시드가 실행일 기준이라 날마다 바뀌므로 가린다.
     await capture(page, testInfo, '13-payment', {
       visual: {
         mask: [
+          page.locator('main h1'),
+          page.locator('main h1 + p'),
           page.getByRole('region', { name: '남은 선점 시간' }),
           page.getByRole('region', { name: '선택한 좌석' }),
           page.getByTestId('payable-amount'),
