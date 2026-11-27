@@ -34,7 +34,7 @@ PostgreSQL 인스턴스에는 core DB와 payment 전용 DB(`payment_db`)가 있�
 | `batch` | payment-batch | Spring Batch 메타데이터 | 결제 대사 Job용 |
 | `public` | Modulith | `event_publication` | payment 앱 자체 레지스트리. core와 공유하지 않는다 |
 
-분리 전 데이터는 `scripts/db/migrate-payment-data.sh`로 core DB의 `payment` 스키마에서 옮긴다([runbook](../runbook.md#9-결제-db-이전-core-db-payment-스키마--payment_db)). core DB의 `payment` 스키마와 그 테이블은 이전 뒤 한 단계 검증을 거쳐 별도 마이그레이션으로 제거하기 전까지 남아 있다([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)). 남아 있는 동안에도 core는 이 스키마를 읽거나 쓰지 않는다.
+분리 전 데이터는 `scripts/db/migrate-payment-data.sh`로 core DB의 `payment` 스키마에서 옮긴다. 이전을 대조하고 결제·환불 동작을 검증한 뒤, 원본 백업을 보존하고 core Flyway V18을 적용한다. V18은 core DB의 옛 결제 테이블 네 개와 `payment` 스키마를 제거한다. [runbook](../runbook.md#9-결제-db-이전-core-db-payment-스키마--payment_db), [ADR 0040](../adr/0040-payment-separate-database-same-instance.md)
 컬럼과 관계는 [erd.md](./erd.md)가 기준이다. 원본은 core DB는 `core/src/main/resources/db/migration/V*.sql`, `payment_db`는 `payment/src/main/resources/db/migration/V*.sql`이다.
 
 ## 3. Redis 키 소유

@@ -18,7 +18,7 @@ approved_at: 2026-11-27T17:02:55+09:00
 
 ### T1. core Flyway에서 이전이 끝난 결제 스키마 제거
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: 적용된 SQL은 보존하고 core에 새 Flyway 마이그레이션을 추가한다. 제거할 기존 결제 객체를 명시하고, 예상하지 못한 객체나 다른 스키마의 의존 관계가 있으면 마이그레이션이 실패하도록 한다. `payment_db`의 스키마는 유지한다. [아키텍처](../../architecture.md#5-데이터), [데이터 소유](../../architecture/data-ownership.md), [ERD](../../architecture/erd.md)에 현재 상태를 반영하고 [런북](../../runbook.md#9-결제-db-이전-core-db-payment-스키마--payment_db)에 운영 적용 전 이전 완료 확인과 백업 보존 조건을 적는다.
 - 테스트 경계와 선례: `core`의 `TicketingApplicationTests`에서 애플리케이션 기동 후 DB 스키마 목록을 확인한다. 마이그레이션을 추가하기 전에는 기존 `payment` 스키마가 남아 실패해야 하고, 적용 뒤에는 `payment`가 사라지고 사용 중인 다른 스키마는 남아야 한다. Flyway와 jOOQ 코드 생성은 격리된 테스트 DB를 사용한다.
