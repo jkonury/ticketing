@@ -25,6 +25,12 @@ spring:
     listener:
       concurrency: 3
       ack-mode: record
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: never
+      table-prefix: batch.BATCH_
 
 management:
   endpoint:

@@ -48,7 +48,7 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 
 ### T3. 독립 배치에서 일별 정산 계산
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T2
 - 변경 범위와 제약: `dailySettlementJob`과 집계·저장 로직을 정산 앱으로 옮기고 `settlement-batch.jar`를 추가한다. Job 이름과 `targetDate`, `run.id` 계약을 유지한다. `settlement_db`에 배치 메타데이터를 두고 비웹 배치 프로필에서 Kafka 소비를 시작하지 않는다.
 - 테스트 경계와 선례: `DailySettlementJobTests`와 `DailySettlementCalculatorTests`를 옮겨 Job 실행과 정산 DB 결과를 검증한다. KST 경계, 다른 날 확정된 환불, 쿠폰 부담, 같은 날짜 재실행 시 행 중복 방지, 실패 청크 재시작, 필수 파라미터를 확인한다. 확정 사본보다 환불 사본이 먼저 적재된 예매도 두 사본이 도착한 뒤 올바르게 집계한다. `payment-batch`를 런처 선례로 쓴다.

@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: settlement-batch
+  main:
+    web-application-type: none
+  kafka:
+    admin:
+      auto-create: false
+    listener:
+      auto-startup: false
+  batch:
+    job:
+      enabled: true
