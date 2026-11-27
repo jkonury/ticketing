@@ -65,10 +65,10 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 
 - [x] [실행 계획 템플릿](./plans/template.md)에 범위, 선행 관계, task별 AC와 테스트 경계를 담는다.
 - [x] 초안 작성과 승인 기록 절차를 [plan-next](../../.agents/skills/plan-next/SKILL.md)에 정의한다.
-- [x] [implement](../../.agents/skills/implement/SKILL.md)와 CLI 검증으로 승인된 task의 구현·게이트 검사·로컬 커밋을 진행한다. 마지막에 최종 검사와 리뷰를 수행한다.
+- [x] [implement](../../.agents/skills/implement/SKILL.md)와 CLI 검증으로 승인된 task의 구현·게이트 검사·로컬 커밋을 진행한다. 마지막에 최종 검사를 수행한다.
 - [x] [core DB의 결제 스키마 정리](./plans/2026-11-27-core-payment-schema-cleanup.md)를 시범 계획으로 완주한다.
 
-**완료 기준**: 시범 계획이 승인된 뒤 task 검증과 로컬 커밋을 거쳐 `done`에 도달한다. 검증용 DB에 마이그레이션을 적용한 상태에서 결제·환불 E2E가 통과하고, 최종 리뷰 결과와 게이트 지표가 남는다.
+**완료 기준**: 시범 계획이 승인된 뒤 task 검증과 로컬 커밋을 거쳐 `done`에 도달한다. 검증용 DB에 마이그레이션을 적용한 상태에서 결제·환불 E2E가 통과하고, 게이트 지표가 남는다.
 
 ### 설계 입력: mattpocock/skills의 `to-spec`·`to-tickets` 검토 (2026-11-27)
 
@@ -88,4 +88,4 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 착수 시 확인할 것:
 
 - 계획 형식이 [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md) 결정 7(계획 문서 형식과 `status`)을 바꾸면 새 ADR로 남긴다. 사용자와 합의한 뒤에 쓴다.
-- `/plan-next`의 앞 단계(요구 정리)는 [`grill-with-docs` 스킬](../../.agents/skills/grill-with-docs/SKILL.md)을 쓴다. 뒤 단계는 `tdd`(구현)와 `review-diff`(리뷰)다. 이 흐름에서 `/implement`가 맡을 범위를 정한다.
+- `/plan-next`의 앞 단계(요구 정리)는 [`grill-with-docs` 스킬](../../.agents/skills/grill-with-docs/SKILL.md)을 쓴다. 뒤 단계는 `tdd`(구현)와 `review-diff`(리뷰)다. `/implement`는 `review-diff`를 호출하지 않으며, 리뷰는 별도로 요청한다.
