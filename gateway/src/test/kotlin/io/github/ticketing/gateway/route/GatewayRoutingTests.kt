@@ -96,6 +96,20 @@ class GatewayRoutingTests(
     }
 
     @Test
+    fun `정산 조회는 쿼리와 인증 헤더를 포함해 settlement 앱에 전달한다`() {
+        val jwt = token()
+        val query = "from=2026-11-01&to=2026-11-30"
+        client.get().uri("/api/v1/settlements?$query").headers { it.setBearerAuth(jwt) }.exchange().expectStatus().isOk
+
+        val forwarded = settlement.requests.single()
+        assertThat(forwarded.path).isEqualTo("api/v1/settlements")
+        assertThat(forwarded.query).isEqualTo(query)
+        assertThat(forwarded.headers.getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer $jwt")
+        assertThat(forwarded.headers.getFirst("X-Member-Id")).isNull()
+        assertThat(core.requests).isEmpty()
+    }
+
+    @Test
     fun `예매 결제 요청은 코어에 전달한다`() {
         client.post().uri("/api/v1/bookings/1/payments").headers { it.setBearerAuth(token()) }.exchange().expectStatus().isOk
 
@@ -172,12 +186,20 @@ class GatewayRoutingTests(
     private fun assertNothingForwarded() {
         assertThat(core.requests).isEmpty()
         assertThat(payment.requests).isEmpty()
+        assertThat(settlement.requests).isEmpty()
         assertThat(realtime.requests).isEmpty()
     }
 
     @Test
     fun `결제 조회에도 rate limit을 적용한다`() {
         val statuses = (1..3).map { client.get().uri("/api/v1/payments/me").exchange().returnResult<String>().status.value() }
+
+        assertThat(statuses).containsExactly(200, 200, 429)
+    }
+
+    @Test
+    fun `정산 조회는 기존 기본 rate limit을 적용한다`() {
+        val statuses = (1..3).map { client.get().uri("/api/v1/settlements").exchange().returnResult<String>().status.value() }
 
         assertThat(statuses).containsExactly(200, 200, 429)
     }

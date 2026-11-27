@@ -38,13 +38,15 @@ fi
 declare -A GRADLE_PROJECT=(
   [common]=:common [contract]=:contract [core]=:core [core-batch]=:core-batch
   [payment]=:payment [payment-batch]=:payment-batch [realtime]=:realtime [gateway]=:gateway
+  [settlement]=:settlement [settlement-batch]=:settlement-batch
   [fake-pg]=:fake-pg [e2e]=:e2e [loadtest/gatling]=:loadtest-gatling
 )
 declare -A DEPENDENTS=(
-  [common]="core core-batch payment payment-batch realtime"
-  [contract]="core core-batch payment payment-batch"
+  [common]="core core-batch payment payment-batch realtime settlement settlement-batch"
+  [contract]="core core-batch payment payment-batch settlement settlement-batch"
   [core]="core-batch"
   [payment]="payment-batch"
+  [settlement]="settlement-batch"
 )
 
 declare -A modules=()
@@ -53,7 +55,7 @@ unmapped=() sh_files=()
 
 for f in "${files[@]}"; do
   case "$f" in
-    core/src/main/*|payment/src/main/*|realtime/src/main/*|docs/api/openapi/*|web/openapi-ts.config.ts|web/scripts/api-contracts.mjs|web/package.json|web/pnpm-lock.yaml|web/src/server/api/generated/*)
+    core/src/main/*|payment/src/main/*|settlement/src/main/*|realtime/src/main/*|docs/api/openapi/*|web/openapi-ts.config.ts|web/scripts/api-contracts.mjs|web/package.json|web/pnpm-lock.yaml|web/src/server/api/generated/*)
       api_contract=1 ;;
   esac
   case "$f" in
@@ -61,6 +63,7 @@ for f in "${files[@]}"; do
     loadtest/gatling/*) modules[loadtest/gatling]=1 ;;
     docs/api/openapi/core.json) modules[core]=1 ;;
     docs/api/openapi/payment.json) modules[payment]=1 ;;
+    docs/api/openapi/settlement.json) modules[settlement]=1 ;;
     docs/api/openapi/realtime.json) modules[realtime]=1 ;;
     docs/*.md|*AGENTS.md|*CLAUDE.md|README.md) docs=1 ;;
     web/package.json|web/pnpm-lock.yaml|web/next.config.ts|web/tsconfig.json) web=1; web_build=1 ;;
@@ -74,7 +77,7 @@ for f in "${files[@]}"; do
       if [ "$top" != "$f" ] && [ -n "${GRADLE_PROJECT[$top]:-}" ]; then
         modules[$top]=1
         case "$f" in core/src/main/*) modulith=1 ;; esac
-        case "$f" in */src/main/*) case "$top" in core|payment|realtime|gateway|fake-pg|contract) e2e=1 ;; esac ;; esac
+        case "$f" in */src/main/*) case "$top" in core|payment|settlement|settlement-batch|realtime|gateway|fake-pg|contract) e2e=1 ;; esac ;; esac
       else
         unmapped+=("$f")
       fi

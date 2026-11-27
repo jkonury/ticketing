@@ -228,7 +228,15 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 - 로그는 전체를 출력하지 않고 `rg -n -m 20 '오류 패턴' 로그경로`로 위치를 좁힌다.
 - Gradle 테스트 결과 파일이 깨졌다면 test와 check를 동시에 돌렸는지 확인하고 순차로 다시 실행한다.
 - E2E 실패 시 `build/e2e/logs/`의 앱별 로그를 보고, `--keep`으로 스택을 남겨 재현한다.
-- 포트 점유로 E2E가 시작되지 않으면 18000, 18080, 18081, 18082, 18085, 13000(`--web`)을 비운다.
+- E2E 기본 앱 포트는 18000, 18080, 18081, 18082, 18085, 18086, 18090과 13000(`--web`)이다. 동시에 개발 스택을 유지하려면 별도 작업 디렉터리에 E2E용 `.env`를 두고, 고유한 Compose 프로젝트와 브리지 이름, 별도 인프라 포트, 앱 포트 오프셋을 지정한다.
+
+  ```bash
+  export COMPOSE_PROJECT_NAME=ticketing-e2e TICKETING_BRIDGE_NAME=br-tkt-e2e
+  export TICKETING_POSTGRES_PORT=25432 TICKETING_REDIS_PORT=26379 TICKETING_KAFKA_PORT=29092 TICKETING_MINIO_PORT=29010
+  export E2E_APP_PORT_OFFSET=10000
+  ./scripts/e2e/run.sh
+  ./scripts/e2e/run.sh --web
+  ```
 - Testcontainers 컨테이너가 남아 있으면 `docker ps`로 확인하고 Ryuk이 정리하지 못한 것만 지운다.
 
 ## 7. 변경 시 확인 사항

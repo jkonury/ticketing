@@ -220,33 +220,6 @@ export const zCreateCouponRequest = z.object({
   validUntil: z.iso.datetime({ offset: true }).nullable(),
 });
 
-export const zDailySettlementResponse = z.object({
-  feeAmount: z.number(),
-  feeRate: z.number(),
-  netAmount: z.number(),
-  payoutAmount: z.number(),
-  performanceId: z.int(),
-  refundAmount: z.number(),
-  refundCount: z
-    .int()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  saleAmount: z.number(),
-  saleCount: z
-    .int()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  settlementDate: z.iso.date(),
-});
-
 export const zGradePrice = z.object({
   grade: z.string(),
   price: z.number(),
@@ -861,16 +834,6 @@ export const zSeatsPath = z.object({
  * OK
  */
 export const zSeatsResponse = z.array(zSeatView);
-
-export const zFindQuery = z.object({
-  from: z.string().optional(),
-  to: z.string().optional(),
-});
-
-/**
- * OK
- */
-export const zFindResponse = z.array(zDailySettlementResponse);
 
 /**
  * Created

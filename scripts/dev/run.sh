@@ -6,10 +6,11 @@ cd "$ROOT"
 source "$ROOT/scripts/lib/scouter.sh"
 usage() {
   cat <<'HELP'
-사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--payment] [--realtime] [--gateway] [--web] [--slow-queue]
+사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--payment] [--settlement] [--realtime] [--gateway] [--web] [--slow-queue]
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
---infra: PostgreSQL, Redis, Kafka, MinIO(기동 뒤 payment_db·포스터 버킷 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
+--infra: PostgreSQL, Redis, Kafka, MinIO(기동 뒤 결제·정산 DB와 포스터 버킷 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
 --payment: 결제 앱(18085, 웹훅은 fake-pg가 직접 호출). 결제 흐름에는 --core와 --payment를 함께 띄운다
+--settlement: 정산 앱(18086). 기존 데이터가 있는 환경은 런북의 정산 DB 이전 절차를 먼저 진행한다
 --slow-queue: 대기열 입장을 5초에 1명으로 늦춘다(대기 순번 화면 확인용, realtime에 적용. 예: --all --slow-queue)
 앱 옵션은 조합할 수 있습니다. 의존 인프라는 별도로 선택해야 합니다.
 Java 앱은 Scouter를 기본으로 연결합니다. .env 또는 환경 변수에 SCOUTER_AGENT_DIR을 지정하세요.
@@ -17,16 +18,17 @@ SCOUTER_COLLECTOR_IP는 기본값 127.0.0.1입니다.
 앱은 이 터미널에서 관리하며 Ctrl+C로 종료합니다. Docker 컨테이너는 유지됩니다.
 HELP
 }
-infra=false; fakepg=false; observability=false; core=false; payment=false; realtime=false; gateway=false; web=false; slow_queue=false
+infra=false; fakepg=false; observability=false; core=false; payment=false; settlement=false; realtime=false; gateway=false; web=false; slow_queue=false
 if (($# == 0)); then set -- --all; fi
 for arg in "$@"; do
   case "$arg" in
-    --all) infra=true; fakepg=true; core=true; payment=true; realtime=true; gateway=true; web=true ;;
+    --all) infra=true; fakepg=true; core=true; payment=true; settlement=true; realtime=true; gateway=true; web=true ;;
     --infra) infra=true ;;
     --fake-pg) fakepg=true ;;
     --observability) observability=true ;;
     --core) core=true ;;
     --payment) payment=true ;;
+    --settlement) settlement=true ;;
     --realtime) realtime=true ;;
     --gateway) gateway=true ;;
     --web) web=true ;;
@@ -35,7 +37,7 @@ for arg in "$@"; do
     *) printf '알 수 없는 옵션: %s\n' "$arg" >&2; usage >&2; exit 1 ;;
   esac
 done
-if $infra || $fakepg || $observability || $core || $payment || $gateway || $realtime; then
+if $infra || $fakepg || $observability || $core || $payment || $settlement || $gateway || $realtime; then
   [[ -f .env ]] || { echo '.env가 필요합니다. cp .env.example .env 후 값을 설정하세요.' >&2; exit 1; }
   set -a
   source .env
@@ -46,7 +48,7 @@ if $web; then
   [[ -f web/.env.local ]] || { echo 'web/.env.local이 필요합니다. web/.env.example을 복사해 설정하세요.' >&2; exit 1; }
   [[ -d web/node_modules ]] || { echo 'web 의존성이 없습니다. cd web && pnpm install을 실행하세요.' >&2; exit 1; }
 fi
-if $core || $payment || $realtime || $gateway; then
+if $core || $payment || $settlement || $realtime || $gateway; then
   [[ -n "${SCOUTER_AGENT_DIR:-}" ]] || { echo '개발 Java 앱은 Scouter를 사용합니다. .env 또는 환경 변수에 SCOUTER_AGENT_DIR을 지정하세요.' >&2; exit 1; }
   [[ -f "$SCOUTER_AGENT_DIR/scouter.agent.jar" ]] || { echo "SCOUTER_AGENT_DIR에 scouter.agent.jar가 없습니다: $SCOUTER_AGENT_DIR" >&2; exit 1; }
 fi
@@ -65,15 +67,17 @@ tasks=()
 $fakepg && tasks+=(:fake-pg:bootJar)
 $core && tasks+=(:core:bootJar)
 $payment && tasks+=(:payment:bootJar)
+$settlement && tasks+=(:settlement:bootJar)
 $realtime && tasks+=(:realtime:bootJar)
 $gateway && tasks+=(:gateway:bootJar)
 if ((${#tasks[@]})); then ./gradlew "${tasks[@]}"; fi
 if $infra; then
   docker compose up -d --wait postgres redis kafka minio
   docker compose run --rm --no-deps minio-init
-  # 기존 볼륨에는 payment_db가 없을 수 있으므로 멱등하게 준비한다
+  # 기존 볼륨에도 전용 DB를 준비한다
   ./scripts/db/ensure-payment-db.sh
 fi
+if $infra || $settlement; then ./scripts/db/ensure-settlement-db.sh; fi
 if $observability; then docker compose -f compose.yaml -f compose.observability.yaml up -d --wait prometheus tempo grafana; fi
 start() {
   local name=$1
@@ -102,6 +106,7 @@ start_java() {
 $fakepg && start fake-pg java -jar fake-pg/build/libs/fake-pg.jar
 $core && start_java core
 $payment && start_java payment
+$settlement && start_java settlement
 if $realtime && $slow_queue; then
   # QueueProperties(ticketing.realtime.queue)의 relaxed binding. .env보다 우선한다
   export TICKETING_REALTIME_QUEUE_ADMISSIONINTERVAL=5s TICKETING_REALTIME_QUEUE_ADMISSIONBATCHSIZE=1

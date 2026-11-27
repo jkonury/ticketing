@@ -9,6 +9,8 @@
 "core-batch" = ":core-batch"
 "payment" = ":payment"
 "payment-batch" = ":payment-batch"
+"settlement" = ":settlement"
+"settlement-batch" = ":settlement-batch"
 "realtime" = ":realtime"
 "gateway" = ":gateway"
 "fake-pg" = ":fake-pg"

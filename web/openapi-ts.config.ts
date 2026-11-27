@@ -7,7 +7,7 @@ const format = {
 };
 
 export default defineConfig(
-  ['core', 'payment', 'realtime'].map((app) => ({
+  ['core', 'payment', 'realtime', 'settlement'].map((app) => ({
     input: `../docs/api/openapi/${app}.json`,
     output: {
       path: join(

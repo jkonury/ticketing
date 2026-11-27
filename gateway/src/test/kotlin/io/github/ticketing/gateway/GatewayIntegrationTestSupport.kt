@@ -42,6 +42,7 @@ abstract class GatewayIntegrationTestSupport(protected val baseClient: WebTestCl
     protected val core = TestInfrastructure.core
     protected val realtime = TestInfrastructure.realtime
     protected val payment = TestInfrastructure.payment
+    protected val settlement = TestInfrastructure.settlement
 
     @BeforeEach
     fun clearRequests() {
@@ -53,6 +54,7 @@ abstract class GatewayIntegrationTestSupport(protected val baseClient: WebTestCl
         core.clear()
         realtime.clear()
         payment.clear()
+        settlement.clear()
     }
 
     protected fun token(
@@ -89,6 +91,7 @@ abstract class GatewayIntegrationTestSupport(protected val baseClient: WebTestCl
             registry.add("ticketing.gateway.core-uri") { TestInfrastructure.core.uri }
             registry.add("ticketing.gateway.realtime-uri") { TestInfrastructure.realtime.uri }
             registry.add("ticketing.gateway.payment-uri") { TestInfrastructure.payment.uri }
+            registry.add("ticketing.gateway.settlement-uri") { TestInfrastructure.settlement.uri }
             registry.add("spring.data.redis.host") { TestInfrastructure.redis.host }
             registry.add("spring.data.redis.port") { TestInfrastructure.redis.firstMappedPort }
         }
@@ -134,4 +137,5 @@ private object TestInfrastructure {
     val core = DownstreamStub()
     val realtime = DownstreamStub()
     val payment = DownstreamStub()
+    val settlement = DownstreamStub()
 }

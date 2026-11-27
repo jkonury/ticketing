@@ -13,6 +13,8 @@ enum class BatchTarget(private val jarProperty: String, private val userProperty
 
     /** payment-batch: 결제 DB(`payment_db`, 전용 계정). */
     PAYMENT("e2e.paymentBatchJar", "e2e.paymentDbUser", "e2e.paymentDbName"),
+
+    SETTLEMENT("e2e.settlementBatchJar", "e2e.settlementDbUser", "e2e.settlementDbName"),
     ;
 
     val jar: String get() = property(jarProperty)
@@ -40,6 +42,8 @@ object BatchSupport {
 
     /** 결제 DB(`payment_db`)를 조회한다. */
     fun paymentPsql(sql: String): List<String> = psql(sql, BatchTarget.PAYMENT)
+
+    fun settlementPsql(sql: String): List<String> = psql(sql, BatchTarget.SETTLEMENT)
 
     /** 인자 없는 Job도 재실행되도록 식별 파라미터 `e2eRun`을 항상 붙인다. 메타데이터는 [target]의 DB에서 읽는다. */
     fun runJob(job: String, vararg parameters: String, target: BatchTarget = BatchTarget.CORE): JobRun {

@@ -41,6 +41,7 @@ jobs:
           sed -i \
             -e "s|^TICKETING_POSTGRES_PASSWORD=.*|TICKETING_POSTGRES_PASSWORD=$(openssl rand -hex 16)|" \
             -e "s|^TICKETING_PAYMENT_POSTGRES_PASSWORD=.*|TICKETING_PAYMENT_POSTGRES_PASSWORD=$(openssl rand -hex 16)|" \
+            -e "s|^TICKETING_SETTLEMENT_POSTGRES_PASSWORD=.*|TICKETING_SETTLEMENT_POSTGRES_PASSWORD=$(openssl rand -hex 16)|" \
             -e "s|^TICKETING_JWT_SECRET=.*|TICKETING_JWT_SECRET=$(openssl rand -hex 32)|" \
             -e "s|^FAKE_PG_WEBHOOK_SECRET=.*|FAKE_PG_WEBHOOK_SECRET=$(openssl rand -hex 32)|" \
             .env

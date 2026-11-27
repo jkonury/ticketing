@@ -570,46 +570,6 @@
         "required" : [ "items" ],
         "type" : "object"
       },
-      "DailySettlementResponse" : {
-        "properties" : {
-          "feeAmount" : {
-            "type" : "number"
-          },
-          "feeRate" : {
-            "type" : "number"
-          },
-          "netAmount" : {
-            "type" : "number"
-          },
-          "payoutAmount" : {
-            "type" : "number"
-          },
-          "performanceId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "refundAmount" : {
-            "type" : "number"
-          },
-          "refundCount" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "saleAmount" : {
-            "type" : "number"
-          },
-          "saleCount" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "settlementDate" : {
-            "format" : "date",
-            "type" : "string"
-          }
-        },
-        "required" : [ "feeAmount", "feeRate", "netAmount", "payoutAmount", "performanceId", "refundAmount", "refundCount", "saleAmount", "saleCount", "settlementDate" ],
-        "type" : "object"
-      },
       "GradePrice" : {
         "properties" : {
           "grade" : {
@@ -2470,42 +2430,6 @@
           }
         },
         "tags" : [ "catalog-query-controller" ]
-      }
-    },
-    "/api/v1/settlements" : {
-      "get" : {
-        "operationId" : "find",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "from",
-          "required" : false,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "to",
-          "required" : false,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "items" : {
-                    "$ref" : "#/components/schemas/DailySettlementResponse"
-                  },
-                  "type" : "array"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "settlement-controller" ]
       }
     },
     "/api/v1/sse-tickets" : {
