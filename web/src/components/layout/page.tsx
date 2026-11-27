@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { cx } from '@/lib/cx';
 
 /** 헤더와 같은 가로 기준(max-w-280, px-4/md:px-6)을 쓰는 페이지 컨테이너. */
@@ -6,14 +6,17 @@ export function Page({
   narrow = false,
   className,
   children,
+  ref,
 }: {
   /** 로그인·가입처럼 좁은 폼 화면 */
   narrow?: boolean;
   className?: string;
   children: ReactNode;
+  ref?: Ref<HTMLElement>;
 }) {
   return (
     <main
+      ref={ref}
       className={cx(
         'mx-auto w-full px-4 py-8 md:px-6 md:py-10',
         narrow ? 'max-w-110' : 'max-w-280',

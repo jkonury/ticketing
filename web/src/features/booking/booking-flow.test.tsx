@@ -41,7 +41,12 @@ vi.mock('@/features/stream/use-event-stream', () => ({
     } else if (beforeReconnect) {
       stream.beforeReconnect = beforeReconnect;
     }
-    return { state: stream.state, close: stream.close, restart: vi.fn() };
+    return {
+      state: stream.state,
+      close: stream.close,
+      restart: vi.fn(),
+      attach: vi.fn(),
+    };
   },
 }));
 const seats = Array.from({ length: 5 }, (_, index) => ({
@@ -114,6 +119,7 @@ describe('예매 흐름', () => {
     );
     await screen.findByText('좌석 선택');
     const leave = ['/api/queues/1/entries/me', { method: 'DELETE' }];
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).not.toHaveBeenCalledWith(...leave);
     unmount();
     await act(async () => {

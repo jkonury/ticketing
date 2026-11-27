@@ -1,7 +1,7 @@
-import type { HTMLAttributes } from 'react';
+import type { ComponentPropsWithRef } from 'react';
 import { cx } from '@/lib/cx';
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+export interface CardProps extends ComponentPropsWithRef<'div'> {
   /** 포스터처럼 가장자리까지 채우는 내용은 none을 쓴다. */
   padding?: 'none' | 'md' | 'lg';
 }

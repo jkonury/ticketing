@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
@@ -14,35 +14,26 @@ type Options = {
   beforeReconnect?: (signal: AbortSignal) => Promise<void>;
 };
 
-export function useEventStream({
-  request,
-  handlers,
-  enabled = true,
-  freshSnapshot = false,
-  onDisconnect,
-  beforeReconnect,
-}: Options) {
-  const { kind, scheduleId } = request;
-  const [state, setState] = useState<State>('connecting');
-  const router = useRouter();
-  const [generation, setGeneration] = useState(0);
-  const restart = useCallback(() => {
-    setState('connecting');
-    setGeneration((value) => value + 1);
-  }, []);
-  const handlersRef = useRef(handlers);
-  const disconnectRef = useRef(onDisconnect);
-  const beforeReconnectRef = useRef(beforeReconnect);
-  const closeRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    handlersRef.current = handlers;
-    disconnectRef.current = onDisconnect;
-    beforeReconnectRef.current = beforeReconnect;
-  }, [handlers, onDisconnect, beforeReconnect]);
-  const close = useCallback(() => closeRef.current(), []);
+function createEventStream(
+  kind: Options['request']['kind'],
+  scheduleId: number,
+  enabled: boolean,
+  freshSnapshot: boolean,
+  onSessionExpired: () => void,
+) {
+  let options: Options | undefined;
+  let state: State = 'connecting';
+  let notify: (() => void) | undefined;
+  let stopConnection: (() => void) | undefined;
 
-  useEffect(() => {
+  function setState(next: State) {
+    state = next;
+    notify?.();
+  }
+  function start() {
+    stopConnection?.();
     if (!enabled) return;
+    setState('connecting');
     let stopped = false;
     let source: EventSource | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -55,13 +46,10 @@ export function useEventStream({
       source?.close();
       if (timer) clearTimeout(timer);
     };
-    closeRef.current = () => {
-      stop();
-      setState('closed');
-    };
+    stopConnection = stop;
     const retry = () => {
       if (stopped) return;
-      disconnectRef.current?.();
+      options?.onDisconnect?.();
       setState('reconnecting');
       const delay = Math.min(30000, 1000 * 2 ** failures++);
       timer = setTimeout(
@@ -71,7 +59,7 @@ export function useEventStream({
     };
     async function connect() {
       try {
-        if (failures > 0) await beforeReconnectRef.current?.(abort.signal);
+        if (failures > 0) await options?.beforeReconnect?.(abort.signal);
         if (stopped) return;
         const response = await fetch('/api/streams/tickets', {
           method: 'POST',
@@ -90,15 +78,16 @@ export function useEventStream({
           const problem = z
             .object({ code: z.string() })
             .safeParse(await response.json().catch(() => null));
+          if (stopped) return;
           if (
             response.status === 401 &&
             problem.success &&
             problem.data.code === 'SESSION_EXPIRED'
           ) {
-            disconnectRef.current?.();
+            options?.onDisconnect?.();
             stop();
             setState('failed');
-            router.push('/login');
+            onSessionExpired();
             return;
           }
           if (
@@ -107,7 +96,7 @@ export function useEventStream({
             response.status !== 408 &&
             response.status !== 429
           ) {
-            disconnectRef.current?.();
+            options?.onDisconnect?.();
             stop();
             setState('failed');
             return;
@@ -118,37 +107,88 @@ export function useEventStream({
           .object({ url: z.string() })
           .parse(await response.json());
         if (stopped) return;
-        source = new EventSource(url);
-        source.onopen = () => {
+        const currentSource = new EventSource(url);
+        source = currentSource;
+        currentSource.onopen = () => {
+          if (stopped || source !== currentSource) return;
           failures = 0;
           setState('open');
         };
-        source.onerror = () => {
-          source?.close();
+        currentSource.onerror = () => {
+          if (stopped || source !== currentSource) return;
+          currentSource.close();
+          source = undefined;
           retry();
         };
-        for (const name of Object.keys(handlersRef.current)) {
-          source.addEventListener(name, (event: MessageEvent<string>) => {
-            if (event.lastEventId) lastEventId = event.lastEventId;
-            try {
-              handlersRef.current[name]?.(
-                event.data ? JSON.parse(event.data) : null,
-                event.lastEventId || null,
-              );
-            } catch {
-              /* malformed events are ignored */
-            }
-          });
+        for (const name of Object.keys(options?.handlers ?? {})) {
+          currentSource.addEventListener(
+            name,
+            (event: MessageEvent<string>) => {
+              if (stopped || source !== currentSource) return;
+              if (event.lastEventId) lastEventId = event.lastEventId;
+              try {
+                options?.handlers[name]?.(
+                  event.data ? JSON.parse(event.data) : null,
+                  event.lastEventId || null,
+                );
+              } catch {
+                /* malformed events are ignored */
+              }
+            },
+          );
         }
       } catch {
         if (!stopped) retry();
       }
     }
-    void connect();
-    return () => {
-      stop();
-      closeRef.current = () => {};
-    };
-  }, [enabled, kind, scheduleId, router, generation, freshSnapshot]);
-  return { state, close, restart };
+    queueMicrotask(() => void connect());
+  }
+  return {
+    subscribe(listener: () => void) {
+      notify = listener;
+      start();
+      return () => {
+        notify = undefined;
+        stopConnection?.();
+        stopConnection = undefined;
+      };
+    },
+    getSnapshot: () => state,
+    update(next: Options) {
+      options = next;
+    },
+    close() {
+      stopConnection?.();
+      setState('closed');
+    },
+    restart: start,
+  };
+}
+
+const initialSnapshot = (): State => 'connecting';
+
+export function useEventStream(options: Options) {
+  const { kind, scheduleId } = options.request;
+  const { enabled = true, freshSnapshot = false } = options;
+  const router = useRouter();
+  const stream = useMemo(
+    () =>
+      createEventStream(kind, scheduleId, enabled, freshSnapshot, () =>
+        router.push('/login'),
+      ),
+    [kind, scheduleId, enabled, freshSnapshot, router],
+  );
+  const state = useSyncExternalStore(
+    stream.subscribe,
+    stream.getSnapshot,
+    initialSnapshot,
+  );
+  return {
+    state,
+    close: stream.close,
+    restart: stream.restart,
+    attach(element: HTMLElement | null) {
+      if (element) stream.update(options);
+    },
+  };
 }

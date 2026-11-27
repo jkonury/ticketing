@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -64,9 +64,13 @@ export function Seats({
     [selected],
   );
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
-  useEffect(() => {
+  const clearFlashTimersRef = useCallback((element: HTMLDivElement | null) => {
+    if (!element) return;
     const active = timers.current;
-    return () => active.forEach(clearTimeout);
+    return () => {
+      active.forEach(clearTimeout);
+      active.clear();
+    };
   }, []);
   // 다른 사용자가 선점한 좌석을 잠깐 강조한다. 움직임은 CSS의 motion-safe가 맡는다.
   const flash = useCallback((ids: number[]) => {
@@ -81,7 +85,7 @@ export function Seats({
     }, 1500);
     timers.current.add(timer);
   }, []);
-  const stream = useEventStream({
+  const { state, restart, attach } = useEventStream({
     request: { kind: 'seats', scheduleId },
     freshSnapshot: true,
     onDisconnect: () => setHasSnapshot(false),
@@ -107,7 +111,7 @@ export function Seats({
       },
     },
   });
-  const ready = stream.state === 'open' && hasSnapshot;
+  const ready = state === 'open' && hasSnapshot;
   async function submit() {
     setPending(true);
     setNotice('');
@@ -165,8 +169,12 @@ export function Seats({
     key.current = crypto.randomUUID();
   }
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:pb-0">
+    <div
+      ref={clearFlashTimersRef}
+      className="grid grid-cols-[minmax(0,1fr)] gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:pb-0"
+    >
       <Card
+        ref={(element) => attach(element)}
         padding="none"
         className="grid grid-cols-[minmax(0,1fr)] gap-4 overflow-visible! p-4 lg:p-6"
       >
@@ -175,17 +183,17 @@ export function Seats({
           최대 4석까지 고를 수 있어요. 좌석 현황은 참고용이고, 실제 선점 결과는
           예매할 때 확정돼요.
         </p>
-        {stream.state === 'failed' ? (
+        {state === 'failed' ? (
           <InlineError role="alert">
             좌석 정보를 연결할 수 없습니다.{' '}
-            <Button variant="secondary" onClick={stream.restart}>
+            <Button variant="secondary" onClick={restart}>
               다시 연결
             </Button>
           </InlineError>
         ) : !ready ? (
           <p role="status" className="text-caption text-fg-muted">
             좌석 정보를{' '}
-            {stream.state === 'reconnecting'
+            {state === 'reconnecting'
               ? '다시 연결하고 있습니다. 표시된 정보는 오래되었을 수 있습니다.'
               : '확인하고 있습니다.'}
           </p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   EmptyState,
@@ -41,32 +41,38 @@ export function CouponPanel({
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(
     'loading',
   );
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    call('/api/me/coupons', 'GET')
-      .then((data) => {
-        if (!alive) return;
-        const now = Date.now();
-        setCoupons(
-          myCouponsSchema
-            .parse(data)
-            .filter(
-              (coupon) =>
-                coupon.status === 'ISSUED' &&
-                Date.parse(coupon.definition.validFrom) <= now &&
-                now <= Date.parse(coupon.definition.validUntil),
-            ),
-        );
-        setLoadState('ready');
-      })
-      .catch(() => {
-        if (alive) setLoadState('error');
-      });
-    return () => {
-      alive = false;
-    };
-  }, [attempt]);
+  const couponLoad = useRef<AbortController | null>(null);
+  const loadCoupons = useCallback(async (signal: AbortSignal) => {
+    if (signal.aborted) return;
+    try {
+      const data = await call('/api/me/coupons', 'GET');
+      if (signal.aborted) return;
+      const now = Date.now();
+      setCoupons(
+        myCouponsSchema
+          .parse(data)
+          .filter(
+            (coupon) =>
+              coupon.status === 'ISSUED' &&
+              Date.parse(coupon.definition.validFrom) <= now &&
+              now <= Date.parse(coupon.definition.validUntil),
+          ),
+      );
+      setLoadState('ready');
+    } catch {
+      if (!signal.aborted) setLoadState('error');
+    }
+  }, []);
+  const couponPanelRef = useCallback(
+    (element: HTMLFieldSetElement | null) => {
+      if (!element) return;
+      const controller = new AbortController();
+      couponLoad.current = controller;
+      queueMicrotask(() => void loadCoupons(controller.signal));
+      return () => controller.abort();
+    },
+    [loadCoupons],
+  );
   const fail = (error: unknown) => {
     const code = codeOf(error);
     if (code === 'SESSION_EXPIRED') onSessionExpired();
@@ -131,7 +137,10 @@ export function CouponPanel({
   const locked = disabled || busy;
   const applyLocked = locked || coupon?.state === 'RESERVING';
   return (
-    <fieldset className="grid min-w-0 gap-3 rounded-control border border-line p-4">
+    <fieldset
+      ref={couponPanelRef}
+      className="grid min-w-0 gap-3 rounded-control border border-line p-4"
+    >
       <legend className="px-1 text-body font-semibold text-fg">쿠폰</legend>
       {coupon?.state === 'RESERVING' && <p>쿠폰을 적용하고 있어요.</p>}
       {coupon?.state === 'RESERVED' && (
@@ -159,7 +168,8 @@ export function CouponPanel({
               variant="secondary"
               onClick={() => {
                 setLoadState('loading');
-                setAttempt((value) => value + 1);
+                if (couponLoad.current)
+                  void loadCoupons(couponLoad.current.signal);
               }}
             >
               다시 시도

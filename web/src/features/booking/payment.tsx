@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
@@ -31,16 +31,17 @@ export function Payment({
   onDone: () => void;
   onReset: () => void;
 }) {
-  const remainingNow = () =>
-    Math.max(
-      0,
-      Math.ceil(
-        (Date.parse(booking.expiresAt) -
-          Date.parse(booking.serverTime) -
-          (performance.now() - booking.receivedAt)) /
-          1000,
+  const holdDuration =
+    Date.parse(booking.expiresAt) - Date.parse(booking.serverTime);
+  const { receivedAt } = booking;
+  const remainingNow = useCallback(
+    () =>
+      Math.max(
+        0,
+        Math.ceil((holdDuration - (performance.now() - receivedAt)) / 1000),
       ),
-    );
+    [holdDuration, receivedAt],
+  );
   const [remaining, setRemaining] = useState(remainingNow);
   // 진행 바의 전체 길이는 최초 렌더 시점의 남은 시간이다.
   const [total] = useState(remaining);
@@ -49,15 +50,18 @@ export function Payment({
   const [amount, setAmount] = useState<AmountView>({});
   const paymentKey = useRef(crypto.randomUUID());
   const router = useRouter();
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const next = remainingNow();
-      setRemaining(next);
-      if (next === 0) clearInterval(timer);
-    }, 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booking.expiresAt, booking.serverTime, booking.receivedAt]);
+  const countdownRef = useCallback(
+    (element: HTMLElement | null) => {
+      if (!element) return;
+      const timer = setInterval(() => {
+        const next = remainingNow();
+        setRemaining(next);
+        if (next === 0) clearInterval(timer);
+      }, 1000);
+      return () => clearInterval(timer);
+    },
+    [remainingNow],
+  );
   const expired = remaining === 0;
   const warning = !expired && remaining <= WARNING_SECONDS;
   // 60초 경고는 한 번만 알린다. 문구는 한 번 나타나면 그대로 둔다.
@@ -124,6 +128,7 @@ export function Payment({
     <Card padding="lg" className="grid gap-5">
       <h2 className="text-heading font-bold text-fg">결제</h2>
       <section
+        ref={countdownRef}
         aria-label="남은 선점 시간"
         className={cx(
           'grid gap-2 rounded-control p-4',

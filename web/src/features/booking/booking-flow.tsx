@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Page, PageHeader } from '@/components/layout/page';
 import { formatSeoul } from '@/lib/datetime';
 import {
@@ -33,28 +33,32 @@ export function BookingFlow({
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
   const scheduleId = schedule.id;
-  useEffect(() => {
-    // 개발 모드에서 같은 회차의 효과가 즉시 다시 실행되면 이탈을 취소한다.
-    if (pendingLeave.current?.scheduleId === scheduleId) {
-      clearTimeout(pendingLeave.current.timer);
-      pendingLeave.current = null;
-    }
-    return () => {
-      const timer = setTimeout(() => {
-        void call(`/api/queues/${scheduleId}/entries/me`, 'DELETE').catch(
-          () => {},
-        );
-      }, 0);
-      pendingLeave.current = { scheduleId, timer };
-    };
-  }, [scheduleId]);
+  const bookingPageRef = useCallback(
+    (element: HTMLElement | null) => {
+      if (!element) return;
+      // 개발 모드에서 같은 회차의 효과가 즉시 다시 실행되면 이탈을 취소한다.
+      if (pendingLeave.current?.scheduleId === scheduleId) {
+        clearTimeout(pendingLeave.current.timer);
+        pendingLeave.current = null;
+      }
+      return () => {
+        const timer = setTimeout(() => {
+          void call(`/api/queues/${scheduleId}/entries/me`, 'DELETE').catch(
+            () => {},
+          );
+        }, 0);
+        pendingLeave.current = { scheduleId, timer };
+      };
+    },
+    [scheduleId],
+  );
   const reset = () => {
     setAdmission(null);
     setBooking(null);
     setQueueVersion((value) => value + 1);
   };
   return (
-    <Page>
+    <Page ref={bookingPageRef}>
       <PageHeader
         title={schedule.performanceTitle}
         description={formatSeoul(schedule.startsAt)}

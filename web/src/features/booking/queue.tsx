@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -48,61 +48,71 @@ export function Queue({
   const [removed, setRemoved] = useState(false);
   const [position, setPosition] = useState<number | null>(null);
   const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
   const [initial, setInitial] = useState<number | null>(null);
   const [announced, setAnnounced] = useState<number | null>(null);
   const latest = useRef<number | null>(null);
+  const registration = useRef<AbortController | null>(null);
+  const stopWaitingTimers = useRef<(() => void) | null>(null);
   const router = useRouter();
   if (initial === null && position !== null) setInitial(position);
-  useEffect(() => {
-    latest.current = position;
-  }, [position]);
-  useEffect(() => {
-    if (!waiting) return;
-    const sync = () => setAnnounced(latest.current);
-    const first = setTimeout(sync, 0);
-    const timer = setInterval(sync, ANNOUNCE_INTERVAL_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [waiting]);
-  useEffect(() => {
-    let active = true;
-    void call(`/api/queues/${scheduleId}/entries`, 'POST')
-      .then((data) => {
-        if (!active) return;
+  const updatePosition = useCallback((next: number | null) => {
+    latest.current = next;
+    setPosition(next);
+  }, []);
+  const register = useCallback(
+    async (signal: AbortSignal) => {
+      if (signal.aborted) return;
+      try {
+        const data = await call(`/api/queues/${scheduleId}/entries`, 'POST');
+        if (signal.aborted) return;
         const entry = queueSchema.parse(data);
-        if (entry.status === 'ADMITTED')
+        if (entry.status === 'ADMITTED') {
           onAdmitted(admissionSchema.parse(entry));
-        else {
-          setPosition(entry.position ?? null);
-          setWaiting(true);
+          return;
         }
-      })
-      .catch((failure: unknown) => {
-        if (active) {
-          const code = codeOf(failure);
-          if (code === 'SESSION_EXPIRED') router.push('/login');
-          setError(bookingError(code));
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [scheduleId, attempt, onAdmitted, router]);
-  useEffect(() => {
-    if (!waiting) return;
-    const timer = setTimeout(() => setShowQueue(true), 2000);
-    return () => clearTimeout(timer);
-  }, [waiting]);
+        updatePosition(entry.position ?? null);
+        setWaiting(true);
+        setAnnounced(latest.current);
+        stopWaitingTimers.current?.();
+        const announce = setInterval(
+          () => setAnnounced(latest.current),
+          ANNOUNCE_INTERVAL_MS,
+        );
+        const show = setTimeout(() => setShowQueue(true), 2000);
+        stopWaitingTimers.current = () => {
+          clearInterval(announce);
+          clearTimeout(show);
+        };
+      } catch (failure) {
+        if (signal.aborted) return;
+        const code = codeOf(failure);
+        if (code === 'SESSION_EXPIRED') router.push('/login');
+        setError(bookingError(code));
+      }
+    },
+    [scheduleId, onAdmitted, router, updatePosition],
+  );
+  const queueRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (!element) return;
+      const controller = new AbortController();
+      registration.current = controller;
+      queueMicrotask(() => void register(controller.signal));
+      return () => {
+        controller.abort();
+        stopWaitingTimers.current?.();
+      };
+    },
+    [register],
+  );
   function showRemoved() {
-    stream.close();
+    close();
+    stopWaitingTimers.current?.();
     setWaiting(false);
     setShowQueue(false);
     setRemoved(true);
   }
-  const stream = useEventStream({
+  const { state, close, restart, attach } = useEventStream({
     request: { kind: 'queue', scheduleId },
     enabled: waiting,
     async beforeReconnect(signal) {
@@ -112,10 +122,10 @@ export function Queue({
         const entry = queueSchema.parse(data);
         if (entry.status === 'ADMITTED') {
           const admission = admissionSchema.parse(entry);
-          stream.close();
+          close();
           onAdmitted(admission);
         } else {
-          setPosition(entry.position ?? null);
+          updatePosition(entry.position ?? null);
         }
       } catch (failure) {
         if (!signal.aborted && codeOf(failure) === 'QUEUE_ENTRY_NOT_FOUND')
@@ -125,23 +135,28 @@ export function Queue({
     handlers: {
       position(data) {
         const parsed = z.object({ position: z.number() }).safeParse(data);
-        if (parsed.success) setPosition(parsed.data.position);
+        if (parsed.success) updatePosition(parsed.data.position);
       },
       admitted(data) {
         const parsed = admissionSchema.safeParse(data);
         if (parsed.success) {
-          stream.close();
+          close();
           onAdmitted(parsed.data);
         }
       },
       removed: showRemoved,
     },
   });
-  const connected = stream.state === 'open';
+  const connected = state === 'open';
   const percent =
     position !== null && initial !== null ? progressOf(initial, position) : 0;
   return (
-    <Card padding="lg" className="grid gap-4">
+    <Card ref={queueRef} padding="lg" className="grid gap-4">
+      <p ref={(element) => attach(element)} role="status" className="sr-only">
+        {showQueue && waiting && announced !== null
+          ? `현재 대기 순번은 ${announced}번이에요. 내 앞에 ${aheadOf(announced)}명이 있어요.`
+          : ''}
+      </p>
       {showQueue && waiting ? (
         <>
           <div className="flex items-center justify-between gap-2">
@@ -190,27 +205,22 @@ export function Queue({
           <p className="text-caption text-fg-muted">
             새로고침하면 순번이 뒤로 밀릴 수 있어요.
           </p>
-          <p role="status" className="sr-only">
-            {announced === null
-              ? ''
-              : `현재 대기 순번은 ${announced}번이에요. 내 앞에 ${aheadOf(announced)}명이 있어요.`}
-          </p>
         </>
       ) : (
         !removed && !error && <LoadingState label="입장을 확인하고 있어요." />
       )}
       {waiting &&
-        stream.state !== 'open' &&
-        (stream.state === 'failed' ? (
+        state !== 'open' &&
+        (state === 'failed' ? (
           <InlineError role="alert">
             대기열 연결에 실패했어요.{' '}
-            <Button variant="secondary" onClick={stream.restart}>
+            <Button variant="secondary" onClick={restart}>
               다시 연결
             </Button>
           </InlineError>
         ) : (
           <p role="status" className="text-caption text-fg-muted">
-            {stream.state === 'reconnecting'
+            {state === 'reconnecting'
               ? '대기열에 다시 연결하고 있어요. 순번이 오래되었을 수 있어요.'
               : '대기열에 연결하고 있어요.'}
           </p>
@@ -222,7 +232,8 @@ export function Queue({
             <Button
               onClick={() => {
                 setRemoved(false);
-                setAttempt((value) => value + 1);
+                if (registration.current)
+                  void register(registration.current.signal);
               }}
             >
               다시 줄 서기
