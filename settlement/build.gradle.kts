@@ -6,18 +6,22 @@ plugins {
 val jooqGenerator = sourceSets.create("jooqGenerator")
 
 dependencies {
+    implementation(libs.springdoc.webmvc.api)
     implementation(project(":common"))
     implementation(project(":contract"))
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-jooq")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation(testFixtures(project(":common")))
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 
     "jooqGeneratorImplementation"(kotlin("stdlib"))
     "jooqGeneratorImplementation"("org.jooq:jooq-codegen")
@@ -66,6 +70,11 @@ sourceSets.main {
 
 tasks.test {
     inputs.files(rootProject.file("deploy/postgres/init/20-settlement-db.sql"))
+    val updateOpenApi = providers.environmentVariable("UPDATE_OPENAPI").map { it == "1" }.orElse(false)
+    inputs.property("updateOpenApi", updateOpenApi)
+    inputs.files(rootProject.file("docs/api/openapi/settlement.json"))
+    outputs.upToDateWhen { !updateOpenApi.get() }
+    outputs.doNotCacheIf("OpenAPI 스펙을 갱신할 때") { updateOpenApi.get() }
 }
 
 tasks.compileKotlin {

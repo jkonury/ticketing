@@ -1,6 +1,7 @@
 package io.github.ticketing.settlement
 
 import io.github.ticketing.KafkaTopics
+import io.github.ticketing.SETTLEMENT_TEST_JWT_SECRET
 import io.github.ticketing.SettlementTestContainers
 import io.github.ticketing.SettlementTestDatabases
 import io.github.ticketing.SettlementTestDatabases.CORE_DATABASE
@@ -40,7 +41,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
 
-@SpringBootTest
+@SpringBootTest(properties = ["ticketing.jwt.secret=$SETTLEMENT_TEST_JWT_SECRET"])
 @Import(SettlementTestContainers::class, SettlementKafkaIntegrationTests.FixedClock::class)
 class SettlementKafkaIntegrationTests(
     private val dsl: DSLContext,

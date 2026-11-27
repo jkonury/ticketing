@@ -61,7 +61,7 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 
 ### T4. 독립 앱의 주최자 정산 조회 공개 경계 준비
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T3
 - 변경 범위와 제약: 정산 앱에 `GET /api/v1/settlements`와 전용 OpenAPI 스냅샷을 추가한다. T3의 일별 정산 테이블을 조회한다. 기존 JWT 서명·역할 규칙을 사용하고 JWT의 주최자 ID로 조회 범위를 결정한다. Gateway 라우트 및 BFF의 실제 계약 전환은 T6에서 한다. OpenAPI 수집은 기존 앱 방식으로 한다. [ADR 0047](../../adr/0047-openapi-codegen-for-bff-boundary.md)
 - 테스트 경계와 선례: `SettlementApiIntegrationTests`를 정산 앱의 HTTP 경계에 옮긴다. 주최자별 격리·정렬, 인증 없음 401, 권한 없음 403, 잘못된 기간 400, 기존 응답 필드와 플랫폼 할인 부담액의 비노출을 확인한다. `OpenApiContractTests`로 정산 앱의 스펙을 고정한다.

@@ -1,0 +1,89 @@
+{
+  "components" : {
+    "schemas" : {
+      "DailySettlementResponse" : {
+        "properties" : {
+          "feeAmount" : {
+            "type" : "number"
+          },
+          "feeRate" : {
+            "type" : "number"
+          },
+          "netAmount" : {
+            "type" : "number"
+          },
+          "payoutAmount" : {
+            "type" : "number"
+          },
+          "performanceId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundAmount" : {
+            "type" : "number"
+          },
+          "refundCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "saleAmount" : {
+            "type" : "number"
+          },
+          "saleCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "settlementDate" : {
+            "format" : "date",
+            "type" : "string"
+          }
+        },
+        "required" : [ "feeAmount", "feeRate", "netAmount", "payoutAmount", "performanceId", "refundAmount", "refundCount", "saleAmount", "saleCount", "settlementDate" ],
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/settlements" : {
+      "get" : {
+        "operationId" : "find",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DailySettlementResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    }
+  }
+}
