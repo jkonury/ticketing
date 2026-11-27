@@ -81,12 +81,13 @@ core 테스트에서 결제 결과는 `KafkaPaymentStub`(`core/src/test/.../supp
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
 
 - 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)와 payment 앱(18085)이 필요하다. 결제 결과는 payment 앱이 발행한다.
-- 전체 E2E는 PR의 CI에서 검증한다. 로컬 백엔드·웹 E2E는 사용자가 명시적으로 요청한 경우에만 실행한다. 특정 백엔드 시나리오를 재현할 때는 `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`의 `--tests`로 범위를 지정한다.
+- 전체 E2E는 PR의 CI에서 검증한다. 로컬 백엔드·웹 E2E는 사용자가 명시적으로 요청한 경우에만 실행한다. 특정 백엔드 시나리오를 재현할 때는 `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web | --saga-recovery]`의 `--tests`로 범위를 지정한다.
   - 사전 조건은 payment·settlement DB 설정과 JWT·웹훅 비밀 값이 들어 있는 `.env`, 실행 중인 Docker, 비어 있는 앱 포트다. 필요한 포트와 별도 Compose에서 실행하는 절차는 [런북](../runbook.md#6-테스트검증-실패-대응)을 따른다.
   - 프로세스는 fake-pg, core, payment, settlement, realtime-a/b, Gateway다. 매 실행마다 DB 준비 스크립트로 `payment_db`와 `settlement_db`를 준비한다. fake-pg 웹훅은 payment 앱을 직접 호출한다.
   - Batch E2E(`BatchBaselineE2eTests`)는 세 배치 JAR를 별도 프로세스로 실행한다. 미결제 정리는 core-batch와 core DB, 결제 대사는 payment-batch와 `payment_db`, 정산은 settlement-batch와 `settlement_db`를 사용한다. `BatchSupport`의 `BatchTarget`이 JAR와 DB를 지정한다.
   - 결제 경로 E2E(`PaymentFlowE2eTests`)는 같은 승인 웹훅 재전송의 멱등, 만료 후 승인 → 환불·좌석 반환(fake-pg 승인 보류로 "만료 시각 커밋 → 승인" 순서를 보장), Gateway의 웹훅 404를 검증한다. 웹훅 재전송은 `E2E_WEBHOOK_SECRET`(스크립트가 `.env`의 `FAKE_PG_WEBHOOK_SECRET`을 환경 변수로 전달)으로 서명해 payment 앱에 직접 보낸다.
+  - `CouponFlowE2eTests`는 보류된 PG 거래를 실패로 끝낸 뒤 예매 취소와 쿠폰 복원, 좌석 재선점을 검증한다. `SagaRecoveryE2eTests`는 `--saga-recovery`에서만 실행되며 Kafka 중단 후 만료 예매의 환불과 payment 중단 중 접수한 확정 예매 취소의 환불을 검증한다. 로컬 장애 실행에는 Linux와 전용 Compose 프로젝트, 격리된 포트·볼륨이 필요하다. [격리 실행 절차](../runbook.md#6-테스트검증-실패-대응)
   - 스크립트가 실행마다 관리자(ADMIN) 계정을 가입시킨 뒤 DB에서 승격하고, `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다. 앱 코드에는 E2E 전용 경로가 없다.
   - 로그는 `build/e2e/logs/`에 저장한다.
 - 부하 테스트: `scripts/loadtest/run.sh`(k6)와 Gatling(`loadtest/gatling/README.md`). 프로세스는 fake-pg, core, realtime, Gateway, payment(18085)이며 실행마다 `ensure-payment-db.sh`로 `payment_db`를 준비한다. 결과는 `build/loadtest/runs/`에 저장한다. 절차는 [부하 테스트 런북](../performance/loadtest-runbook.md)을 따른다.
-- `main` 대상 PR마다 `.github/workflows/ci.yml`의 `backend E2E` 잡이 `./scripts/e2e/run.sh`를 실행한다. 실패 로그와 JUnit 결과는 artifact `backend-e2e-logs`에서 확인한다. `.github/workflows/web-e2e.yml`은 `run.sh --web --keep` → `seed-demo.sh` → `pnpm capture`를 실행하고 캡처를 artifact `ui-capture`로 남긴다. 부하 테스트는 별도로 실행한다.
+- `main` 대상 PR마다 `.github/workflows/ci.yml`의 `backend E2E` 잡이 실행 ID와 시도 번호가 붙은 Compose 프로젝트에서 `./scripts/e2e/run.sh --saga-recovery`를 실행한다. 성공한 JUnit 결과는 artifact `backend-e2e-results`, 실패 로그와 결과는 `backend-e2e-logs`에서 확인한다. `.github/workflows/web-e2e.yml`은 `run.sh --web --keep` → `seed-demo.sh` → `pnpm capture`를 실행하고 캡처를 artifact `ui-capture`로 남긴다. 부하 테스트는 별도로 실행한다.

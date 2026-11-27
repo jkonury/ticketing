@@ -117,8 +117,8 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 - **만료는 지연 판정**: 예매는 `expiresAt = 생성 시각 + 5분`을 갖는다. 결제 요청이나 결제 결과가 도착했을 때 `Clock`과 비교해 `EXPIRED`로 전환한다. 일괄 정리는 M2 Batch가 한다.
 - **결제 실패**: `PENDING → CANCELLED`(사유 `PAYMENT_FAILED`)로 바꾸고 좌석을 반환한다. 재결제는 없다.
 - **확정 예매 취소**: 즉시 `CANCELLED`(`USER_REQUESTED`)로 바꾸고 `RefundRequested`를 발행한다. 환불은 비동기다.
-- **결제 금액 불일치**: 결제는 성공했지만 금액(`compareTo`)이 `totalPrice`와 다르면 확정하지 않는다. `PENDING → CANCELLED`(`AMOUNT_MISMATCH`)로 바꾸고 `RefundRequested`(사유 `AMOUNT_MISMATCH`)와 `BookingCancelled`(`refundRequired=true`)를 발행하며 커밋 후 선점을 해제한다. `sold_seat`는 넣지 않는다. 만료 판정이 먼저라서 만료됐으면 불일치여도 `EXPIRED` 환불 경로다.
-- **결제 재요청**(`POST /api/v1/bookings/{id}/payments`): `PENDING`이면 이미 요청했어도 `202`(이벤트는 다시 발행하지 않는다). 이미 요청했다면 만료 시각이 지나도 결제가 진행 중이므로 `202`다. `CONFIRMED`, `CANCELLED`는 `409 INVALID_BOOKING_STATE`, `EXPIRED`는 `409 BOOKING_EXPIRED`.
+- **결제 금액 불일치**는 PG 승인 금액과 쿠폰 할인을 반영한 `payableAmount`를 `compareTo`로 비교해 판단한다. 불일치하면 `PENDING → CANCELLED`(`AMOUNT_MISMATCH`)로 바꾸고 `RefundRequested`(사유 `AMOUNT_MISMATCH`)와 `BookingCancelled`(`refundRequired=true`)를 발행하며 커밋 후 선점을 해제한다. `sold_seat`는 넣지 않는다. 만료 판정이 먼저라서 만료됐으면 `EXPIRED` 환불 경로로 처리한다.
+- **결제 재호출**(`POST /api/v1/bookings/{id}/payments`)에서 접수 이력이 있는 `PENDING`·`CONFIRMED` 예매는 만료 시각이나 회차 시작 시각이 지나도 현재 상태를 `202`로 반환한다. 이벤트 재발행은 없다. 최초 요청은 예매 만료와 회차 시작을 검사한다. `CANCELLED`와 접수 이력이 없는 `CONFIRMED`는 `409 INVALID_BOOKING_STATE`, `EXPIRED`는 `409 BOOKING_EXPIRED`를 반환한다. [ADR 0044](../adr/0044-sales-close-and-payment-retry.md)
 - **동시 수정 충돌**: HTTP 요청 경로에서 `Booking`의 낙관적 락(`@Version`) 충돌이 나면 `ApiExceptionHandler`가 `409 CONCURRENT_MODIFICATION`으로 변환하며 클라이언트가 다시 시도한다. 이벤트 리스너 경로는 예외를 그대로 던져 이벤트 발행 레지스트리가 재시도한다.
 - 같은 결제 결과 이벤트가 다시 와도 상태는 다시 바뀌지 않는다(멱등).
 
@@ -130,7 +130,12 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 4. payment 앱이 멱등 키로 중복을 걸러내고 결과 이벤트 발행(Kafka)
 5. `booking`이 이벤트를 받아 `CONFIRMED` 또는 실패 처리(`CANCELLED`, 사유 `PAYMENT_FAILED`, 좌석 반환)
 
-**자동 환불 조건**: 결제는 성공했는데 (a) 예매가 이미 만료됐거나(`EXPIRED`로 전환), (b) 확정 시 `booking.sold_seat` 유니크 제약에 걸려 좌석이 이미 판매된 경우(`CANCELLED`, 사유 `SEAT_ALREADY_SOLD`), `booking`이 `RefundRequested`를 발행해 자동 환불한다.
+다음 경우에는 PG 승인이 도착해도 `booking`이 `RefundRequested`를 발행해 자동 환불한다.
+
+- 만료 시각이 지났거나 이미 `EXPIRED`인 예매는 `EXPIRED` 상태와 사유 `BOOKING_EXPIRED`로 처리한다.
+- 이미 취소된 예매는 `CANCELLED`를 유지하고 환불 요청 사유로 `BOOKING_CANCELLED`를 사용한다.
+- 만료되지 않은 `PENDING` 예매의 승인 금액이 결제 예정 금액과 다르면 `CANCELLED`와 사유 `AMOUNT_MISMATCH`로 처리한다.
+- 확정 중 `booking.sold_seat` 유니크 제약에 걸리면 `CANCELLED`와 사유 `SEAT_ALREADY_SOLD`로 처리한다.
 
 **결제 결과 처리의 트랜잭션 구조**
 - 결과 이벤트는 `@KafkaListener`로 받고, DB 작업은 유스케이스의 트랜잭션 하나에 참여한다. 내부에서 `REQUIRES_NEW`를 또 열지 않는다. 동시에 도는 처리가 커넥션을 두 개씩 잡으면 풀 고갈과 교착이 생기기 때문이다.

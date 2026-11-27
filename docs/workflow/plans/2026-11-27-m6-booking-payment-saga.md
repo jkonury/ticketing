@@ -74,6 +74,7 @@ M6 사전 작업(P1~P6), Kafka 도입, payment 분리, HTTP 계약 생성, settl
 ### T4. 보상 결과와 복구 절차를 문서로 확인할 수 있다
 
 - [ ] 완료
+- 복구 문서와 로컬 검증 후 PR CI의 분리 스택 15개 결과를 확인해야 T4와 로드맵 Saga 항목을 완료할 수 있다.
 - Blocked by: T1, T2, T3
 - 변경 범위와 제약: 흐름 문서의 자동 환불 조건에 금액 불일치와 취소 후 늦은 승인을 반영하고, 결제 재호출 설명을 ADR 0044와 맞춘다. 런북에는 발행 앱별 DB에서 미완료 발행을 찾고 브로커 복구 후 해당 앱을 재기동하는 절차, 이미 Kafka에 적재된 환불의 소비 재개, DLT 확인이 필요한 조건을 주문 상태와 함께 적는다. E2E 문서에 `--saga-recovery`와 격리 사전 조건을, fake-pg 테스트 제어 문서에 T1 동작을 반영한다. [ADR 0044](../../adr/0044-sales-close-and-payment-retry.md), [장애 진단 런북](../../runbook.md#37-미완료-이벤트-발행이-쌓인다), [fake-pg 연동 규약](../../architecture/integrations.md#승인-보류-테스트-제어)
 - 테스트 경계와 선례: `BookingPaymentFlowTests`·`BookingCouponSagaTests`로 좌석 충돌, 금액 불일치, 쿠폰 해제·사용 확정 및 이전 시도 재전달을 확인한다. `ExpirePendingBookingsJobTests`·`ReleaseStaleCouponReservationsJobTests`와 P2 기준선으로 배치 보정 경계를 확인한다. 이 테스트와 분리 스택 결과를 근거로 복구 절차를 검토한 뒤 로드맵 Saga 항목을 완료 처리한다.
