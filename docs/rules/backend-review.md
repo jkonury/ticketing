@@ -55,7 +55,7 @@
 
 ## 5. 검증 확인
 
-- `./scripts/agent/test/run-tests.sh`가 통과했는가(필터는 사용자가 지정한 경우만).
+- `./scripts/agent/test/run-tests.sh`가 필터 없이 통과했는가.
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과했는가.
 - 모듈 의존을 바꿨다면 Modulith 구조 검증을 돌렸는가.
 - core·payment·gateway·realtime·fake-pg 흐름을 바꿨다면 `./scripts/e2e/run.sh`를 실행했는가.

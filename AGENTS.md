@@ -15,7 +15,8 @@
 - [백엔드 공통 지침](docs/rules/backend.md): 공통 작성 규칙과 `core`, `core-batch`, `payment`, `payment-batch`, `realtime`, `gateway`, `fake-pg`, `common`, `contract`별 지침. 변경 경로에 해당하는 지침도 읽는다.
 - [백엔드 테스트 지침](docs/rules/backend-testing.md): 백엔드 테스트·픽스처·E2E·부하 테스트·CI를 다룰 때 읽는다.
 - [프론트엔드 지침](docs/rules/frontend.md): `web`(Next.js BFF + 화면)을 다룰 때 읽는다.
-- 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다.
+- 리뷰: 백엔드 변경은 [백엔드 리뷰 지침](docs/rules/backend-review.md), `web` 변경은 [프론트엔드 리뷰 지침](docs/rules/frontend-review.md)을 따른다. 기준점과 HEAD 사이 변경을 Standards·Spec 두 축으로 리뷰하라는 요청은 `review-diff` 스킬(`.agents/skills/review-diff/SKILL.md`)을 따른다. 이 스킬은 서브에이전트 대신 **지금 실행 중인 도구와 다른 모델의 CLI**(Claude Code는 `codex`, Codex는 `claude`)를 읽기 전용으로 호출한다.
+- 설계 인터뷰와 구현 방식: 계획·설계를 검증하며 용어사전(`docs/glossary.md`)과 ADR을 갱신하라는 요청은 `grill-with-docs` 스킬, 테스트 우선(red → green) 구현 요청은 `tdd` 스킬을 따른다. 두 스킬 모두 규범은 `docs/rules`와 `docs/` 문서가 정한다.
 - [서브에이전트 위임 지침](docs/rules/subagent-delegation.md): 구현 계획을 서브에이전트 task로 나눠 위임할 때 읽는다.
 - herdr 위임은 사용자가 명시적으로 지시할 때만 `delegate` 스킬(`.agents/skills/delegate/SKILL.md`)을 따른다. 이 저장소의 위임 값은 [서브에이전트 위임 지침](docs/rules/subagent-delegation.md#이-저장소의-위임-값)에 있다.
 - 반복 작업 절차는 skill로 둔다. 원본은 `.agents/skills/<이름>/SKILL.md`(Codex가 읽음)이고 `.claude/skills`는 그 디렉터리를 가리키는 symlink다. 추가·수정 후 `./scripts/agent/skills/check-skills.sh`를 실행한다. skill에는 순서만 쓰고 규범은 `docs/rules`를 링크한다.
@@ -88,7 +89,7 @@ cd web && pnpm install && pnpm dev
 
 - 사전 조건: Docker가 떠 있어야 한다(jOOQ 코드 생성과 Testcontainers가 사용한다). 에이전트 스크립트는 `fd`, `rg`를 쓴다.
 - 변경 범위 검사: `./scripts/agent/test/verify-changed.sh [--dry-run] [기준 ref | A..B]`. 변경 경로에 맞는 아래 검사를 골라 실행하고 E2E·`modulithDocs` 필요 여부를 알린다. 작업을 마치기 전에 실행한다.
-- test: `./scripts/agent/test/run-tests.sh` (필터는 사용자가 지정한 경우에만 `--tests "패턴"` 추가)
+- test: `./scripts/agent/test/run-tests.sh` (`--tests "패턴"`으로 일부만 실행할 수 있다. 작업을 마치기 전 최종 검증은 필터 없이 실행한다)
 - check: `./scripts/agent/test/check-summary.sh` (기본 `check`, 필요하면 Gradle 작업을 인자로 지정)
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과시킨다(`./gradlew ktlintFormat`으로 포맷 자동 수정). `@Suppress`·baseline 추가는 사용자와 합의한 경우에만 한다(`--no-verify`는 훅이 차단한다).
 - web 변경 후 `./scripts/agent/test/web-check.sh`(빌드 확인은 `--build`)를 통과시킨다.

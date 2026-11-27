@@ -34,7 +34,7 @@ task 하나는 모듈 하나만 수정한다. 모듈은 `core`의 Modulith 모�
 
 ### 테스트 필터
 
-서브에이전트 task의 AC에는 `run-tests.sh`의 `--tests` 필터를 써도 된다(사용자 합의). `AGENTS.md` 6절의 "필터는 사용자가 지정한 경우에만"은 이 합의로 task AC에 한해 완화된다. main의 최종 검증은 필터 없이 실행한다.
+서브에이전트 task의 AC에는 `run-tests.sh`의 `--tests` 필터를 써도 된다. main의 최종 검증은 필터 없이 실행한다.
 
 ### 변경 유형별 최종 검증
 
