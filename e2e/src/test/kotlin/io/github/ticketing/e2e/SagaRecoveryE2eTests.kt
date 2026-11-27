@@ -68,6 +68,62 @@ class SagaRecoveryE2eTests {
         )
     }
 
+    @Test
+    fun `payment 재기동 후 확정 예매의 취소를 환불하고 사용한 쿠폰을 유지한다`() = runTest(timeout = 15.minutes) {
+        val booking = CouponBookingFixture.reserve(client)
+        val order = booking.bookingId
+        val requestDate = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        val payable = client.bookingDetail(booking.buyer, order)["payableAmount"].asLong()
+        client.payAndAwaitConfirmed(booking.buyer, order)
+        awaitCoupon(booking, "USED")
+        val transactionId = approvedTransaction(order, requestDate, payable)
+        assertEquals(
+            booking.seatIds.map(Long::toString),
+            BatchSupport.psql("SELECT seat_id FROM booking.sold_seat WHERE booking_id = $order ORDER BY seat_id"),
+        )
+
+        val payment = SagaPaymentProcess()
+        SagaKafka(order, SagaTopic.REFUND_REQUESTED, SagaTopic.PAYMENT_REFUNDED, SagaTopic.BOOKING_CANCELLED).use { kafka ->
+            try {
+                payment.stop()
+                client.cancelBooking(booking.buyer, order)
+                assertEquals("CANCELLED", client.bookingDetail(booking.buyer, order)["status"].asString())
+                assertSeatAvailable(booking)
+                awaitQueuedRefund(order, kafka)
+                assertEquals(transactionId, approvedTransaction(order, requestDate, payable))
+
+                payment.restore()
+
+                awaitRefund(booking, requestDate)
+                assertEquals(transactionId, fakePg.transactions(order, requestDate).single()["transactionId"].asString())
+                awaitCoupon(booking, "USED")
+                client.poll {
+                    BatchSupport.settlementPsql("SELECT reason FROM settlement.booking_refund WHERE booking_id = $order") ==
+                        listOf("USER_REQUESTED")
+                }
+                assertRecoveryComplete(order, kafka)
+            } finally {
+                withContext(NonCancellable) { payment.restore() }
+            }
+        }
+    }
+
+    private fun approvedTransaction(order: Long, requestDate: LocalDate, payable: Long): String {
+        val transaction = fakePg.transactions(order, requestDate).single()
+        assertEquals("APPROVED", transaction["status"].asString())
+        assertEquals(payable, transaction["amount"].asLong())
+        return transaction["transactionId"].asString()
+    }
+
+    private suspend fun awaitQueuedRefund(order: Long, kafka: SagaKafka) {
+        client.poll {
+            BatchSupport.psql(
+                "SELECT id FROM public.event_publication WHERE event_type LIKE '%RefundRequested' " +
+                    "AND serialized_event::jsonb ->> 'orderId' = '$order' AND completion_date IS NOT NULL",
+            ).size == 1 && kafka.published(SagaTopic.REFUND_REQUESTED)
+        }
+    }
+
     private suspend fun approveWhileBrokerPaused(booking: CouponBooking, broker: SagaBroker): UUID {
         val order = booking.bookingId
         try {
@@ -110,12 +166,12 @@ class SagaRecoveryE2eTests {
     }
 
     private suspend fun assertRecoveryComplete(order: Long, kafka: SagaKafka) {
-        client.poll { kafka.consumed() }
-        kafka.assertNoDeadLetters()
         val unfinished = "SELECT id FROM public.event_publication WHERE completion_date IS NULL " +
             "AND (serialized_event::jsonb ->> 'orderId' = '$order' OR serialized_event::jsonb ->> 'bookingId' = '$order')"
         client.poll {
             BatchSupport.psql(unfinished).isEmpty() && BatchSupport.paymentPsql(unfinished).isEmpty()
         }
+        client.poll { kafka.consumed() }
+        kafka.assertNoDeadLetters()
     }
 }

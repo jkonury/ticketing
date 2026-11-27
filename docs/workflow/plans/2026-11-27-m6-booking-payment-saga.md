@@ -59,7 +59,7 @@ M6 사전 작업(P1~P6), Kafka 도입, payment 분리, HTTP 계약 생성, settl
 
 ### T3. payment 앱이 돌아오면 확정 후 취소의 환불이 완료된다
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T2(payment 프로세스 수명 관리와 복구 테스트 지원 재사용)
 - 변경 범위와 제약: T2의 장애 옵션, payment 생명주기 관리, DLT 확인 절차를 재사용한다. Kafka와 fake-pg는 계속 실행한다.
 - 테스트 경계와 선례: `CouponFlowE2eTests`의 할인 결제·확정 후 취소와 payment의 `PaymentListenerTests`의 환불 멱등 검증을 따른다. 예매 `CONFIRMED`, 쿠폰 `USED`, 할인 결제 금액을 확인한 뒤 payment를 내린다. Gateway로 취소하고 판매 좌석 삭제와 재선점, core의 `RefundRequested` 발행 완료, 아직 환불 전인 PG 거래를 확인한다. payment를 같은 그룹으로 재기동해 적재된 환불 요청을 소비하게 하고 결제 조회와 PG의 `REFUNDED`, 같은 거래 한 건, 쿠폰 `USED` 유지를 확인한다. 정산 환불 사본 반영을 폴링하고 T2의 DLT 기준을 적용한다.
