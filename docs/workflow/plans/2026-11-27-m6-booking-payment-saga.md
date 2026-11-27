@@ -25,7 +25,7 @@ M6 사전 작업(P1~P6), Kafka 도입, payment 분리, HTTP 계약 생성, settl
 
 ### T1. 실패 웹훅이 예매를 취소하고 예약 쿠폰을 복원한다
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: 기존 fake-pg 승인 보류 테스트 제어에 보류 중인 주문을 실패로 끝내는 동작을 추가한다. 기존 실패 웹훅 발송 경로를 사용한다. 제어는 기존 `fake-pg.test-controls.enabled=true`에서만 가능하며, 같은 주문의 보류 거래는 한 번만 마친다. `CouponFlowE2eTests`의 쿠폰 예매 준비를 재사용하고 후속 복구 테스트에 필요한 주문·회차·쿠폰 식별자를 공유한다.
 - 테스트 경계와 선례: fake-pg HTTP 테스트는 `ApprovalHoldTest`, `ApprovalHoldDisabledTest`, `PaymentScenarioTest`를 따른다. 보류된 거래에서 `PAYMENT_FAILED` 웹훅이 한 번 발행되고, 제어가 꺼져 있거나 이미 처리한 주문은 실패를 다시 발송하지 않는다. 분리 스택에서는 Gateway 예매·결제 요청 → fake-pg 실패 웹훅 → payment → Kafka → core를 거쳐 결제 `FAILED`, 예매 `CANCELLED`와 사유 `PAYMENT_FAILED`, 같은 쿠폰 `ISSUED`, 판매 좌석 미생성 및 다른 구매자의 재선점을 확인한다.

@@ -39,6 +39,14 @@ class ApprovalHoldController(private val holds: ApprovalHolds, private val payme
             throw ResponseStatusException(HttpStatus.CONFLICT, "보류된 거래가 없다: $orderId")
         }
     }
+
+    @PostMapping("/{orderId}/fail")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun fail(@PathVariable orderId: String) {
+        if (!paymentService.failHeldApproval(orderId)) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "보류된 거래가 없다: $orderId")
+        }
+    }
 }
 
 data class HoldResponse(val orderId: String, val state: HoldState)
