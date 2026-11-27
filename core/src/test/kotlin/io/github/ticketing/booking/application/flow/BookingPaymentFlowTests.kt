@@ -20,6 +20,7 @@ import io.github.ticketing.publicationIds
 import io.github.ticketing.support.KafkaPaymentStub
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.within
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -134,7 +135,7 @@ class BookingPaymentFlowTests(
 
     private fun awaitConfirmedListeners(bookingId: Long) {
         await().atMost(Duration.ofSeconds(10)).untilAsserted {
-            listOf("BookingNotificationListener.on", "BookingEventListener.on").forEach { listener ->
+            listOf("BookingNotificationListener.on", "EventExternalizerModuleListener.externalize").forEach { listener ->
                 val ids = publicationIds(jdbc, BookingConfirmed::class.java, "bookingId", bookingId, listener)
                 assertThat(ids).hasSize(1)
                 assertThat(publicationCompleted(jdbc, ids.single())).isTrue()
@@ -315,7 +316,7 @@ class BookingPaymentFlowTests(
         payments.awaitResultsConsumedByBooking(payments.topics.paymentSucceeded, id, 2)
         awaitConfirmedListeners(id)
         assertThat(lag.count() - countBefore).isEqualTo(1L)
-        assertThat(lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) - totalBefore).isEqualTo(1500.0)
+        assertThat(lag.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) - totalBefore).isCloseTo(1500.0, within(0.001))
     }
 
     @Test

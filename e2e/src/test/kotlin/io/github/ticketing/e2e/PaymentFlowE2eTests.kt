@@ -64,7 +64,9 @@ class PaymentFlowE2eTests {
         assertEquals(publishedBefore, approvedPublications(booking))
         assertEquals("CONFIRMED", client.bookingDetail(buyer, booking)["status"].asString())
         // 정산 사본은 이벤트를 비동기로 받으므로 기다린 뒤 한 행인지 확인한다
-        client.poll { BatchSupport.psql("SELECT count(*) FROM settlement.booking_sale WHERE booking_id = $booking") == listOf("1") }
+        client.poll {
+            BatchSupport.settlementPsql("SELECT count(*) FROM settlement.booking_sale WHERE booking_id = $booking") == listOf("1")
+        }
         assertEquals("SUCCEEDED", paymentStatus(buyer, booking))
     }
 

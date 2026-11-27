@@ -513,7 +513,7 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
    ./scripts/db/migrate-settlement-data.sh --verify-only
    ```
 
-   재생 후 건수와 체크섬이 이전 결과와 일치해야 한다. lag이 0이어도 미완료 발행과 DLT를 확인한다.
+   재생 후 건수와 체크섬이 이전 결과와 일치해야 한다. 4단계 명령으로 두 DLT의 끝 오프셋을 다시 읽고, 기준점 이후에 늘어난 레코드와 이전에 처리 결과를 남기지 않은 레코드를 확인한다. lag이 0이어도 미처리 DLT와 미완료 발행이 있으면 6단계로 넘어가지 않는다.
 6. 새 core와 Gateway를 시작하고 정산 배치 실행 대상 JAR를 `settlement-batch.jar`로 변경한다. Gateway의 `GET /api/v1/settlements?from=…&to=…`가 주최자 JWT로 해당 주최자의 과거 정산을 반환하는지 확인한다. 확인 후 쓰기와 배치 스케줄을 재개한다.
 
 ### 복귀와 지연 이벤트
