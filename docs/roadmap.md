@@ -62,6 +62,7 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 | Spring Authorization Server (OAuth2/OIDC) | M6 완료 후 새 ADR로 검토. [ADR 0041](./adr/0041-auth-stays-in-core-sas-deferred.md) |
 | 실제 PG 연동 (테스트 모드) | 가짜 PG로 보상 흐름 검증 이후 |
 | 실제 이메일/SMS 알림 | 미정 |
+| 포스터 저장소 RustFS 전환 | 검토 후 도입 여부 결정. [영향 범위와 검증 결과](reviews/2026-11-27-poster-storage-rustfs.md) |
 | 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |
 | 플랫폼 실수익 리포트 (할인 부담 반영) | 미정 |
 | coupon MSA 분리 | M6에서는 분리하지 않음. 이후 검토 |
