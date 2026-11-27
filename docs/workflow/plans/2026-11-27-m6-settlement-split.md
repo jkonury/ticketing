@@ -120,7 +120,7 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 ## 최종 검증
 
 - 시작 SHA부터 HEAD까지 `./scripts/agent/test/verify-changed.sh <시작-SHA>..HEAD`를 실행한다. 필터 없는 `./scripts/agent/test/run-tests.sh`와 `./scripts/agent/test/check-summary.sh ktlintCheck detekt`를 실행한다.
-- 격리된 Compose 환경에서 `./scripts/e2e/run.sh --web`으로 백엔드·웹 전체 E2E를 실행한다. PR CI에서는 전체 백엔드 E2E 및 web E2E 결과와 OpenAPI 생성물 drift 검사를 확인한다.
+- 격리된 Compose 환경에서 `./scripts/e2e/run.sh`로 전체 백엔드 E2E를, `./scripts/e2e/run.sh --web`으로 전체 웹 E2E를 실행한다. PR CI에서는 두 E2E 결과와 OpenAPI 생성물 drift 검사를 확인한다.
 - 같은 SHA 범위를 승인 계획을 명세로 삼아 `review-diff`의 Standards·Spec으로 검토한다. P2 정산 결과와 이전 리허설 결과를 계획에 남긴다.
 
 ### 정산 분리 검증 결과
