@@ -35,7 +35,7 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 
 ### T2. 정산 앱이 Kafka에서 사본을 적재
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1
 - 변경 범위와 제약: `settlement` Gradle 앱, 전용 계정·DB 준비, Flyway와 독립 jOOQ 생성을 추가한다. 앱은 `common`과 `contract`를 사용하고 core 및 core DB에 연결하지 않는다. 기존 판매·환불 적재 유스케이스를 옮긴다. 두 토픽을 `ticketing-settlement` 그룹에서 소비하고, 빈 그룹의 최초 구독은 보관 중인 레코드부터 읽는다. DB 쓰기가 커밋되기 전에 메시지 처리를 완료하지 않는다. 신규 앱의 강제 기동이나 기존 환경 전환은 T6에서 한다.
 - 테스트 경계와 선례: `SettlementModuleTests`의 검증을 새 앱의 Kafka → PostgreSQL 통합 테스트로 옮긴다. 동일한 확정·취소의 중복 수신, 확정보다 먼저 도착한 환불, `refundRequired=false`, 잘못된 본문의 DLT를 실제 Kafka·정산 DB에서 확인한다. 전용 계정으로 기동하고 core DB와 정산 DB의 교차 접속 제한도 확인한다. 로컬 관리자 계정은 DB 준비와 테스트에서 사용한다. 독립 빌드와 코드 생성은 payment 선례를 따른다.
