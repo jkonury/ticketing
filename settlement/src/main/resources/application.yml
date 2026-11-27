@@ -1,3 +1,9 @@
+springdoc:
+  api-docs:
+    enabled: false
+  paths-to-match: /api/v1/**
+  override-with-generic-response: false
+
 spring:
   application:
     name: settlement
@@ -62,6 +68,20 @@ management:
 server:
   port: 18086
 
+ticketing:
+  jwt:
+    secret: ${TICKETING_JWT_SECRET}
+
 logging:
   level:
     org.jooq.Constants: off
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+springdoc:
+  api-docs:
+    enabled: true
