@@ -81,7 +81,7 @@ core 테스트에서 결제 결과는 `KafkaPaymentStub`(`core/src/test/.../supp
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
 
 - 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)와 payment 앱(18085)이 필요하다. 결제 결과는 payment 앱이 발행한다.
-- E2E: `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`. core·payment·gateway·realtime·fake-pg 흐름을 바꾼 작업에서 실행한다(결제 경로는 `PaymentFlowE2eTests`가 검증한다).
+- 전체 E2E는 PR의 CI에서 검증한다. 로컬에서 특정 시나리오를 재현할 때는 `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`의 `--tests`로 범위를 지정한다.
   - 사전 조건: `.env`(payment DB·`TICKETING_JWT_SECRET`·`FAKE_PG_WEBHOOK_SECRET` 포함. 없으면 스크립트가 키 이름을 알리고 실패한다), 실행 중인 Docker, 비어 있는 18000·18080·18081·18082·18085·18090 포트. `--web`은 Playwright web 앱을 13000 포트에 추가하므로 그 포트도 비어 있어야 한다.
   - 프로세스는 fake-pg, core, payment, realtime-a/b, Gateway다. 매 실행마다 `./scripts/db/ensure-payment-db.sh`로 `payment_db`를 준비한다. fake-pg 웹훅은 payment 앱을 직접 호출한다.
   - `core-batch`·`payment-batch` bootJar도 빌드하며 Batch E2E(`BatchBaselineE2eTests`)는 별도 프로세스로 실행한다. 정산·미결제 정리는 core-batch와 코어 DB, 결제 대사는 payment-batch와 `payment_db`(`BatchSupport`의 `BatchTarget`)를 쓴다.
@@ -89,4 +89,4 @@ E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Grad
   - 스크립트가 실행마다 관리자(ADMIN) 계정을 가입시킨 뒤 DB에서 승격하고, `E2E_ADMIN_EMAIL`·`E2E_ADMIN_PASSWORD`로 전달한다. 앱 코드에는 E2E 전용 경로가 없다.
   - 로그는 `build/e2e/logs/`에 저장한다.
 - 부하 테스트: `scripts/loadtest/run.sh`(k6)와 Gatling(`loadtest/gatling/README.md`). 프로세스는 fake-pg, core, realtime, Gateway, payment(18085)이며 실행마다 `ensure-payment-db.sh`로 `payment_db`를 준비한다. 결과는 `build/loadtest/runs/`에 저장한다. 절차는 [부하 테스트 런북](../performance/loadtest-runbook.md)을 따른다.
-- CI: `.github/workflows/ci.yml`(빌드·검사)과 `.github/workflows/web-e2e.yml`(PR마다 `run.sh --web --keep` → `seed-demo.sh` → `pnpm capture`, 캡처는 artifact `ui-capture`). 백엔드 E2E·부하 테스트는 포함하지 않는다.
+- `main` 대상 PR마다 `.github/workflows/ci.yml`의 `backend E2E` 잡이 `./scripts/e2e/run.sh`를 실행한다. 실패 로그와 JUnit 결과는 artifact `backend-e2e-logs`에서 확인한다. `.github/workflows/web-e2e.yml`은 `run.sh --web --keep` → `seed-demo.sh` → `pnpm capture`를 실행하고 캡처를 artifact `ui-capture`로 남긴다. 부하 테스트는 별도로 실행한다.
