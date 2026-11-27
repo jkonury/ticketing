@@ -1,6 +1,6 @@
 # API 규약 (§7, §8)
 
-> [← 아키텍처 개요](../architecture.md) · 범위: 코어·payment·realtime·Gateway의 HTTP API 공통 규칙
+> [← 아키텍처 개요](../architecture.md) · 범위: 코어·payment·settlement·realtime·Gateway의 HTTP API 공통 규칙
 > 함께 보기: [integrations.md](./integrations.md), [events.md](./events.md), [ADR 0020](../adr/0020-gateway-verification-contracts.md), [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md), [ADR 0023](../adr/0023-schedule-detail-api.md)
 
 ## 1. 호출 경로
@@ -8,10 +8,11 @@
 ```
 브라우저 ─▶ Next.js BFF ─▶ Gateway(18000) ─▶ 코어(18080)
                                           └─▶ payment(18085)   (/api/v1/payments/**)
+                                          └─▶ settlement(18086) (/api/v1/settlements)
 브라우저 ─(SSE, 단기 티켓)─▶ Gateway(18000) ─▶ realtime(18081)
 ```
 
-- 브라우저는 코어·payment API를 직접 부르지 않고 BFF Route Handler를 거친다. SSE만 예외다.
+- 일반 브라우저 요청은 BFF Route Handler를 거친다. SSE는 Gateway에 직접 연결한다.
 - BFF·클라이언트는 Gateway를 거쳐 호출한다.
 
 ### Gateway 라우팅
@@ -21,11 +22,14 @@
 | `/api/v1/queues/**` | realtime | JWT 필수, 회원 ID를 `X-Member-Id`로 전달, rate limit |
 | `/api/v1/streams/**` | realtime | SSE 티켓 소비, rate limit |
 | `/api/v1/payments/**` | payment | rate limit. `/api/v1/payments/webhooks` 하위는 라우팅 전에 404로 막는다(웹훅은 fake-pg가 payment 앱을 직접 호출) |
+| `/api/v1/settlements` | settlement | 기본 rate limit, `Authorization`을 정산 앱에 전달 |
 | `POST /api/v1/bookings` | 코어 | JWT 필수, 입장 토큰 검증, rate limit |
 | `POST /api/v1/coupons/*/claims` | 코어 | 전용 rate limit 버킷(`coupon-claim`, 보충 1·버스트 3. 회원당 1회 시나리오라 429는 검증하지 못한 임시값 확정, [coupon-drop.md](../performance/m5.5/coupon-drop.md)) |
 | `/api/v1/**` 그 외 | 코어 | rate limit |
 
 `payment-api` 라우트는 `core-api`보다 먼저 매칭하며, 대상 주소는 `ticketing.gateway.payment-uri`(환경 변수 `PAYMENT_URI`, 기본 `http://localhost:18085`)다. 필터는 `core-api`와 같이 rate limit(`default`)만 건다. JWT는 payment 앱이 검증한다.
+
+`settlement-api`도 `core-api`보다 먼저 매칭한다. 대상은 `ticketing.gateway.settlement-uri`(환경 변수 `SETTLEMENT_URI`, 기본 `http://localhost:18086`)다. `GET /api/v1/settlements?from=YYYY-MM-DD&to=YYYY-MM-DD`는 `ORGANIZER` JWT의 회원 ID로 해당 주최자의 정산만 조회한다. 응답 계약은 [정산 OpenAPI](../api/openapi/settlement.json)에 있다.
 
 #### 경로 검증
 
@@ -50,9 +54,9 @@
 | 토큰 | `Authorization: Bearer <access JWT>`. HS256, 수명 15분, `sub`=회원 ID, `role` 클레임 |
 | 공개 API | 공연·회차 조회(`GET /api/v1/performances/**`, `GET /api/v1/schedules/**`), 회원 가입, 로그인, 토큰 갱신·폐기, `/actuator/health`. 결제 웹훅은 Gateway를 거치지 않고 payment 앱이 서명으로만 받는다 |
 | 역할 | `USER`(예매·결제·내 정보), `ORGANIZER`(공연·회차 등록, 정산·판매 현황) |
-| 인가 방식 | 코어 컨트롤러의 `@PreAuthorize("hasRole(...)")`. payment 앱도 같은 비밀(HS256)로 JWT를 검증하고 `role` 클레임을 확인한다 |
+| 인가 방식 | 각 웹 앱의 `@PreAuthorize("hasRole(...)")` 또는 Security 설정. 코어·payment·settlement는 같은 비밀(HS256)로 JWT를 검증하고 `role` 클레임을 확인한다 |
 
-- Gateway는 `Authorization`이 있으면 모든 경로에서 JWT 서명을 검증하고 실패하면 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지운다. 코어와 payment 앱도 JWT를 자체 검증한다.
+- Gateway는 `Authorization`이 있으면 모든 경로에서 JWT 서명을 검증하고 실패하면 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지운다.
 - **JWT는 브라우저에 노출하지 않는다.** 토큰은 BFF 서버 측에만 있고 브라우저는 httpOnly 세션 쿠키만 가진다.
 - 본인 데이터 API는 요청 파라미터의 회원 ID가 아니라 JWT의 회원 ID로 조회한다. 다른 회원의 예매에 접근하면 403 `NOT_BOOKING_OWNER`로 응답한다.
 - 웹훅은 JWT 대신 서명으로 인증한다(`X-FakePg-Timestamp`, `X-FakePg-Signature`, [integrations.md §10](./integrations.md#10-외부-연동)).

@@ -14,7 +14,7 @@ import java.io.File
 
 // core가 소유한 모듈별 스키마. db/migration의 V1과 같이 유지하되 payment는 payment 앱 소유라 코드 생성 대상에서 뺀다.
 // 이전 검증 뒤 별도 마이그레이션으로 core의 payment 스키마를 제거한다(ADR 0040).
-private val SCHEMAS = listOf("member", "catalog", "booking", "settlement", "audit", "coupon")
+private val SCHEMAS = listOf("member", "catalog", "booking", "audit", "coupon")
 
 /**
  * 사용법: JooqCodegenKt <마이그레이션 디렉터리> <출력 디렉터리>

@@ -20,6 +20,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation(libs.archunit.junit5)
     testImplementation(testFixtures(project(":common")))
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 

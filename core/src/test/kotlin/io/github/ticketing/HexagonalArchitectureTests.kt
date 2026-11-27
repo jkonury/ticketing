@@ -17,9 +17,6 @@ class HexagonalArchitectureTests {
 
     private val classes get() = importedClasses
 
-    // payment 구현은 payment 앱으로 옮겨 core에는 계약 이벤트만 남았다
-    private val hexagonalModules = listOf("booking", "settlement")
-
     companion object {
         // 테스트 메서드마다 인스턴스가 새로 만들어지므로 클래스 분석은 한 번만 한다
         private val importedClasses = ClassFileImporter()
@@ -28,35 +25,28 @@ class HexagonalArchitectureTests {
     }
 
     @Test
-    fun `헥사고날 모듈은 adapter에서 application으로 application에서 domain으로만 의존한다`() {
-        hexagonalModules.forEach { module ->
-            val base = "io.github.ticketing.$module"
-            layeredArchitecture()
-                .consideringOnlyDependenciesInLayers()
-                .withOptionalLayers(true)
-                .layer("adapter").definedBy("$base.adapter..")
-                .layer("application").definedBy("$base.application..")
-                .layer("domain").definedBy("$base.domain..")
-                .whereLayer("adapter").mayNotBeAccessedByAnyLayer()
-                .whereLayer("application").mayOnlyBeAccessedByLayers("adapter")
-                .whereLayer("domain").mayOnlyBeAccessedByLayers("application", "adapter")
-                .check(classes)
-        }
+    fun `booking은 adapter에서 application으로 application에서 domain으로 의존한다`() {
+        layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            .layer("adapter").definedBy("io.github.ticketing.booking.adapter..")
+            .layer("application").definedBy("io.github.ticketing.booking.application..")
+            .layer("domain").definedBy("io.github.ticketing.booking.domain..")
+            .whereLayer("adapter").mayNotBeAccessedByAnyLayer()
+            .whereLayer("application").mayOnlyBeAccessedByLayers("adapter")
+            .whereLayer("domain").mayOnlyBeAccessedByLayers("application", "adapter")
+            .check(classes)
     }
 
     @Test
-    fun `도메인은 Spring JPA jOOQ에 의존하지 않는다`() {
-        hexagonalModules.forEach { module ->
-            noClasses().that().resideInAPackage("io.github.ticketing.$module.domain..")
-                .should().dependOnClassesThat().resideInAnyPackage(
-                    "org.springframework..",
-                    "jakarta.persistence..",
-                    "org.jooq..",
-                    "ticketing.jooq..",
-                )
-                .allowEmptyShould(true)
-                .check(classes)
-        }
+    fun `booking 도메인은 Spring JPA jOOQ에 의존하지 않는다`() {
+        noClasses().that().resideInAPackage("io.github.ticketing.booking.domain..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                "org.springframework..",
+                "jakarta.persistence..",
+                "org.jooq..",
+                "ticketing.jooq..",
+            )
+            .check(classes)
     }
 
     @Test

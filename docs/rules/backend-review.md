@@ -35,7 +35,7 @@
 
 작성 지침의 나머지 규칙 이탈이다.
 
-- 구조: [core 모듈 구조](backend-core.md#코어-모듈-구조-modulith), [헥사고날](backend-core.md#헥사고날-booking-settlement-coupon), [contract](backend-contract.md). 모듈 의존을 바꿨다면 Modulith 검증과 `modulithDocs` 갱신
+- 구조: [core 모듈 구조](backend-core.md#코어-모듈-구조-modulith), [헥사고날](backend-core.md#헥사고날-booking-coupon), [contract](backend-contract.md). 모듈 의존을 바꿨다면 Modulith 검증과 `modulithDocs` 갱신
 - 코드 규칙: [Kotlin](backend.md#kotlin), [JPA 엔티티](backend-core.md#jpa-엔티티), [영속성](backend-core.md#영속성), [API](backend-core.md#api)와 [API 규약](../architecture/api-conventions.md)
 - 실행 경계: [Virtual Thread](backend.md#virtual-thread), [realtime](backend-realtime.md), [gateway](backend-gateway.md), [로깅](backend.md#로깅)
 - 배치·결제: [Batch Job](backend-core.md#batch-job)([ADR 0019](../adr/0019-batch-jobs-in-owning-modules.md)), [core-batch](backend-core-batch.md), [payment-batch](backend-payment-batch.md), [payment](backend-payment.md)

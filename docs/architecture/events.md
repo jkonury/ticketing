@@ -36,8 +36,8 @@
 | `PaymentSucceeded` | `payment` | payment(앱) | booking(core) | PG 승인 웹훅(`PAYMENT_APPROVED`) 처리 |
 | `PaymentFailed` | `payment` | payment(앱) | booking(core) | PG 실패 웹훅(`PAYMENT_FAILED`) 처리 또는 PG 접수 거절 |
 | `PaymentRefunded` | `payment` | payment(앱) | booking(core) | PG 환불 완료 웹훅(`REFUND_COMPLETED`) 처리 |
-| `BookingConfirmed` | `booking` | booking | notification, settlement | 결제 성공으로 예매 확정(정가·할인액 포함) |
-| `BookingCancelled` | `booking` | booking | notification, settlement | 예매 취소 |
+| `BookingConfirmed` | `booking` | booking | notification(core), settlement 앱 | 결제 성공으로 예매 확정(정가·할인액 포함) |
+| `BookingCancelled` | `booking` | booking | notification(core), settlement 앱 | 예매 취소 |
 | `BookingExpired` | `booking` | booking | notification | 미결제 예매 만료 |
 | `CouponReservationRequested` | `coupon` | booking | coupon | 쿠폰 적용 시 예약 요청 |
 | `CouponReserved` | `coupon` | coupon | booking | 쿠폰 예약 성공 |
@@ -67,20 +67,20 @@
 
 ### Kafka 외부화 대상 (M6)
 
-프로세스 경계를 넘는 계약 이벤트 7종이 대상이다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 2단계에서 결제 5종을 외부화했고, 3단계에서 payment가 별도 앱으로 분리돼 이 5종이 core와 payment 앱 사이를 Kafka로만 오간다. 4단계에서 core가 예매 확정·취소도 Kafka로 발행한다. 정산 전환 전까지 core의 정산 리스너가 사본을 적재한다. 토픽은 이벤트별이다. core-batch·payment-batch는 발행 가능하지만 리스너를 기동하지 않는다.
+프로세스 경계를 넘는 계약 이벤트 7종이 대상이다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 결제 이벤트 5종은 core와 payment 사이를 오간다. 예매 확정·취소 2종은 core가 발행하고 settlement 앱이 소비한다. 토픽은 이벤트별이다. core-batch·payment-batch는 발행할 수 있다. 세 배치 실행 앱은 Kafka 리스너를 기동하지 않는다.
 
-| 이벤트 | 발행 (현재 → 분리 후. 분리를 마친 이벤트는 현재만) | 구독 (현재 → 분리 후. 같은 규칙) | 외부화 단계 | 토픽 | 메시지 키 | 파티션 | 소비자 멱등 근거 | 비고 |
+| 이벤트 | 발행 | Kafka 구독 | 외부화 단계 | 토픽 | 메시지 키 | 파티션 | 소비자 멱등 근거 | 비고 |
 |---|---|---|---|---|---|---|---|---|
 | `PaymentRequested` | booking(core) | payment(앱) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-requested` | `orderId` | 3 | `orderId`·멱등 키로 기존 결제 재사용, `REQUESTED`이고 PG 거래 ID가 없을 때만 PG 재요청 | 결제 DB의 `order_id`·`idempotency_key` 유니크 제약이 최종 방어선 |
 | `RefundRequested` | booking(core) | payment(앱) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.refund-requested` | `orderId` | 3 | 이미 `REFUNDED`면 건너뜀. 환불 진행 중 중복 도착 경합을 테스트로 검증 | |
 | `PaymentSucceeded` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-succeeded` | `orderId` | 3 | 예매 상태 전이 검사(이미 `CONFIRMED`면 `AlreadyConfirmed` 무시, `EXPIRED`·`CANCELLED`면 환불 경로) | |
 | `PaymentFailed` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-failed` | `orderId` | 3 | 예매 상태 전이 검사 | 토픽이 달라 같은 주문의 성공·실패·환불 간 순서는 보장되지 않는다. 상태 전이 검사에 의존 |
 | `PaymentRefunded` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-refunded` | `orderId` | 3 | 로그만 남김(부작용 없음) | |
-| `BookingConfirmed` | booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 외부화 | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | settlement: `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음(로그만, 중복 가능) | notification은 core에 남으므로 **같은 JVM 로컬 리스너를 유지**한다. settlement만 Kafka 소비로 바꾼다 |
-| `BookingCancelled` | booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 외부화 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | settlement: `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음 | 위와 같다 |
+| `BookingConfirmed` | booking(core) | settlement 앱 | 4단계 외부화·앱 분리 | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | `ON CONFLICT (booking_id) DO NOTHING` | notification은 core의 로컬 리스너로 받는다 |
+| `BookingCancelled` | booking(core) | settlement 앱 | 4단계 외부화·앱 분리 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING` | notification은 core의 로컬 리스너로 받는다 |
 | 외부화 안 함 | | | | | | | | `ScheduleRegistered`(catalog→booking), 쿠폰 계약 이벤트 5종(booking↔coupon), `BookingExpired`, audit 이벤트(`MemberRoleChanged`, 쿠폰 관리자 행위 5종): 분리 후에도 core 한 JVM 안에서 소비한다. Modulith 이벤트 그대로 둔다 |
 
-`orderId`와 `bookingId`는 같은 값(예매 ID)이다. 같은 토픽 안에서는 같은 키가 같은 파티션으로 가 순서가 보장되지만, 토픽이 다르면 순서가 보장되지 않는다. 그래서 같은 예매의 이벤트 간 순서 의존은 소비자의 상태 전이 검사로 막는다.
+`orderId`와 `bookingId`는 같은 값(예매 ID)이다. 순서는 같은 토픽의 같은 파티션 안에서 보장된다. 결제 이벤트의 역순 도착은 상태 전이 검사로 처리한다. 정산 앱은 환불 사본도 도착하는 즉시 저장하며, 배치는 집계 시 같은 예매 ID로 판매 사본을 찾는다.
 
 **규칙**
 
@@ -94,13 +94,14 @@
 - Modulith 외부화는 `EventExternalizerModuleListener`라는 **추가 `@ApplicationModuleListener`**로 구현된다([소스](https://github.com/spring-projects/spring-modulith/blob/main/spring-modulith-events/spring-modulith-events-core/src/main/java/org/springframework/modulith/events/support/EventExternalizerModuleListener.java), 확인한 것은 main 브랜치이며 프로젝트는 2.1.1). 이벤트를 소비하지 않으므로 외부화한다고 로컬 `@ApplicationModuleListener`가 막히지 않는다. 발행 레지스트리는 리스너마다 행을 하나씩 만든다. 공식 레퍼런스에는 이 동작이 명시되어 있지 않고 소스로 확인한 사실이다.
 - 2-3에서 payment 요청 리스너 2종과 booking 결과 리스너 3종을 `@KafkaListener`로 교체하고 해당 로컬 리스너를 제거했다. 같은 이벤트의 이중 처리를 피한다. 3단계에서 payment 리스너는 payment 앱으로 옮겼고 소비자 그룹 `ticketing-payment`를 유지해 core가 커밋한 오프셋을 이어받는다.
 - payment 앱은 자기 DB(`payment_db`)에 `event_publication`을 따로 둔다. 레지스트리를 core와 공유하지 않으므로 미완료 이벤트 확인과 재제출도 앱별로 한다.
+- 정산 앱은 `ticketing-settlement` 그룹으로 예매 확정·취소를 구독한다. 처음 구독할 때는 브로커에 남은 가장 오래된 레코드부터 읽고, 사본 저장 트랜잭션이 끝난 뒤 오프셋을 커밋한다. 전환 전 core에서 수행하던 정산 적재는 정산 앱이 맡는다.
 - 외부화는 `event_publication`을 거치므로 브로커 전송 실패는 외부화 리스너 행만 미완료로 남고 로컬 리스너 행에는 영향이 없다.
 
 근거: [Spring Modulith 이벤트 외부화](https://docs.spring.io/spring-modulith/reference/events.html#externalization)(`@Externalized` 문법 `토픽::키`는 `#externalization.annotations`, 프로그래매틱 설정은 `#externalization.api`, 순서는 `#externalization.serialization`). Kafka 모듈은 라우팅 키를 토픽·메시지 키로 쓴다(`#externalization.infrastructure`). 본문은 타입 헤더 없는 JSON 바이트이며 소비자는 리스너 파라미터 타입으로 역직렬화한다. 소비자 그룹은 payment 앱의 `ticketing-payment`와 core의 `ticketing-booking`이다. 재시도 소진 시 DLT로 보낸다. 장애 복구와 DLT 재처리는 [런북 §3.7](../runbook.md#37-미완료-이벤트-발행이-쌓인다)을 따른다.
 
 ### 의존 방향
 
-`booking → catalog`, `booking → payment`(core의 `payment` 패키지는 계약 이벤트만 담는다), `booking → coupon`, `notification → booking`, `settlement → booking`, `audit → member`, `audit → coupon`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. payment 앱은 예매를 모르고 `orderId`(=예매 ID)만 안다.
+`booking → catalog`, `booking → payment`(core의 `payment` 패키지는 계약 이벤트만 담는다), `booking → coupon`, `notification → booking`, `audit → member`, `audit → coupon`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. payment 앱은 `orderId`로 결제 대상을 식별한다. 정산 앱은 Kafka 계약 이벤트로 예매 사본을 적재한다.
 
 ## 3. 좌석 변경 스트림 (Redis Streams)
 

@@ -4,6 +4,9 @@ import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import org.junit.jupiter.api.Test
 import org.springframework.modulith.core.ApplicationModules
+import org.springframework.modulith.core.DependencyType
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ModularityTests {
 
@@ -19,9 +22,16 @@ class ModularityTests {
     }
 
     @Test
-    fun `설계한 8개 모듈이 모두 인식된다`() {
+    fun `설계한 7개 모듈이 모두 인식된다`() {
         val names = modules.map { it.identifier.toString() }.toSet()
-        kotlin.test.assertEquals(setOf("member", "catalog", "booking", "payment", "settlement", "notification", "audit", "coupon"), names)
+        assertEquals(setOf("member", "catalog", "booking", "payment", "notification", "audit", "coupon"), names)
+    }
+
+    @Test
+    fun `notification은 로컬 예매 이벤트를 계속 구독한다`() {
+        val notification = modules.getModuleByName("notification").orElseThrow()
+        val dependencies = notification.getDirectDependencies(modules, DependencyType.EVENT_LISTENER)
+        assertTrue(dependencies.uniqueModules().anyMatch { it.identifier.toString() == "booking" })
     }
 
     @Test
@@ -32,7 +42,7 @@ class ModularityTests {
             .map { it.name }
             .toSet()
 
-        kotlin.test.assertEquals(
+        assertEquals(
             setOf("PaymentRequested", "RefundRequested", "PaymentSucceeded", "PaymentFailed", "PaymentRefunded")
                 .map { "io.github.ticketing.payment.$it" }
                 .toSet(),

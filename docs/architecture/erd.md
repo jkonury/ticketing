@@ -5,7 +5,7 @@
 
 ## PostgreSQL
 
-- 인스턴스 하나에 DB 둘. core DB는 **모듈별 스키마 분리**(`member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`), payment는 전용 DB `payment_db`(스키마 `payment`, `batch`)다. 전용 계정만 `payment_db`에 접속한다([ADR 0040](../adr/0040-payment-separate-database-same-instance.md)).
+- 인스턴스 하나에 core DB와 전용 계정으로 접근하는 `payment_db`, `settlement_db`를 둔다. core는 모듈별 스키마를 쓴다. 기존 core 정산 스키마와 정산 배치 이력은 전환 후에도 보관한다. [ADR 0040](../adr/0040-payment-separate-database-same-instance.md), [ADR 0051](../adr/0051-settlement-database-cutover.md)
 - **모듈 간 외래 키·조인 금지**
 - `settlement`의 집계에 필요한 타 모듈 데이터는 이벤트로 받아 자기 스키마에 사본으로 쌓는다.
 - 스키마 관리는 Flyway, jOOQ 코드는 Flyway가 만든 스키마에서 생성한다.
@@ -17,7 +17,7 @@
 
 ## 테이블 구조 (ERD)
 
-스키마별로 그린다. 스키마를 넘는 관계는 FK가 없고 값으로만 참조하므로 선을 긋지 않고 주석으로 표시한다. 원본은 core DB는 `core/src/main/resources/db/migration/V*.sql`, `payment_db`는 `payment/src/main/resources/db/migration/V*.sql`이다. 이 외에 각 DB에 `public.event_publication`(Modulith 이벤트 발행 레지스트리)과 `batch` 스키마(Spring Batch 메타데이터, 공식 DDL)가 있다. core Flyway V18 적용 이후 `payment` 스키마는 `payment_db`에만 존재한다.
+스키마별로 그린다. 스키마 밖의 ID 참조에는 주석을 붙인다. DDL은 각 앱의 `src/main/resources/db/migration/`에 있다. 세 DB가 각각 `batch` 스키마를 갖고, core DB와 `payment_db`는 이벤트 발행용 `public.event_publication`도 갖는다.
 
 ### member
 
@@ -193,6 +193,8 @@ erDiagram
 ```
 
 ### settlement
+
+`settlement_db`의 `settlement` 스키마는 판매·환불 사본과 일별 결과를 저장한다.
 
 ```mermaid
 erDiagram
