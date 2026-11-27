@@ -1,5 +1,5 @@
 ---
-status: approved
+status: done
 approved_at: 2026-11-27T17:43:15+09:00
 ---
 
@@ -127,3 +127,5 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 
 - 격리 Compose의 `BatchBaselineE2eTests` 3개가 통과했다. `settlement-batch.jar`는 종료 코드 0으로 종료했고, `settlement_db`에서 `dailySettlementJob` 실행 상태는 `COMPLETED`였다. 판매 3건·30,000원, 환불 1건·10,000원, 순액 20,000원, 수수료율 0.10, 수수료 2,000원, 정산액 18,000원, 플랫폼 할인 부담 3,000원으로 P2와 일치했다. Gateway를 통한 주최자 조회와 다른 주최자의 데이터 격리도 통과했다.
 - 격리 PostgreSQL·Kafka의 이전 리허설에서 세 테이블의 건수와 체크섬 일치, 이관된 과거 정산 조회, 옛 Batch 이력 보존을 확인했다. 종료 오프셋까지 재생한 뒤 사본이 중복되지 않았고, 불일치·복사 실패 시 대상 트랜잭션 롤백과 쓰기 재개 전 원본 복귀를 검증했다.
+- 변경 범위 검사, 필터 없는 Gradle 테스트 621개, ktlint·detekt, OpenAPI 생성물 대조가 통과했다. 별도 Compose의 전체 백엔드 E2E 12개와 웹 E2E 8개도 통과했다.
+- Claude로 Standards·Spec을 검토했다. CLI의 도구 제한으로 전체 diff를 검토하지 못했다. Spec에서 확인한 DLT 점검을 보완해 Kafka 재생 후 종료 오프셋을 다시 읽도록 런북에 적었다.
