@@ -1,6 +1,6 @@
 # 개발 워크플로 로드맵 (W 트랙)
 
-- 결정: [ADR 0047](../adr/0047-ai-dev-workflow-pipeline.md)
+- 결정: [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md)
 - 작성일: 2026-11-25
 - 상태: W0~W2 완료. 다음은 W2.5
 
@@ -21,7 +21,7 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 
 ## W0. 결정 기록과 지침 갱신
 
-- [x] [ADR 0047](../adr/0047-ai-dev-workflow-pipeline.md)
+- [x] [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md)
 - [x] 이 로드맵 문서
 - [x] `AGENTS.md`: 문서 목록, W 트랙 병행, 승인된 계획의 커밋 예외
 
