@@ -2,6 +2,7 @@ package io.github.ticketing.e2e.support
 
 import java.io.File
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 data class JobRun(val exitCode: Int, val status: String?, val exitStatus: String?, val log: File)
@@ -35,9 +36,15 @@ object BatchSupport {
             "docker", "compose", "exec", "-T", "postgres", "psql", "-U", target.dbUser, "-d", target.dbName,
             "-v", "ON_ERROR_STOP=1", "-qtA", "-F", "|", "-c", sql,
         ).directory(projectDir).redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        check(process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0) { "psql 실패: $output" }
-        return output.lines().filter { it.isNotBlank() }
+        val output = CompletableFuture.supplyAsync { process.inputStream.bufferedReader().use { it.readText() } }
+        try {
+            check(process.waitFor(30, TimeUnit.SECONDS)) { "psql 응답 시간 초과" }
+            val text = output.get(3, TimeUnit.SECONDS)
+            check(process.exitValue() == 0) { "psql 실패: $text" }
+            return text.lines().filter { it.isNotBlank() }
+        } finally {
+            if (process.isAlive) process.destroyForcibly()
+        }
     }
 
     /** 결제 DB(`payment_db`)를 조회한다. */

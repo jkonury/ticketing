@@ -225,8 +225,8 @@ class E2eClient(private val gatewayUrl: String) {
         .bodyToFlux(object : ParameterizedTypeReference<ServerSentEvent<String>>() {}).asFlow()
         .map { SseEvent(it.id(), it.event(), it.data()?.let(mapper::readTree)) }
 
-    suspend fun poll(done: suspend () -> Boolean) = withContext(Dispatchers.IO) {
-        withTimeout(30000) {
+    suspend fun poll(timeoutMillis: Long = 30_000, done: suspend () -> Boolean) = withContext(Dispatchers.IO) {
+        withTimeout(timeoutMillis) {
             while (!done()) delay(200)
         }
     }

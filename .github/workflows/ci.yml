@@ -66,7 +66,16 @@ jobs:
             -e "s|^FAKE_PG_WEBHOOK_SECRET=.*|FAKE_PG_WEBHOOK_SECRET=$(openssl rand -hex 32)|" \
             .env
       - name: 백엔드 E2E
-        run: ./scripts/e2e/run.sh
+        env:
+          COMPOSE_PROJECT_NAME: ticketing-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+        run: ./scripts/e2e/run.sh --saga-recovery
+      - name: 백엔드 E2E 성공 리포트 업로드
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-e2e-results
+          path: e2e/build/test-results/e2eTest/TEST-*.xml
+          if-no-files-found: error
+          retention-days: 7
       - name: E2E 실패 로그·리포트 업로드
         if: failure()
         uses: actions/upload-artifact@v7
