@@ -1,5 +1,6 @@
 package io.github.ticketing.catalog.web
 
+import io.github.ticketing.catalog.domain.PerformanceGenre
 import io.github.ticketing.catalog.domain.SeatGrade
 import io.github.ticketing.catalog.service.CatalogRegistrationService
 import jakarta.validation.Valid
@@ -46,6 +47,7 @@ class CatalogRegistrationController(private val service: CatalogRegistrationServ
                 request.description,
                 request.venueId,
                 prices,
+                request.genre,
             ),
         )
         return ResponseEntity.status(HttpStatus.CREATED).body(IdResponse(requireNotNull(performance.id)))
@@ -81,6 +83,7 @@ data class RegisterPerformanceRequest(
     @field:NotBlank val description: String,
     val venueId: Long,
     @field:Valid @field:NotEmpty val prices: List<PriceRequest>,
+    val genre: PerformanceGenre? = null,
 )
 
 data class PriceRequest(

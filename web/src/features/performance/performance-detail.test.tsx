@@ -6,6 +6,8 @@ const view: PerformanceDetailView = {
   id: 1,
   title: '공연',
   description: '설명',
+  genre: null,
+  posterUrl: null,
   venue: { id: 1, name: '공연장' },
   prices: [],
   schedules: [{ id: 2, startsAt: '2026-12-01T10:00:00Z' }],

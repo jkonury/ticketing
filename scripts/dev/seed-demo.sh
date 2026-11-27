@@ -117,16 +117,29 @@ start_at() { # <일수> <HH:MM>
   TZ=Asia/Seoul date -d "+$1 days $2" +%Y-%m-%dT%H:%M:00+09:00
 }
 
-# 공연: 공연장 키|제목|소개|가격(JSON)|회차(일수@시각 ...)
+upload_poster() {
+  local performance=$1 poster=$2 upload url upload_id header
+  local headers=()
+  upload=$(api_ok "$organizer_token" POST "/performances/$performance/poster-uploads" '{"contentType":"image/webp"}')
+  url=$(jq -er .url <<<"$upload")
+  upload_id=$(jq -er .uploadId <<<"$upload")
+  while IFS= read -r header; do
+    headers+=(-H "$header")
+  done < <(jq -r '.headers | to_entries[] | "\(.key): \(.value)"' <<<"$upload")
+  curl -fsS --max-time 30 "${headers[@]}" --upload-file "$poster" "$url" >/dev/null
+  api_ok "$organizer_token" POST "/performances/$performance/poster-uploads/$upload_id/complete" >/dev/null
+}
+
+# 공연: 공연장 키|제목|소개|가격(JSON)|회차(일수@시각 ...)|장르|포스터 파일
 PERFORMANCES=$(cat <<'DATA'
-mid|달빛 아래 우체국|편지 한 통이 이어 준 두 사람의 십 년을 그린 창작 뮤지컬이에요. 따뜻한 선율과 앙상블이 어우러져요. 가족 단위 관객에게도 잘 맞아요.|{"VIP":150000,"R":110000,"S":80000}|5@19:30 12@14:00 19@19:30
-hall|겨울밤 클래식 갈라|현악 사중주와 피아노 협연으로 꾸린 송년 갈라 무대예요. 익숙한 소품부터 대편성 관현악까지 폭넓게 들려드려요.|{"VIP":170000,"R":130000,"S":90000,"A":60000}|9@19:30 16@19:30
-small|두 개의 문|한 방에서 마주친 두 형제가 오래 묵은 비밀을 꺼내는 이인극이에요. 짧고 밀도 있는 대사가 긴장감을 만들어요.|{"R":50000,"S":40000}|3@19:30 10@19:30 17@14:00
-hall|네온 시티 라이브|신스 사운드와 밴드 라이브를 결합한 도시 감성 콘서트예요. 영상과 조명 연출이 공연을 채워요.|{"VIP":165000,"R":132000,"S":99000,"A":77000}|14@19:30 15@19:30
-mid|웃음 공장 스탠드업|일상의 작은 불편을 입담으로 풀어내는 코미디 쇼예요. 매회 새 소재로 꾸며요.|{"VIP":60000,"R":45000,"S":35000}|7@19:30 21@19:30
-small|오후의 재즈 살롱|트리오 편성의 재즈 연주를 가까이에서 듣는 낮 공연이에요. 차 한 잔과 함께 편하게 즐겨요.|{"R":45000,"S":35000}|4@14:00 11@14:00 18@14:00
-mid|숲속의 작은 오케스트라|아이와 함께 악기 소리를 배우는 가족 음악극이에요. 직접 소리를 내 보는 시간도 있어요.|{"VIP":70000,"R":55000,"S":40000}|6@14:00 13@14:00
-hall|라스트 발레 나이트|젊은 무용수들이 고전과 창작 안무를 번갈아 선보이는 발레 갈라예요. 섬세한 몸짓에 집중하는 밤이에요.|{"VIP":140000,"R":105000,"S":75000,"A":50000}|25@19:30 30@19:30
+mid|달빛 아래 우체국|편지 한 통이 이어 준 두 사람의 십 년을 그린 창작 뮤지컬이에요. 따뜻한 선율과 앙상블이 어우러져요. 가족 단위 관객에게도 잘 맞아요.|{"VIP":150000,"R":110000,"S":80000}|5@19:30 12@14:00 19@19:30|MUSICAL
+hall|겨울밤 클래식 갈라|현악 사중주와 피아노 협연으로 꾸린 송년 갈라 무대예요. 익숙한 소품부터 대편성 관현악까지 폭넓게 들려드려요.|{"VIP":170000,"R":130000,"S":90000,"A":60000}|9@19:30 16@19:30|CLASSICAL
+small|두 개의 문|한 방에서 마주친 두 형제가 오래 묵은 비밀을 꺼내는 이인극이에요. 짧고 밀도 있는 대사가 긴장감을 만들어요.|{"R":50000,"S":40000}|3@19:30 10@19:30 17@14:00|PLAY
+hall|네온 시티 라이브|신스 사운드와 밴드 라이브를 결합한 도시 감성 콘서트예요. 영상과 조명 연출이 공연을 채워요.|{"VIP":165000,"R":132000,"S":99000,"A":77000}|14@19:30 15@19:30|CONCERT|scripts/dev/posters/neon-city-live.webp
+mid|웃음 공장 스탠드업|일상의 작은 불편을 입담으로 풀어내는 코미디 쇼예요. 매회 새 소재로 꾸며요.|{"VIP":60000,"R":45000,"S":35000}|7@19:30 21@19:30|PLAY
+small|오후의 재즈 살롱|트리오 편성의 재즈 연주를 가까이에서 듣는 낮 공연이에요. 차 한 잔과 함께 편하게 즐겨요.|{"R":45000,"S":35000}|4@14:00 11@14:00 18@14:00|CONCERT
+mid|숲속의 작은 오케스트라|아이와 함께 악기 소리를 배우는 가족 음악극이에요. 직접 소리를 내 보는 시간도 있어요.|{"VIP":70000,"R":55000,"S":40000}|6@14:00 13@14:00|MUSICAL
+hall|라스트 발레 나이트|젊은 무용수들이 고전과 창작 안무를 번갈아 선보이는 발레 갈라예요. 섬세한 몸짓에 집중하는 밤이에요.|{"VIP":140000,"R":105000,"S":75000,"A":50000}|25@19:30 30@19:30|CLASSICAL
 DATA
 )
 
@@ -159,9 +172,9 @@ VENUE[mid]=$(create_venue "$organizer_token" '한빛 중극장' "$(mid_seats)")
 VENUE[hall]=$(create_venue "$organizer_token" '새봄 콘서트홀' "$(hall_seats)")
 
 performances=0 schedules=0
-while IFS='|' read -r venue title description prices slots; do
-  body=$(jq -nc --arg t "$title" --arg d "$description" --argjson v "${VENUE[$venue]}" --argjson p "$prices" \
-    '{title:$t,description:$d,venueId:$v,prices:($p | to_entries | map({grade:.key,price:.value}))}')
+while IFS='|' read -r venue title description prices slots genre poster; do
+  body=$(jq -nc --arg t "$title" --arg d "$description" --arg g "$genre" --argjson v "${VENUE[$venue]}" --argjson p "$prices" \
+    '{title:$t,description:$d,genre:$g,venueId:$v,prices:($p | to_entries | map({grade:.key,price:.value}))}')
   performance_id=$(api_ok "$organizer_token" POST /performances "$body" | jq -r .id)
   performances=$((performances + 1))
   for slot in $slots; do
@@ -169,6 +182,7 @@ while IFS='|' read -r venue title description prices slots; do
     api_ok "$organizer_token" POST "/performances/$performance_id/schedules" "$(jq -nc --arg s "$starts" '{startsAt:$s}')" >/dev/null
     schedules=$((schedules + 1))
   done
+  [[ -z $poster ]] || upload_poster "$performance_id" "$poster"
 done <<<"$PERFORMANCES"
 
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)

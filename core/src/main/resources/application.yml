@@ -85,6 +85,13 @@ server:
   port: 18080
 
 ticketing:
+  poster:
+    endpoint: ${TICKETING_POSTER_ENDPOINT:http://127.0.0.1:19010}
+    upload-endpoint: ${TICKETING_POSTER_UPLOAD_ENDPOINT:http://127.0.0.1:19010}
+    public-base-url: ${TICKETING_POSTER_PUBLIC_BASE_URL:http://127.0.0.1:19010/${TICKETING_POSTER_BUCKET:ticketing-posters}}
+    bucket: ${TICKETING_POSTER_BUCKET:ticketing-posters}
+    access-key: ${TICKETING_MINIO_USER:ticketing-local}
+    secret-key: ${TICKETING_MINIO_PASSWORD:ticketing-local-dev}
   kafka:
     topic-prefix: ticketing
   startup-warmup:

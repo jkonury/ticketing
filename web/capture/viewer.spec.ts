@@ -8,15 +8,25 @@ import {
   newWatchedPage,
 } from './support';
 
-async function scheduleHrefs(page: Page): Promise<string[]> {
-  await gotoReady(page, '/');
-  const shows = await page
-    .locator('a[href^="/performances/"]')
-    .evaluateAll((els) =>
-      Array.from(
-        new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href'))),
-      ),
-    );
+const visualPerformanceTitle = '라스트 발레 나이트';
+
+async function scheduleHrefs(page: Page, visual: boolean): Promise<string[]> {
+  await gotoReady(page, visual ? '/?genre=CLASSICAL' : '/');
+  const links = page.locator('a[href^="/performances/"]');
+  const candidates = visual
+    ? links.filter({
+        has: page.getByRole('heading', {
+          name: visualPerformanceTitle,
+          exact: true,
+        }),
+      })
+    : links;
+  if (visual) await expect(candidates).toHaveCount(1);
+  const shows = await candidates.evaluateAll((els) =>
+    Array.from(
+      new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href'))),
+    ),
+  );
   const result: string[] = [];
   for (const show of shows) {
     if (!show) continue;
@@ -31,12 +41,13 @@ async function scheduleHrefs(page: Page): Promise<string[]> {
   return result;
 }
 
-const available = (page: Page) =>
-  page.getByRole('button', { name: /, 선택 가능$/ });
-
 test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
   const { page, errors, context } = await newWatchedPage(browser, testInfo);
   const isMobile = testInfo.project.name === 'mobile';
+  const visual = process.env.VISUAL === '1';
+  const availableSeats = page.getByRole('button', {
+    name: visual ? /, VIP석 .+, 선택 가능$/ : /, 선택 가능$/,
+  });
   try {
     await login(page, accounts.user);
     await gotoReady(page, '/');
@@ -52,9 +63,9 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
       await page.keyboard.press('Escape');
     }
 
-    // 선택 가능한 좌석이 2개 이상인 회차를 찾는다.
+    // 시각 비교에서는 공연 제목과 결제 금액이 차지하는 공간을 일정하게 유지한다.
     let ready = false;
-    for (const href of await scheduleHrefs(page)) {
+    for (const href of await scheduleHrefs(page, visual)) {
       await page.goto(href);
       const seatsHeading = page.getByRole('heading', { name: '좌석 선택' });
       if (
@@ -64,19 +75,22 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
           .catch(() => false))
       )
         continue;
-      await available(page)
+      await availableSeats
         .first()
         .waitFor({ timeout: 15_000 })
         .catch(() => undefined);
-      if ((await available(page).count()) >= 2) {
+      if ((await availableSeats.count()) >= 2) {
         ready = true;
         break;
       }
     }
-    expect(ready, '선택 가능 좌석이 2개 이상인 회차').toBe(true);
+    expect(
+      ready,
+      visual ? '선택 가능한 VIP석 2개' : '선택 가능한 좌석 2개',
+    ).toBe(true);
 
-    await available(page).nth(0).click();
-    await available(page).nth(1).click();
+    await availableSeats.nth(0).click();
+    await availableSeats.nth(1).click();
     await expect(page.locator('[aria-pressed="true"]')).toHaveCount(2);
     await capture(page, testInfo, '12-seats');
 
@@ -87,8 +101,7 @@ test('관람객 화면과 예매 흐름', async ({ browser }, testInfo) => {
     // 쿠폰 패널은 마운트 후 목록을 불러오고, 불러오기 전에도 "없습니다"를 보여 준다.
     // 시드 관람객은 미사용 쿠폰이 있으므로 선택 상자가 뜰 때까지 기다린다.
     await expect(page.getByRole('button', { name: '쿠폰 적용' })).toBeVisible();
-    // 시각 비교: 남은 시간은 시간 기반, 좌석·쿠폰·금액은 누적 데이터, 머리글의 공연명·일시는
-    // 시드가 실행일 기준이라 날마다 바뀌므로 가린다.
+    // 시각 비교에서는 공연 머리글, 남은 시간, 선택한 좌석, 결제 금액을 가린다.
     await capture(page, testInfo, '13-payment', {
       visual: {
         mask: [
