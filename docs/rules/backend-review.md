@@ -58,7 +58,7 @@
 - `./scripts/agent/test/run-tests.sh`가 필터 없이 통과했는가.
 - Kotlin 변경 후 `ktlintCheck detekt`를 통과했는가.
 - 모듈 의존을 바꿨다면 Modulith 구조 검증을 돌렸는가.
-- core·payment·gateway·realtime·fake-pg 흐름을 바꿨다면 `./scripts/e2e/run.sh`를 실행했는가.
+- 사용자가 로컬 백엔드 E2E를 요청했다면 `./scripts/e2e/run.sh`의 결과를 확인했는가.
 - 성능에 민감한 변경(좌석 선점, 대기열, 부하 경로)이면 `scripts/loadtest/run.sh` 결과를 확인했는가. 다른 Gradle 작업과 동시에 돌리지 않았는가.
 - 문서를 옮기거나 제목·링크를 바꿨다면 `./scripts/agent/docs/check-docs.sh`를 통과했는가.
 

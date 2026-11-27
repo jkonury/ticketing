@@ -109,5 +109,5 @@ web/src
 - E2E(Playwright): 로그인 → 대기열 → 좌석 선택 → 결제 → 예매 완료.
 - 토큰 비노출 검증: E2E에서 브라우저 저장소와 네트워크 응답에 JWT가 없음을 확인한다 (M4 완료 기준).
 - 실행: `./scripts/agent/test/web-check.sh [--build]`
-- 실행: `./scripts/e2e/run.sh --web`
+- 로컬 웹 E2E는 사용자가 명시적으로 요청한 경우에만 `./scripts/e2e/run.sh --web`으로 실행한다.
 - 화면 시각 회귀(`toHaveScreenshot`)와 기준 이미지 관리: [web/capture/README.md](../../web/capture/README.md#시각-회귀-비교와-기준-이미지)

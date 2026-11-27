@@ -81,7 +81,7 @@ core 테스트에서 결제 결과는 `KafkaPaymentStub`(`core/src/test/.../supp
 E2E·부하 테스트는 `build`·`check`에 포함되지 않는다. 다른 Gradle 작업과 동시에 실행하지 않는다.
 
 - 로컬 core 결제 흐름에는 Compose Kafka(`127.0.0.1:19092`)와 payment 앱(18085)이 필요하다. 결제 결과는 payment 앱이 발행한다.
-- 전체 E2E는 PR의 CI에서 검증한다. 로컬에서 특정 시나리오를 재현할 때는 `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`의 `--tests`로 범위를 지정한다.
+- 전체 E2E는 PR의 CI에서 검증한다. 로컬 백엔드·웹 E2E는 사용자가 명시적으로 요청한 경우에만 실행한다. 특정 백엔드 시나리오를 재현할 때는 `./scripts/e2e/run.sh [--keep] [--tests "패턴"] [--web]`의 `--tests`로 범위를 지정한다.
   - 사전 조건은 payment·settlement DB 설정과 JWT·웹훅 비밀 값이 들어 있는 `.env`, 실행 중인 Docker, 비어 있는 앱 포트다. 필요한 포트와 별도 Compose에서 실행하는 절차는 [런북](../runbook.md#6-테스트검증-실패-대응)을 따른다.
   - 프로세스는 fake-pg, core, payment, settlement, realtime-a/b, Gateway다. 매 실행마다 DB 준비 스크립트로 `payment_db`와 `settlement_db`를 준비한다. fake-pg 웹훅은 payment 앱을 직접 호출한다.
   - Batch E2E(`BatchBaselineE2eTests`)는 세 배치 JAR를 별도 프로세스로 실행한다. 미결제 정리는 core-batch와 core DB, 결제 대사는 payment-batch와 `payment_db`, 정산은 settlement-batch와 `settlement_db`를 사용한다. `BatchSupport`의 `BatchTarget`이 JAR와 DB를 지정한다.
