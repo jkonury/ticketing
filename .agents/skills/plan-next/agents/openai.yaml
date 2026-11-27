@@ -1,0 +1,5 @@
+interface:
+  display_name: "Plan Next"
+  short_description: "다음 로드맵 항목의 범위와 완료 기준을 담은 실행 계획 작성"
+policy:
+  allow_implicit_invocation: false

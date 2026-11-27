@@ -221,6 +221,46 @@ class PipelineCliTest(unittest.TestCase):
             self.assertEqual((row['run_id'], row['plan'], row['task_id'], row['reason']),
                              (run_id, 'p.md', 'T1', 'replaced'))
 
+    def test_verify_shares_stop_attempts_and_only_accepts_current_tree(self):
+        with PipelineRepo() as root:
+            (root / 'src').mkdir()
+            change = root / 'src' / 'a'
+            change.write_text('x')
+            pipeline.main(['task', 'T1', '--ac', 'test -f .ok'])
+            verify = ['verify', '--config', 'rules.toml']
+            self.assertIn('1/3', stop_gate.evaluate(stop_hook(root), root / 'rules.toml'))
+            with unittest.mock.patch('sys.stderr'):
+                self.assertEqual(pipeline.main(verify), 1)
+            (root / '.ok').touch()
+            self.assertEqual(pipeline.main(verify), 0)
+            self.assertEqual(pipeline.main(verify), 0)
+            (root / '.ok').unlink()
+            with unittest.mock.patch('sys.stderr'):
+                self.assertEqual(pipeline.main(verify), 1)
+                self.assertEqual(pipeline.main(verify), 1)
+            self.assertIsNone(stop_gate.evaluate(stop_hook(root), root / 'rules.toml'))
+            self.assertEqual([row['outcome'] for row in metric_events(root)],
+                             ['blocked', 'blocked', 'passed', 'blocked', 'unresolved'])
+
+    def test_verify_rejects_unbound_missing_task_clean_or_unchecked_tree(self):
+        with PipelineRepo() as root, unittest.mock.patch('sys.stderr'):
+            verify = ['verify', '--config', 'rules.toml']
+            self.assertEqual(pipeline.main(verify), 1)
+            pipeline.main(['task', 'T1'])
+            self.assertEqual(pipeline.main(verify), 1)
+            (root / 'README.md').write_text('검사 경로 밖의 변경')
+            self.assertEqual(pipeline.main(verify), 1)
+            pipeline.main(['task', 'T2', '--ac', 'true'])
+            pipeline.main(['resume'])
+            self.assertEqual(pipeline.main(verify), 1)
+            self.assertEqual([row['event'] for row in metric_events(root)], ['task_ended'])
+
+    def test_verify_rejects_change_made_by_the_check_itself(self):
+        with PipelineRepo() as root, unittest.mock.patch('sys.stderr'):
+            (root / 'README.md').write_text('검사 전 변경')
+            pipeline.main(['task', 'T1', '--ac', 'echo changed > README.md'])
+            self.assertEqual(pipeline.main(['verify', '--config', 'rules.toml']), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

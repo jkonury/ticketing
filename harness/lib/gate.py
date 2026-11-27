@@ -20,7 +20,10 @@ import tomllib
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
+from time import monotonic
 from typing import Any
+
+from lib import metrics, state
 
 OUTPUT_TAIL_LINES = 40
 COMMAND_TIMEOUT_SECONDS = 1500
@@ -136,3 +139,49 @@ def run(root: Path, commands: list[str]) -> list[CommandResult]:
             lines = (proc.stdout + proc.stderr).rstrip().splitlines()
             failures.append(CommandResult(command, proc.returncode, '\n'.join(lines[-OUTPUT_TAIL_LINES:])))
     return failures
+
+
+def evaluate(root: Path, current: dict[str, Any], config_path: Path) -> str | None:
+    """검증 실패 사유를 돌려준다. 검사 결과와 차단 횟수는 두 진입점이 공유한다."""
+    files = changed_files(root)
+    if not files:
+        return None
+    task = current.get('task') or state.new_task('_', [])
+    tree_print = fingerprint(root)
+    if task.get('last_pass_fingerprint') == tree_print:
+        return None
+    current['task'] = task
+    if task['gate_blocks'] >= state.MAX_GATE_BLOCKS:
+        if not task['gate_unresolved']:
+            task['gate_unresolved'] = True
+            state.save(root, current)
+            metrics.record(root, current, 'gate', outcome='unresolved')
+        return None
+
+    commands = task.get('ac') or select_commands(files, load_config(config_path))
+    if not commands:
+        return None
+    started = monotonic()
+    failures = run(root, commands)
+    duration = round(monotonic() - started, 3)
+    source = 'ac' if task.get('ac') else 'path_rules'
+    task['last_gate_at'] = state.now()
+    if failures:
+        task['gate_blocks'] += 1
+    else:
+        task['last_pass_fingerprint'] = tree_print
+        task['gate_unresolved'] = False
+    state.save(root, current)
+    metrics.record(root, current, 'gate', outcome='blocked' if failures else 'passed',
+                   source=source, duration_seconds=duration)
+    if not failures:
+        return None
+
+    source_label = 'task AC' if source == 'ac' else '변경 경로 규칙'
+    parts = [
+        f'[검증 게이트] {source_label} 검사 실패 ({task["gate_blocks"]}/{state.MAX_GATE_BLOCKS}회 차단). '
+        '실패를 고친 뒤 작업을 마친다. Stop 훅은 상한을 넘기면 종료를 허용하고 미해결로 기록한다.',
+    ]
+    for failure in failures:
+        parts.append(f'$ {failure.command}  (exit {failure.returncode})\n{failure.output}')
+    return '\n\n'.join(parts)
