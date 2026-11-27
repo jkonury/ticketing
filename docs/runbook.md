@@ -370,12 +370,12 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
    ```bash
    ./scripts/db/migrate-payment-data.sh --target-db "$TARGET_DB"
    ```
-5. **대조 확인**: 스크립트가 커밋 전·후에 대조해 일치하면 `대조 일치`와 함께 종료 코드 0을 낸다. 나중에 대조만 다시 하려면 같은 대상을 지정한다(원본이 그대로일 때만 의미가 있다). 원본 시퀀스는 조회 시점 값이므로 쓰기 중지 뒤에 읽어야 한다.
+5. **대조 확인**은 원본과 대상의 쓰기가 멈춰 있을 때 한다. 스크립트가 커밋 전·후에 대조해 일치하면 `대조 일치`와 함께 종료 코드 0을 낸다. 대상 DB 이름, 실행 시각과 대조 결과를 10단계에서 확인할 수 있도록 배포 기록에 남긴다. 대조를 다시 해야 하면 유입을 재개하기 전에 같은 대상을 지정한다. 원본 시퀀스는 조회 시점 값이므로 쓰기 중지 뒤에 읽어야 한다.
 
    ```bash
    ./scripts/db/migrate-payment-data.sh --verify-only --target-db "$TARGET_DB"
    ```
-6. **새 구성 기동(유입은 아직 닫혀 있다)**에서 이전이 일치하면 payment 앱을 **같은 셸**(`TICKETING_PAYMENT_POSTGRES_DB`가 `$TARGET_DB`와 같은 상태)에서 일반 모드로 띄운다. 분리 후 결제 구현이 제거됐고 V18은 포함하지 않은 core 빌드를 올린다. **gateway와 web은 아직 올리지 않는다.**
+6. **새 구성 기동(유입은 아직 닫혀 있다)**. 대조가 일치하면 payment 앱을 **같은 셸**(`TICKETING_PAYMENT_POSTGRES_DB`가 `$TARGET_DB`와 같은 상태)에서 일반 모드로 띄운다. 결제 구현이 분리된 V18 적용 전 core 빌드를 올린다. **gateway와 web은 아직 올리지 않는다.**
 7. **fake-pg 웹훅 목적지 확인(유입을 열기 전)**: 실행 중인 fake-pg가 새 payment 주소(`http://localhost:18085/api/v1/payments/webhooks/fake-pg`)로 웹훅을 보내는지 확인한다. 설정은 환경 변수 `FAKE_PG_WEBHOOK_URL`이다(비밀 값인 `FAKE_PG_WEBHOOK_SECRET`은 출력하지 않는다).
 
    ```bash
@@ -385,7 +385,11 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
    변수가 없으면 jar의 기본값을 쓴다. 기본값은 `fake-pg/src/main/resources/application.yml`에서 payment 앱(18085)이다(분리 전에 빌드한 jar는 core 18080일 수 있으므로 같은 커밋의 jar인지 확인한다). 목적지가 다르면 **유입이 닫힌 지금** fake-pg를 올바른 값으로 재기동하고 기동 확인(`curl localhost:18090/actuator/health`)과 같은 확인 명령으로 목적지를 다시 확인한 뒤에만 다음으로 간다. 재기동하면 아래 한계대로 기존 거래와 예약이 사라진다. 이 확인이 끝나기 전에는 gateway·web을 올리지 않는다. 열린 상태에서 접수한 신규 결제의 웹훅이 옛 주소로 가거나 재기동으로 신규 거래가 사라질 수 있기 때문이다.
 8. **유입 재개**: 목적지 확인이 끝나면 gateway, web을 올려 사용자 요청을 받는다.
 9. **전환 후 검증**(아래).
-10. **옛 스키마 제거**는 이전 대조가 끝나고 9단계에서 새 결제·환불 동작을 검증한 뒤 별도 배포에서 진행한다. core DB의 옛 `payment` 스키마를 복원 가능한 백업으로 보존하고 접근을 제한한다. 그 뒤 V18이 포함된 core와 core-batch를 배포한다. 적용 뒤 `information_schema.schemata`에서 core DB의 `payment` 스키마가 사라졌고 `$TARGET_DB`의 `payment` 스키마가 남아 있는지 각각 확인한다.
+10. **옛 스키마 제거**는 별도 배포에서 진행한다. V18이 포함된 core나 core-batch가 기동하면 Flyway가 스키마를 제거하므로 아래 확인을 기동 전에 마친다.
+
+    - 동일한 대상 DB에 대해 5단계의 `대조 일치` 기록과 9단계의 결제·환불 검증 결과를 확인한다. 유입 재개 후에는 대상 DB에 새로운 거래가 쌓이므로 전환 전에 남긴 대조 기록을 사용한다.
+    - core DB에서 `pg_dump`의 `--format=custom --schema=payment` 옵션으로 옛 스키마와 데이터를 백업한다. 백업 파일을 `pg_restore --exit-on-error`로 빈 검증 DB에 복원해 네 테이블과 건수가 원본과 일치하는지 확인한다. 백업에 대한 접근을 제한하고, 백업 위치·복원 확인 결과·보존 종료 시점을 배포 기록에 남긴다.
+    - V18이 포함된 core와 core-batch를 배포한 뒤 `information_schema.schemata`에서 core DB의 `payment` 스키마가 사라졌고 `$TARGET_DB`의 `payment` 스키마가 남아 있는지 각각 확인한다.
 
 **커밋 결과를 알 수 없을 때**
 
