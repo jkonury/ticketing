@@ -70,6 +70,12 @@ sourceSets.main {
 
 tasks.test {
     inputs.files(rootProject.file("deploy/postgres/init/20-settlement-db.sql"))
+    inputs.files(rootProject.file("scripts/db/migrate-settlement-data.sh"))
+    inputs.files(
+        rootProject.fileTree("core/src/main/resources/db/migration") {
+            include("V2__*", "V7__*", "V8__*", "V9__*", "V14__*")
+        },
+    )
     val updateOpenApi = providers.environmentVariable("UPDATE_OPENAPI").map { it == "1" }.orElse(false)
     inputs.property("updateOpenApi", updateOpenApi)
     inputs.files(rootProject.file("docs/api/openapi/settlement.json"))

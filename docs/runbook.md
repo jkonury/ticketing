@@ -454,3 +454,59 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
 - 웹훅 목적지는 `FAKE_PG_WEBHOOK_URL`(`fake-pg.webhook.url`)이며 fake-pg가 기동 때 설정으로 읽고 실행 중 바꾸는 수단이 없다. 이 저장소의 기본값은 payment 앱(18085)이므로 이미 이 기본값으로 떠 있는 fake-pg는 재기동하지 않아도 된다. 분리 전 기본값(core 18080)이나 다른 값으로 떠 있다면 목적지를 바꾸려면 재기동해야 하고, 그러면 위와 같이 이전 거래가 사라진다. 이 경우 이전 결제에 대한 환불·대사는 로컬에서 검증할 수 없는 것으로 받아들이거나, 데이터를 이전하지 않고 새 볼륨으로 시작한다.
 
 **롤백**은 8단계(유입 재개) 전에 core DB의 `payment` 스키마가 있는 상태에서 대상 DB(`$TARGET_DB`)를 위 복구 절차로 비워 이전 구성으로 돌리는 절차다. 유입 재개 뒤에는 대상 DB가 새 거래의 원본이다. V18 적용 후에는 옛 스키마의 백업을 별도 DB에 복원해 이전 원본을 조회할 수 있다. fake-pg를 재기동했다면 위 한계 때문에 이전 거래는 복원되지 않는다.
+
+## 10. 정산 DB 이전 (core DB settlement 스키마 → settlement_db)
+
+같은 PostgreSQL 인스턴스의 전용 계정과 DB로 `booking_sale`, `booking_refund`, `daily_settlement`을 옮긴다. 기존 실행 이력은 core의 `batch` 스키마에 보관한다. 신규 실행 이력은 정산 DB에 쌓인다. [ADR 0051](./adr/0051-settlement-database-cutover.md)
+
+### 준비
+
+1. core가 확정·취소 이벤트를 Kafka로도 발행하고 기존 정산 리스너를 유지하는 버전(T1~T4)을 먼저 준비한다. 기존 core, core-batch, Gateway의 실행 파일과 설정을 복귀용으로 보관한다. core와 정산 DB의 백업과 복원 경로를 확보한다.
+2. `.env`에 `TICKETING_SETTLEMENT_POSTGRES_DB`, `TICKETING_SETTLEMENT_POSTGRES_USER`, `TICKETING_SETTLEMENT_POSTGRES_PASSWORD`를 설정한다. 개발 Compose의 DB 준비 스크립트는 core DB와 정산 DB의 `PUBLIC CONNECT`를 회수한다. 코어 DB 소유자 이외에 접속해야 하는 로컬 역할은 명시적으로 권한을 부여한다. Compose의 로컬 core 계정은 슈퍼유저로 ACL 검사를 우회한다.
+
+   ```bash
+   ./scripts/db/ensure-settlement-db.sh
+   ./gradlew :settlement-batch:bootJar
+   java -jar settlement-batch/build/libs/settlement-batch.jar --spring.batch.job.enabled=false
+   ```
+
+   이 명령은 Job과 Kafka 소비 없이 Flyway만 적용하고 종료한다. 대상 DB에서 성공한 Flyway 마이그레이션 V1~V3과 빈 정산 테이블을 확인한다.
+3. `./scripts/db/test-migrate-settlement-data.sh`로 격리 환경에서 이전을 리허설한다. 서로 다른 원본·대상 DB, 기존 실행 이력, 할인·환불 데이터, 실패 롤백, 재실행, Kafka 중복 재생 및 이전된 조회를 검증한다.
+
+### 점검 창
+
+1. Gateway와 web에서 신규 쓰기 유입을 차단하고 예매 상태를 바꾸는 실행의 새 스케줄을 정지한다. 새 정산 앱의 Kafka 소비와 정산 배치도 정지 상태를 유지한다.
+2. 기존 core·payment로 진행 중인 결제와 환불, 지연된 PG 웹훅, 예매 확정·취소의 로컬 적재와 Kafka 외부화를 배출한다. `ticketing-booking`과 `ticketing-payment`의 lag, 두 앱의 `event_publication` 미완료 행, 관련 DLT 및 웹훅을 [결제 이전의 배출 절차](#9-결제-db-이전-core-db-payment-스키마--payment_db)와 같은 방식으로 확인한다. DLT의 처리 결과와 파티션별 끝 오프셋을 기록한다. core의 `dailySettlementJob`에서 진행 중인 실행이 없어야 한다. 전환 전에 이어서 처리할 실패 실행은 기존 core-batch에서 같은 파라미터로 종료한다.
+3. 기존 core와 core-batch를 중지한다. 쓰기가 정지된 상태를 유지하고 다음 명령을 실행한다. 정규화한 PK 순 스냅샷의 세 테이블 건수와 SHA-256을 기록한다. 복사나 대조가 실패하면 대상 트랜잭션이 롤백된다. 이미 채워진 대상은 전체 내용이 일치할 때 재사용한다.
+
+   ```bash
+   ./scripts/db/migrate-settlement-data.sh
+   ```
+
+4. 쓰기가 정지된 상태에서 두 소스 토픽의 파티션별 끝 오프셋을 기록한다. 이 값을 전환 기준점으로 사용한다. 아래는 기본 토픽 접두어와 로컬 Kafka 주소의 예다.
+
+   ```bash
+   for event in booking-confirmed booking-cancelled; do
+     docker run --rm --network host apache/kafka:4.3.2 /opt/kafka/bin/kafka-get-offsets.sh \
+       --bootstrap-server localhost:19092 --topic-partitions "ticketing.booking.$event"
+     docker run --rm --network host apache/kafka:4.3.2 /opt/kafka/bin/kafka-get-offsets.sh \
+       --bootstrap-server localhost:19092 --topic-partitions "ticketing.booking.$event.dlt"
+   done
+   ```
+
+5. 새 정산 앱을 시작해 `ticketing-settlement` 그룹을 붙인다. 아래 명령으로 두 토픽의 각 파티션이 기준점까지 커밋됐는지 확인한다. 커밋 값이 `-`이면 해당 파티션의 시작·종료 오프셋이 같은 경우만 허용한다(`kafka-get-offsets.sh --time -2`로 시작 오프셋을 조회한다). 정산 DLT에 미처리 메시지가 있거나 외부화 미완료 행이 발견되면 전환을 보류하고 [DLT·미완료 발행 절차](#37-미완료-이벤트-발행이-쌓인다)를 따른다.
+
+   ```bash
+   docker run --rm --network host apache/kafka:4.3.2 /opt/kafka/bin/kafka-consumer-groups.sh \
+     --bootstrap-server localhost:19092 --describe --group ticketing-settlement
+   ./scripts/db/migrate-settlement-data.sh --verify-only
+   ```
+
+   재생 후 건수와 체크섬이 이전 결과와 일치해야 한다. lag이 0이어도 미완료 발행과 DLT를 확인한다.
+6. 새 core와 Gateway를 시작하고 정산 배치 실행 대상 JAR를 `settlement-batch.jar`로 변경한다. Gateway의 `GET /api/v1/settlements?from=…&to=…`가 주최자 JWT로 해당 주최자의 과거 정산을 반환하는지 확인한다. 확인 후 쓰기와 배치 스케줄을 재개한다.
+
+### 복귀와 지연 이벤트
+
+- 쓰기 재개 전에는 새 정산 앱과 배치를 정지하고, 보관한 core 및 core-batch와 이전 Gateway 라우트를 복구한다. core DB의 세 테이블과 배치 이력으로 기존 조회와 쓰기를 다시 연다. 새 전환 시도는 이전 도구에서 원본과 대조를 통과하는 대상에서만 이어간다. 앞선 시도 후 core에 쓰기가 재개되어 대상과 달라졌다면 대상 백업을 확보하고 별도의 새 대상 DB를 준비한다.
+- 쓰기 재개 후에는 `settlement_db`가 기준이다. 해당 DB를 보존하거나 백업에서 복원하고 Kafka 수신 상태를 대조한다. 옛 core 사본으로 돌아가면 이후 이벤트와 집계가 빠진다.
+- 매일 정산 배치 전에 예매 확정·취소의 미완료 발행, 두 소스 토픽의 그룹 lag, 미처리 DLT를 점검한다. 늦게 도착한 이벤트가 영향을 준 KST 확정일·환불일을 식별하고, 소비가 끝나면 날짜별로 새 `run.id`를 붙여 `dailySettlementJob`을 재계산한다. 실패한 실행의 재시작에는 기존 파라미터를 사용한다. [배치 실행과 파라미터](./architecture/batch.md)
