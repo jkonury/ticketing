@@ -32,6 +32,8 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 
 계층형 모듈(`member`, `catalog`, `audit`, `notification`)은 역할에 맞게 `web / service / repository` 등으로 단순하게 유지한다. 포트를 억지로 만들지 않는다.
 
+- `catalog`는 공연을 소유한 주최자에 한해 5분짜리 포스터 PUT URL을 발급한다. 객체 키와 콘텐츠 유형을 서명에 묶고, 완료 확인에서 타입과 크기(1바이트~5MiB)를 검증한다. 검증한 객체만 공개 키로 복사한 뒤 DB에 키를 저장하고 상세 캐시를 비운다. 목록과 상세의 응답 URL은 공개 기준 주소와 키로 조합한다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
+
 ## JPA 엔티티
 
 - JPA 엔티티는 `data class`로 만들지 않는다. `equals`는 식별자 기준으로 정의한다. 프록시와 비교될 수 있으므로 `other is 엔티티클래스`로 비교하고 `id`는 getter로 읽는다. `hashCode`는 영속 전후에 유지되고 `equals`가 참인 프록시와 실제 엔티티에서 같아야 한다. 구현을 변경할 때 두 조건을 확인한다. 식별자로 계산하면 영속 전후에 해시가 바뀔 수 있으며, 클래스 기준 계산도 프록시와 같은 값을 내는지 확인해야 한다.

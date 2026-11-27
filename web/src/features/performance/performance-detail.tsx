@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonClassName } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Poster } from '@/components/ui/poster';
+import { genreLabels } from '@/lib/performance-genre';
 
 export function PerformanceDetail({ view }: { view: PerformanceDetailView }) {
   return (
@@ -16,9 +17,12 @@ export function PerformanceDetail({ view }: { view: PerformanceDetailView }) {
           padding="none"
           className="w-full max-w-60 self-start sm:max-w-none"
         >
-          <Poster id={view.id} title={view.title} />
+          <Poster id={view.id} title={view.title} imageUrl={view.posterUrl} />
         </Card>
         <div className="min-w-0">
+          {view.genre && (
+            <Badge className="mb-2">{genreLabels[view.genre]}</Badge>
+          )}
           <h1 className="text-title font-extrabold text-fg">{view.title}</h1>
           <p className="mt-3 text-body text-fg-muted">{view.venue.name}</p>
           <p className="mt-4 whitespace-pre-line text-body">

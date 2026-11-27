@@ -9,6 +9,7 @@ spring-modulith = "2.1.1"
 spring-cloud = "2025.1.4"
 springdoc = "3.2.1"
 archunit = "1.5.1"
+aws-sdk = "2.58.0"
 ktlint = "1.8.0"
 ktlint-gradle = "14.2.0"
 # Kotlin 2.3.21·JDK 25 지원. 1.23.8은 Kotlin 2.0.21·JDK 21 기준이다.
@@ -32,6 +33,7 @@ springdoc-webmvc-api = { module = "org.springdoc:springdoc-openapi-starter-webmv
 springdoc-webflux-api = { module = "org.springdoc:springdoc-openapi-starter-webflux-api", version.ref = "springdoc" }
 
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+aws-s3 = { module = "software.amazon.awssdk:s3", version.ref = "aws-sdk" }
 
 gradle-ktlint = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlint-gradle" }
 gradle-detekt = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }

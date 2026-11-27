@@ -4,6 +4,7 @@ import io.github.ticketing.catalog.ScheduleRegistered
 import io.github.ticketing.catalog.ScheduleSeat
 import io.github.ticketing.catalog.config.CatalogCaches
 import io.github.ticketing.catalog.domain.Performance
+import io.github.ticketing.catalog.domain.PerformanceGenre
 import io.github.ticketing.catalog.domain.Schedule
 import io.github.ticketing.catalog.domain.SeatGrade
 import io.github.ticketing.catalog.domain.Venue
@@ -50,7 +51,15 @@ class CatalogRegistrationService(
         if (missing.isNotEmpty()) throw PriceMissingForGradeException(missing.sorted().map { it.name })
 
         return performances.save(
-            Performance(command.organizerId, command.title.trim(), command.description.trim(), command.venueId, prices, clock.instant()),
+            Performance(
+                command.organizerId,
+                command.title.trim(),
+                command.description.trim(),
+                command.venueId,
+                prices,
+                clock.instant(),
+                command.genre,
+            ),
         )
     }
 
@@ -85,11 +94,25 @@ class CatalogRegistrationService(
         return schedule
     }
 
-    private fun findOwnedPerformance(command: RegisterScheduleCommand): Performance {
-        val performance = performances.findById(command.performanceId).orElseThrow { PerformanceNotFoundException() }
-        // 리소스 소유자 확인은 서비스에서 한다 (docs/rules/backend.md § 보안)
-        if (performance.organizerId != command.requesterId) throw NotPerformanceOwnerException()
-        return performance
+    private fun findOwnedPerformance(command: RegisterScheduleCommand): Performance =
+        requireOwnedPerformance(performances.findById(command.performanceId).orElse(null), command.requesterId)
+
+    @Transactional(readOnly = true)
+    fun posterKey(performanceId: Long, requesterId: Long): String? =
+        requireOwnedPerformance(performances.findById(performanceId).orElse(null), requesterId).posterKey
+
+    @Transactional
+    @CacheEvict(CatalogCaches.PERFORMANCE, key = "#performanceId")
+    fun attachPoster(performanceId: Long, requesterId: Long, key: String) {
+        val performance = requireOwnedPerformance(performances.findForPosterUpdate(performanceId), requesterId)
+        if (performance.posterKey != null && performance.posterKey != key) throw PosterAlreadyAttachedException()
+        performance.attachPoster(key)
+    }
+
+    private fun requireOwnedPerformance(performance: Performance?, requesterId: Long): Performance {
+        val owned = performance ?: throw PerformanceNotFoundException()
+        if (owned.organizerId != requesterId) throw NotPerformanceOwnerException()
+        return owned
     }
 
     private fun saveSchedule(performanceId: Long, command: RegisterScheduleCommand): Schedule {
@@ -114,6 +137,7 @@ class CatalogRegistrationService(
         val description: String,
         val venueId: Long,
         val prices: List<PriceSpec>,
+        val genre: PerformanceGenre? = null,
     )
 
     data class RegisterScheduleCommand(val requesterId: Long, val performanceId: Long, val startsAt: Instant)

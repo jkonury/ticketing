@@ -65,6 +65,14 @@ if ! ./gradlew -q :core:bootJar :gateway:bootJar :realtime:bootJar :fake-pg:boot
   exit 1
 fi
 docker compose up -d --wait postgres redis kafka > "$LOG_DIR/compose.log" 2>&1 || { echo "Compose 기동 실패: $LOG_DIR/compose.log" >&2; tail -n 30 "$LOG_DIR/compose.log" >&2; exit 1; }
+if $WEB; then
+  if ! docker compose up -d --wait minio >> "$LOG_DIR/compose.log" 2>&1 ||
+     ! docker compose run --rm --no-deps minio-init >> "$LOG_DIR/compose.log" 2>&1; then
+    echo "포스터 저장소 기동 실패: $LOG_DIR/compose.log" >&2
+    tail -n 30 "$LOG_DIR/compose.log" >&2
+    exit 1
+  fi
+fi
 # 기존 볼륨에는 payment_db가 없을 수 있으므로 매 실행마다 멱등하게 준비한다
 ./scripts/db/ensure-payment-db.sh > "$LOG_DIR/ensure-payment-db.log" 2>&1 || { echo "payment_db 준비 실패: $LOG_DIR/ensure-payment-db.log" >&2; tail -n 30 "$LOG_DIR/ensure-payment-db.log" >&2; exit 1; }
 start() {
@@ -78,7 +86,15 @@ start() {
 (set -a; source .env; set +a; exec java -jar fake-pg/build/libs/fake-pg.jar --fake-pg.test-controls.enabled=true \
   --fake-pg.behavior.failure-rate=0 --fake-pg.behavior.timeout-rate=0 --fake-pg.behavior.duplicate-rate=0) > "$LOG_DIR/fake-pg.log" 2>&1 &
 PIDS+=("$!")
-start core core/build/libs/core.jar
+if $WEB; then
+  poster_bucket=$(source .env; printf '%s' "${TICKETING_POSTER_BUCKET:-ticketing-posters}")
+  TICKETING_POSTER_ENDPOINT=http://127.0.0.1:19010 \
+    TICKETING_POSTER_UPLOAD_ENDPOINT=http://127.0.0.1:19010 \
+    TICKETING_POSTER_PUBLIC_BASE_URL="http://127.0.0.1:19010/$poster_bucket" \
+    start core core/build/libs/core.jar
+else
+  start core core/build/libs/core.jar
+fi
 start payment payment/build/libs/payment.jar
 start realtime-a realtime/build/libs/realtime.jar
 start realtime-b realtime/build/libs/realtime.jar --server.port="$REALTIME_B_PORT"

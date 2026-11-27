@@ -1,5 +1,6 @@
 package io.github.ticketing.catalog.query
 
+import io.github.ticketing.catalog.domain.PerformanceGenre
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
@@ -28,15 +29,16 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
         }
 
     /** ID 내림차순 커서 페이지. 다음 페이지 존재 여부를 알기 위해 1건 더 읽는다. */
-    fun findPerformances(cursor: Long?, size: Int): PerformancePage {
+    fun findPerformances(cursor: Long?, size: Int, genre: PerformanceGenre? = null): PerformancePage {
         val firstStartsAt = DSL.field(
             DSL.select(DSL.min(SCHEDULE.STARTS_AT)).from(SCHEDULE).where(SCHEDULE.PERFORMANCE_ID.eq(PERFORMANCE.ID)),
         )
 
-        val rows = dsl.select(PERFORMANCE.ID, PERFORMANCE.TITLE, VENUE.NAME, firstStartsAt)
+        val rows = dsl.select(PERFORMANCE.ID, PERFORMANCE.TITLE, VENUE.NAME, firstStartsAt, PERFORMANCE.GENRE, PERFORMANCE.POSTER_KEY)
             .from(PERFORMANCE)
             .join(VENUE).on(VENUE.ID.eq(PERFORMANCE.VENUE_ID))
             .where(if (cursor != null) PERFORMANCE.ID.lt(cursor) else DSL.noCondition())
+            .and(if (genre != null) PERFORMANCE.GENRE.eq(genre.name) else DSL.noCondition())
             .orderBy(PERFORMANCE.ID.desc())
             .limit(size + 1)
             .fetch {
@@ -45,6 +47,8 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
                     title = requireNotNull(it[PERFORMANCE.TITLE]),
                     venueName = requireNotNull(it[VENUE.NAME]),
                     firstStartsAt = it[firstStartsAt]?.toInstant(),
+                    genre = it[PERFORMANCE.GENRE]?.let(PerformanceGenre::valueOf),
+                    posterKey = it[PERFORMANCE.POSTER_KEY],
                 )
             }
 
@@ -53,7 +57,15 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
     }
 
     fun findPerformanceDetail(id: Long): PerformanceDetail? {
-        val head = dsl.select(PERFORMANCE.ID, PERFORMANCE.TITLE, PERFORMANCE.DESCRIPTION, PERFORMANCE.VENUE_ID, VENUE.NAME)
+        val head = dsl.select(
+            PERFORMANCE.ID,
+            PERFORMANCE.TITLE,
+            PERFORMANCE.DESCRIPTION,
+            PERFORMANCE.VENUE_ID,
+            VENUE.NAME,
+            PERFORMANCE.GENRE,
+            PERFORMANCE.POSTER_KEY,
+        )
             .from(PERFORMANCE)
             .join(VENUE).on(VENUE.ID.eq(PERFORMANCE.VENUE_ID))
             .where(PERFORMANCE.ID.eq(id))
@@ -81,6 +93,8 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
             venueName = requireNotNull(head[VENUE.NAME]),
             prices = prices,
             schedules = schedules,
+            genre = head[PERFORMANCE.GENRE]?.let(PerformanceGenre::valueOf),
+            posterKey = head[PERFORMANCE.POSTER_KEY],
         )
     }
 

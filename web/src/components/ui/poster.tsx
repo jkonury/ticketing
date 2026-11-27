@@ -107,7 +107,7 @@ export function Poster({ id, title, imageUrl, className }: PosterProps) {
       )}
     >
       {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- 외부 포스터 호스트가 아직 정해지지 않았다.
+        // eslint-disable-next-line @next/next/no-img-element -- 객체 저장소 공개 주소는 배포 설정으로 정한다.
         <img src={imageUrl} alt={title} className="size-full object-cover" />
       ) : (
         <>

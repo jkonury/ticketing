@@ -5,6 +5,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.ElementCollection
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.FetchType
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
@@ -30,6 +31,7 @@ class Performance(
     prices: Map<SeatGrade, BigDecimal>,
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: Instant,
+    genre: PerformanceGenre? = null,
 ) {
     init {
         require(title.isNotBlank()) { "공연 제목은 비어 있을 수 없다" }
@@ -40,6 +42,20 @@ class Performance(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16, updatable = false)
+    var genre: PerformanceGenre? = genre
+        protected set
+
+    @Column(name = "poster_key", length = 160)
+    var posterKey: String? = null
+        protected set
+
+    fun attachPoster(key: String) {
+        check(posterKey == null || posterKey == key)
+        posterKey = key
+    }
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(
