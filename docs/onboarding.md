@@ -51,6 +51,8 @@ cd web && pnpm install && pnpm dev  # 13000
 
 시드 데이터는 공연장 2곳, 공연 3편, 회차 각 3개이며 다시 실행해도 늘지 않는다. 주최자 ID는 `ticketing.seed.organizer-id`(기본 1)다.
 
+화면 시연 데이터는 `./scripts/dev/seed-demo.sh`로 준비한다. 초기화 옵션과 실행 조건은 [스크립트의 사용 안내](../scripts/dev/seed-demo.sh)를 확인한다.
+
 fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scripts/dev/run.sh --fake-pg`), 웹훅을 `localhost:18085`의 payment 앱으로 직접 보낸다(`FAKE_PG_WEBHOOK_URL`로 바꿀 수 있다). `.env`의 `FAKE_PG_WEBHOOK_SECRET`은 payment 앱과 fake-pg가 같아야 서명 검증이 통과한다.
 
 기존 core DB에 정산 데이터가 있는 환경은 새 소비자를 시작하기 전에 [정산 DB 이전 런북](./runbook.md#10-정산-db-이전-core-db-settlement-스키마--settlement_db)을 따른다.
@@ -68,9 +70,16 @@ fake-pg(18090)는 컨테이너가 아니라 호스트에서 jar로 뜨며(`./scr
 | `realtime/` | 대기열·SSE. WebFlux + Coroutines, Redis만 사용 |
 | `gateway/` | 라우팅, 입장 토큰·SSE 티켓 검증, rate limit |
 | `fake-pg/` | 가짜 PG |
+| `common/` | JVM 앱 공통 코드 |
+| `contract/` | 프로세스 간 이벤트 계약 |
 | `web/` | Next.js BFF + 화면 |
 | `e2e/`, `scripts/e2e/` | 전체 흐름 E2E |
+| `loadtest/` | k6·Gatling 부하 시나리오 |
+| `build-logic/` | Gradle convention plugin |
+| `scripts/` | 개발 실행, E2E, 부하, DB, 에이전트 검사 스크립트 |
 | `docs/` | 설계서, 로드맵, ADR, 측정 결과 |
+| `harness/` | AI 워크플로 훅·검증·파이프라인 실행 코드 |
+| `.agents/skills/` | Codex·Claude Code 공용 스킬 원본. `.claude/skills`가 이 경로를 가리킨다 |
 
 ## 5. 읽는 순서
 
