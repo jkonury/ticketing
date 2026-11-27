@@ -8,10 +8,11 @@
 import argparse
 import sys
 from pathlib import Path
+from time import monotonic
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import gate, hook_input, state  # noqa: E402
+from lib import gate, hook_input, metrics, state  # noqa: E402
 
 
 def evaluate(hook: hook_input.HookInput, config_path: Path) -> str | None:
@@ -30,24 +31,33 @@ def evaluate(hook: hook_input.HookInput, config_path: Path) -> str | None:
     if task.get('last_pass_fingerprint') == tree_print:
         return None
     if task['gate_blocks'] >= state.MAX_GATE_BLOCKS:
-        task['gate_unresolved'] = True
-        state.save(root, current)
+        if not task['gate_unresolved']:
+            task['gate_unresolved'] = True
+            state.save(root, current)
+            metrics.record(root, current, 'gate', outcome='unresolved')
         return None
 
     commands = list(task.get('ac') or []) or gate.select_commands(files, gate.load_config(config_path))
+    started = monotonic()
     failures = gate.run(root, commands)
+    duration = round(monotonic() - started, 3)
+    source = 'ac' if task.get('ac') else 'path_rules'
     task['last_gate_at'] = state.now()
-    if not failures:
+    if failures:
+        task['gate_blocks'] += 1
+    else:
         task['last_pass_fingerprint'] = tree_print
         task['gate_unresolved'] = False
-        state.save(root, current)
+    state.save(root, current)
+    if commands:
+        metrics.record(root, current, 'gate', outcome='blocked' if failures else 'passed',
+                       source=source, duration_seconds=duration)
+    if not failures:
         return None
 
-    task['gate_blocks'] += 1
-    state.save(root, current)
-    source = 'task AC' if task.get('ac') else '변경 경로 규칙'
+    source_label = 'task AC' if source == 'ac' else '변경 경로 규칙'
     parts = [
-        f'[검증 게이트] {source} 검사 실패 ({task["gate_blocks"]}/{state.MAX_GATE_BLOCKS}회 차단). '
+        f'[검증 게이트] {source_label} 검사 실패 ({task["gate_blocks"]}/{state.MAX_GATE_BLOCKS}회 차단). '
         '실패를 고친 뒤 작업을 마친다. 상한을 넘기면 통과시키고 미해결로 기록한다.',
     ]
     for failure in failures:
