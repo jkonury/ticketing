@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md)
 - 작성일: 2026-11-25
-- 상태: W0~W2.5 완료. W3 진행 중
+- 상태: W0~W3 완료. 다음 단계는 W4
 
 Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)의 M6와 병행하고, M6 task를 파이프라인의 시범 대상으로 쓴다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다.
 
@@ -66,7 +66,7 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 - [x] [실행 계획 템플릿](./plans/template.md)에 범위, 선행 관계, task별 AC와 테스트 경계를 담는다.
 - [x] 초안 작성과 승인 기록 절차를 [plan-next](../../.agents/skills/plan-next/SKILL.md)에 정의한다.
 - [x] [implement](../../.agents/skills/implement/SKILL.md)와 CLI 검증으로 승인된 task의 구현·게이트 검사·로컬 커밋을 진행한다. 마지막에 최종 검사와 리뷰를 수행한다.
-- [ ] [core DB의 결제 스키마 정리](./plans/2026-11-27-core-payment-schema-cleanup.md)를 시범 계획으로 완주한다.
+- [x] [core DB의 결제 스키마 정리](./plans/2026-11-27-core-payment-schema-cleanup.md)를 시범 계획으로 완주한다.
 
 **완료 기준**: 시범 계획이 승인된 뒤 task 검증과 로컬 커밋을 거쳐 `done`에 도달한다. 검증용 DB에 마이그레이션을 적용한 상태에서 결제·환불 E2E가 통과하고, 최종 리뷰 결과와 게이트 지표가 남는다.
 
