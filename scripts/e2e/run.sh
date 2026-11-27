@@ -44,7 +44,7 @@ for command in docker curl java; do
 done
 [[ -f .env ]] || { echo '.env 파일이 필요합니다.' >&2; exit 1; }
 if $SAGA_RECOVERY; then
-  configured_default=$(env -u COMPOSE_PROJECT_NAME docker compose config --no-interpolate | awk '/^name: / {print $2}')
+  configured_default=$(env -u COMPOSE_PROJECT_NAME docker compose config --no-interpolate | awk '/^name: / {print $2}') || configured_default=''
   if [[ -z $configured_default || $COMPOSE_PROJECT_NAME == "$configured_default" ]]; then
     echo '--saga-recovery에는 Compose 기본값과 다른 전용 프로젝트가 필요합니다.' >&2
     exit 2
@@ -102,6 +102,7 @@ resume_kafka() {
   rm -f "$SAGA_DIR/kafka-paused"
 }
 cleanup() {
+  local status=$?
   local resume_failed=false
   if ! resume_kafka; then
     printf 'Kafka 재개를 확인하지 못했습니다. 상태 파일: %s/kafka-paused\n' "$SAGA_DIR" >&2
@@ -125,9 +126,9 @@ cleanup() {
     # pnpm start는 next-server를 자식으로 띄우므로 web은 프로세스 그룹째 종료한다
     [[ -z $WEB_PGID ]] || kill -- "-$WEB_PGID" 2>/dev/null || true
     kill "${active_pids[@]}" 2>/dev/null || true
-    wait "${PIDS[@]}" 2>/dev/null || true
+    wait "${active_pids[@]}" 2>/dev/null || true
   fi
-  if $resume_failed; then exit 1; fi
+  if $resume_failed && ((status == 0)); then exit 1; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
