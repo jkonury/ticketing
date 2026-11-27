@@ -1,6 +1,7 @@
 package io.github.ticketing.e2e.support
 
 import org.apache.kafka.clients.admin.Admin
+import org.apache.kafka.clients.admin.AdminClientConfig
 import org.apache.kafka.clients.admin.OffsetSpec
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -23,7 +24,11 @@ internal enum class SagaTopic(val nameSuffix: String, val consumerGroup: String)
 }
 
 internal class SagaKafka(private val orderId: Long, private vararg val contracts: SagaTopic) : AutoCloseable {
-    private val config = mapOf("bootstrap.servers" to sagaProperty("kafkaBootstrap"), "default.api.timeout.ms" to "5000")
+    private val config = mapOf(
+        AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG to sagaProperty("kafkaBootstrap"),
+        AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG to 4_000,
+        AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG to 5_000,
+    )
     private val admin = Admin.create(config)
     private val consumer = KafkaConsumer(
         config + mapOf(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false", ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "none"),
