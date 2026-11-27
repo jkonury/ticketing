@@ -472,7 +472,7 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
 
 ### 준비
 
-1. core가 확정·취소 이벤트를 Kafka로도 발행하고 기존 정산 리스너를 유지하는 버전(T1~T4)을 먼저 준비한다. 기존 core, core-batch, Gateway의 실행 파일과 설정을 복귀용으로 보관한다. core와 정산 DB의 백업과 복원 경로를 확보한다.
+1. core가 확정·취소 이벤트를 Kafka로도 발행하고 기존 정산 리스너를 유지하는 전환 준비 버전을 배포한다. 기존 core, core-batch, Gateway의 실행 파일과 설정을 복귀용으로 보관한다. core와 정산 DB의 백업과 복원 경로를 확보한다.
 2. `.env`에 `TICKETING_SETTLEMENT_POSTGRES_DB`, `TICKETING_SETTLEMENT_POSTGRES_USER`, `TICKETING_SETTLEMENT_POSTGRES_PASSWORD`를 설정한다. 개발 Compose의 DB 준비 스크립트는 core DB와 정산 DB의 `PUBLIC CONNECT`를 회수한다. 코어 DB 소유자 이외에 접속해야 하는 로컬 역할은 명시적으로 권한을 부여한다. Compose의 로컬 core 계정은 슈퍼유저로 ACL 검사를 우회한다.
 
    ```bash
