@@ -262,9 +262,12 @@ export type PaymentRequestResponse = {
   status: string;
 };
 
-export type PerformanceDetail = {
+export type PerformanceDetailResponse = {
   description: string;
+  genre?:
+    'CONCERT' | 'MUSICAL' | 'PLAY' | 'CLASSICAL' | 'SPORTS' | 'EXHIBITION';
   id: number;
+  posterUrl?: string | null;
   prices: Array<GradePrice>;
   schedules: Array<ScheduleSummary>;
   title: string;
@@ -272,16 +275,27 @@ export type PerformanceDetail = {
   venueName: string;
 };
 
-export type PerformancePage = {
-  items: Array<PerformanceSummary>;
+export type PerformancePageResponse = {
+  items: Array<PerformanceSummaryResponse>;
   nextCursor?: number | null;
 };
 
-export type PerformanceSummary = {
+export type PerformanceSummaryResponse = {
   firstStartsAt?: string | null;
+  genre?:
+    'CONCERT' | 'MUSICAL' | 'PLAY' | 'CLASSICAL' | 'SPORTS' | 'EXHIBITION';
   id: number;
+  posterUrl?: string | null;
   title: string;
   venueName: string;
+};
+
+export type PosterUploadRequest = {
+  contentType: string;
+};
+
+export type PosterUploadedResponse = {
+  posterUrl: string;
 };
 
 export type PriceRequest = {
@@ -295,6 +309,8 @@ export type RefreshRequest = {
 
 export type RegisterPerformanceRequest = {
   description: string;
+  genre?:
+    'CONCERT' | 'MUSICAL' | 'PLAY' | 'CLASSICAL' | 'SPORTS' | 'EXHIBITION';
   prices: Array<PriceRequest>;
   title: string;
   venueId: number;
@@ -371,6 +387,14 @@ export type UpdateCouponRequest = {
   totalQuantity?: number | null;
   validFrom?: string | null;
   validUntil?: string | null;
+};
+
+export type Upload = {
+  headers: {
+    [key: string]: string;
+  };
+  uploadId: string;
+  url: string;
 };
 
 export type VenueRegisteredResponse = {
@@ -884,6 +908,8 @@ export type PerformancesData = {
   query?: {
     cursor?: number;
     size?: number;
+    genre?:
+      'CONCERT' | 'MUSICAL' | 'PLAY' | 'CLASSICAL' | 'SPORTS' | 'EXHIBITION';
   };
   url: '/api/v1/performances';
 };
@@ -892,7 +918,7 @@ export type PerformancesResponses = {
   /**
    * OK
    */
-  200: PerformancePage;
+  200: PerformancePageResponse;
 };
 
 export type PerformancesResponse =
@@ -928,11 +954,48 @@ export type PerformanceResponses = {
   /**
    * OK
    */
-  200: PerformanceDetail;
+  200: PerformanceDetailResponse;
 };
 
 export type PerformanceResponse =
   PerformanceResponses[keyof PerformanceResponses];
+
+export type Issue1Data = {
+  body: PosterUploadRequest;
+  path: {
+    performanceId: number;
+  };
+  query?: never;
+  url: '/api/v1/performances/{performanceId}/poster-uploads';
+};
+
+export type Issue1Responses = {
+  /**
+   * OK
+   */
+  200: Upload;
+};
+
+export type Issue1Response = Issue1Responses[keyof Issue1Responses];
+
+export type CompleteData = {
+  body?: never;
+  path: {
+    performanceId: number;
+    uploadId: string;
+  };
+  query?: never;
+  url: '/api/v1/performances/{performanceId}/poster-uploads/{uploadId}/complete';
+};
+
+export type CompleteResponses = {
+  /**
+   * OK
+   */
+  200: PosterUploadedResponse;
+};
+
+export type CompleteResponse = CompleteResponses[keyof CompleteResponses];
 
 export type RegisterScheduleData = {
   body: RegisterScheduleRequest;

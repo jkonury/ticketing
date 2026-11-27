@@ -833,14 +833,21 @@
         "required" : [ "bookingId", "status" ],
         "type" : "object"
       },
-      "PerformanceDetail" : {
+      "PerformanceDetailResponse" : {
         "properties" : {
           "description" : {
             "type" : "string"
           },
+          "genre" : {
+            "enum" : [ "CONCERT", "MUSICAL", "PLAY", "CLASSICAL", "SPORTS", "EXHIBITION" ],
+            "type" : [ "string", "null" ]
+          },
           "id" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "posterUrl" : {
+            "type" : [ "string", "null" ]
           },
           "prices" : {
             "items" : {
@@ -868,11 +875,11 @@
         "required" : [ "description", "id", "prices", "schedules", "title", "venueId", "venueName" ],
         "type" : "object"
       },
-      "PerformancePage" : {
+      "PerformancePageResponse" : {
         "properties" : {
           "items" : {
             "items" : {
-              "$ref" : "#/components/schemas/PerformanceSummary"
+              "$ref" : "#/components/schemas/PerformanceSummaryResponse"
             },
             "type" : "array"
           },
@@ -884,15 +891,22 @@
         "required" : [ "items" ],
         "type" : "object"
       },
-      "PerformanceSummary" : {
+      "PerformanceSummaryResponse" : {
         "properties" : {
           "firstStartsAt" : {
             "format" : "date-time",
             "type" : [ "string", "null" ]
           },
+          "genre" : {
+            "enum" : [ "CONCERT", "MUSICAL", "PLAY", "CLASSICAL", "SPORTS", "EXHIBITION" ],
+            "type" : [ "string", "null" ]
+          },
           "id" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "posterUrl" : {
+            "type" : [ "string", "null" ]
           },
           "title" : {
             "type" : "string"
@@ -902,6 +916,25 @@
           }
         },
         "required" : [ "id", "title", "venueName" ],
+        "type" : "object"
+      },
+      "PosterUploadRequest" : {
+        "properties" : {
+          "contentType" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "contentType" ],
+        "type" : "object"
+      },
+      "PosterUploadedResponse" : {
+        "properties" : {
+          "posterUrl" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "posterUrl" ],
         "type" : "object"
       },
       "PriceRequest" : {
@@ -933,6 +966,10 @@
           "description" : {
             "minLength" : 1,
             "type" : "string"
+          },
+          "genre" : {
+            "enum" : [ "CONCERT", "MUSICAL", "PLAY", "CLASSICAL", "SPORTS", "EXHIBITION" ],
+            "type" : [ "string", "null" ]
           },
           "prices" : {
             "items" : {
@@ -1190,6 +1227,25 @@
             "type" : [ "string", "null" ]
           }
         },
+        "type" : "object"
+      },
+      "Upload" : {
+        "properties" : {
+          "headers" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "uploadId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "headers", "uploadId", "url" ],
         "type" : "object"
       },
       "VenueRegisteredResponse" : {
@@ -2138,13 +2194,21 @@
             "format" : "int32",
             "type" : "integer"
           }
+        }, {
+          "in" : "query",
+          "name" : "genre",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "CONCERT", "MUSICAL", "PLAY", "CLASSICAL", "SPORTS", "EXHIBITION" ],
+            "type" : "string"
+          }
         } ],
         "responses" : {
           "200" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PerformancePage"
+                  "$ref" : "#/components/schemas/PerformancePageResponse"
                 }
               }
             },
@@ -2197,7 +2261,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PerformanceDetail"
+                  "$ref" : "#/components/schemas/PerformanceDetailResponse"
                 }
               }
             },
@@ -2205,6 +2269,78 @@
           }
         },
         "tags" : [ "catalog-query-controller" ]
+      }
+    },
+    "/api/v1/performances/{performanceId}/poster-uploads" : {
+      "post" : {
+        "operationId" : "issue_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "performanceId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PosterUploadRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Upload"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "poster-upload-controller" ]
+      }
+    },
+    "/api/v1/performances/{performanceId}/poster-uploads/{uploadId}/complete" : {
+      "post" : {
+        "operationId" : "complete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "performanceId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "uploadId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PosterUploadedResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "poster-upload-controller" ]
       }
     },
     "/api/v1/performances/{performanceId}/schedules" : {

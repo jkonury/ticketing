@@ -323,16 +323,28 @@ export const zPaymentRequestResponse = z.object({
   status: z.string(),
 });
 
-export const zPerformanceSummary = z.object({
+export const zPerformanceSummaryResponse = z.object({
   firstStartsAt: z.iso.datetime({ offset: true }).nullish(),
+  genre: z
+    .enum(['CONCERT', 'MUSICAL', 'PLAY', 'CLASSICAL', 'SPORTS', 'EXHIBITION'])
+    .optional(),
   id: z.int(),
+  posterUrl: z.string().nullish(),
   title: z.string(),
   venueName: z.string(),
 });
 
-export const zPerformancePage = z.object({
-  items: z.array(zPerformanceSummary),
+export const zPerformancePageResponse = z.object({
+  items: z.array(zPerformanceSummaryResponse),
   nextCursor: z.int().nullish(),
+});
+
+export const zPosterUploadRequest = z.object({
+  contentType: z.string().min(1),
+});
+
+export const zPosterUploadedResponse = z.object({
+  posterUrl: z.string(),
 });
 
 export const zPriceRequest = z.object({
@@ -346,6 +358,9 @@ export const zRefreshRequest = z.object({
 
 export const zRegisterPerformanceRequest = z.object({
   description: z.string().min(1),
+  genre: z
+    .enum(['CONCERT', 'MUSICAL', 'PLAY', 'CLASSICAL', 'SPORTS', 'EXHIBITION'])
+    .optional(),
   prices: z.array(zPriceRequest).min(1),
   title: z.string().min(0).max(200),
   venueId: z.int(),
@@ -391,9 +406,13 @@ export const zScheduleSummary = z.object({
   startsAt: z.iso.datetime({ offset: true }),
 });
 
-export const zPerformanceDetail = z.object({
+export const zPerformanceDetailResponse = z.object({
   description: z.string(),
+  genre: z
+    .enum(['CONCERT', 'MUSICAL', 'PLAY', 'CLASSICAL', 'SPORTS', 'EXHIBITION'])
+    .optional(),
   id: z.int(),
+  posterUrl: z.string().nullish(),
   prices: z.array(zGradePrice),
   schedules: z.array(zScheduleSummary),
   title: z.string(),
@@ -454,6 +473,12 @@ export const zUpdateCouponRequest = z.object({
     .nullish(),
   validFrom: z.iso.datetime({ offset: true }).nullish(),
   validUntil: z.iso.datetime({ offset: true }).nullish(),
+});
+
+export const zUpload = z.object({
+  headers: z.record(z.string(), z.string()),
+  uploadId: z.uuid(),
+  url: z.string(),
 });
 
 export const zVenueRegisteredResponse = z.object({
@@ -752,12 +777,15 @@ export const zPerformancesQuery = z.object({
     })
     .optional()
     .default(20),
+  genre: z
+    .enum(['CONCERT', 'MUSICAL', 'PLAY', 'CLASSICAL', 'SPORTS', 'EXHIBITION'])
+    .optional(),
 });
 
 /**
  * OK
  */
-export const zPerformancesResponse = zPerformancePage;
+export const zPerformancesResponse = zPerformancePageResponse;
 
 export const zRegisterPerformanceBody = zRegisterPerformanceRequest;
 
@@ -773,7 +801,28 @@ export const zPerformancePath = z.object({
 /**
  * OK
  */
-export const zPerformanceResponse = zPerformanceDetail;
+export const zPerformanceResponse = zPerformanceDetailResponse;
+
+export const zIssue1Body = zPosterUploadRequest;
+
+export const zIssue1Path = z.object({
+  performanceId: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zIssue1Response = zUpload;
+
+export const zCompletePath = z.object({
+  performanceId: z.int(),
+  uploadId: z.uuid(),
+});
+
+/**
+ * OK
+ */
+export const zCompleteResponse = zPosterUploadedResponse;
 
 export const zRegisterScheduleBody = zRegisterScheduleRequest;
 
