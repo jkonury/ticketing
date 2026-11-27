@@ -29,5 +29,5 @@ description: contract 모듈의 프로세스 간 이벤트(BookingConfirmed, Pay
 ```
 
 - 모듈 의존이 바뀌었으면 `./gradlew :core:modulithDocs`로 `docs/modulith/`를 갱신해 같은 변경에 넣는다.
-- 결제 흐름이 바뀌었으면 E2E를 실행한다([E2E 실행](../../../docs/rules/backend-testing.md#e2e부하ci-실행)).
+- 결제 흐름 E2E의 실행 조건은 [백엔드 테스트 지침](../../../docs/rules/backend-testing.md#e2e부하ci-실행)을 따른다.
 - 마지막으로 [이벤트 추가 체크리스트](../../../docs/architecture/events.md#5-이벤트를-추가할-때-체크리스트)를 대조한다.

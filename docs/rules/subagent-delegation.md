@@ -44,8 +44,8 @@ task 하나는 모듈 하나만 수정한다. 모듈은 `core`의 Modulith 모�
 |---|---|
 | Kotlin 일반 변경 | `./scripts/agent/test/run-tests.sh`(필터 없이) + `./scripts/agent/test/check-summary.sh` |
 | Modulith 모듈 경계·이벤트 변경 | 위 검사 + 구조 검증, 필요 시 `./gradlew :core:modulithDocs` |
-| core·payment·gateway·realtime·fake-pg 흐름 변경 | 위 검사 + `./scripts/e2e/run.sh` |
-| `web` 변경 | `./scripts/agent/test/web-check.sh`, 영향 시 `--web` E2E |
+| `web` 변경 | `./scripts/agent/test/web-check.sh` |
+| 사용자가 로컬 E2E를 명시적으로 요청 | `./scripts/e2e/run.sh` (웹은 `--web`) |
 | 성능 최적화 | 기능·정합성 검사 후 단독 부하 측정(`scripts/loadtest/run.sh`) |
 | 문서 변경 | `./scripts/agent/docs/check-docs.sh [경로...]` |
 

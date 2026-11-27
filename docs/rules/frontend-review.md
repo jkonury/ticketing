@@ -38,7 +38,7 @@
 
 ## 5. 검증 확인
 
-- `./scripts/agent/test/web-check.sh`가 통과했는가(라우팅·빌드에 영향이 있으면 `--build`). core·payment·gateway·realtime 연동이나 SSE·인증 경계를 바꿨다면 `./scripts/e2e/run.sh --web`을, 문서 제목·링크를 바꿨다면 `./scripts/agent/docs/check-docs.sh`를 실행했는가.
+- `./scripts/agent/test/web-check.sh`가 통과했는가(라우팅·빌드에 영향이 있으면 `--build`). 사용자가 로컬 웹 E2E를 요청했다면 `./scripts/e2e/run.sh --web`의 결과를 확인했는가. 문서 제목·링크를 바꿨다면 `./scripts/agent/docs/check-docs.sh`를 실행했는가.
 
 ## 리뷰 결과 형식
 

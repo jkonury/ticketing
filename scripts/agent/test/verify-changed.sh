@@ -116,7 +116,7 @@ else
   printf '검사: %s\n' "${checks[@]}"
 fi
 [ "$modulith" = 1 ] && echo "안내: core 모듈 의존을 바꿨다면 ./gradlew :core:modulithDocs로 docs/modulith/를 갱신한다."
-[ "$e2e" = 1 ] && echo "안내: 서비스 흐름 변경의 전체 E2E는 PR의 CI에서 확인한다(docs/rules/backend-testing.md)."
+[ "$e2e" = 1 ] && echo "안내: 전체 E2E는 PR의 CI에서 확인한다. 로컬 E2E는 사용자가 명시적으로 요청한 경우에만 실행한다(docs/rules/backend-testing.md)."
 if [ "${#unmapped[@]}" -gt 0 ]; then
   echo "자동 검사 대상이 아닌 변경 ${#unmapped[@]}개(직접 확인):"
   printf '  %s\n' "${unmapped[@]:0:10}"
