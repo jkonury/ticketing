@@ -41,7 +41,7 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 - [x] Modulith 이벤트 외부화로 Kafka 도입: 모놀리스 상태에서 먼저 적용·검증 (앱 간 Redis Streams는 유지: ADR 0039)
 - [x] `payment` 분리: 별도 배포 단위, 스키마를 별도 DB로 이전, fake-pg 웹훅 수신 경로 이전, [분리 후 결제 확정 지연 측정](./performance/m6/03-payment-split-gatling.md)
 - [x] HTTP API 계약 코드 생성: core·payment·realtime OpenAPI 스펙(springdoc) → web BFF 경계 Zod 스키마 생성, 재생성 diff로 drift 차단 ([ADR 0047](./adr/0047-openapi-codegen-for-bff-boundary.md))
-- [ ] `settlement` 분리
+- [x] `settlement` 분리: 전용 DB·Kafka 소비·일별 배치, Gateway 정산 조회, 이전 리허설 및 P2 기준선 검증 ([실행 계획](./workflow/plans/2026-11-27-m6-settlement-split.md), [이전 런북](./runbook.md#10-정산-db-이전-core-db-settlement-스키마--settlement_db))
 - [ ] 예매–결제 Saga 정리 (보상 흐름 재검증, 쿠폰 보상(예약 해제·사용 확정) 포함)
 - [x] 인증 구조 재검토 (Spring Authorization Server 도입 여부): M6에서는 유지, SAS는 후속 (ADR 0041)
 - [ ] 컨테이너 이미지 빌드

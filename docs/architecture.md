@@ -92,19 +92,24 @@
 payment 앱 ──▶ Kafka ──▶ 코어 (PaymentSucceeded·PaymentFailed·PaymentRefunded)
 core-batch, payment-batch ──▶ Kafka (이벤트 발행, 리스너 미기동)
 payment 앱 ──▶ payment_db (같은 PostgreSQL 인스턴스의 별도 DB)
+코어 ──▶ Kafka ──▶ settlement 앱 (BookingConfirmed·BookingCancelled)
+settlement 앱, settlement-batch ──▶ settlement_db (같은 PostgreSQL 인스턴스의 별도 DB)
 실시간 앱 ──▶ Redis (대기열, Streams 구독)   ※ PostgreSQL 접근 없음
 payment 앱 ──▶ 가짜 PG 서버 (결제 요청) / 가짜 PG ──▶ payment 앱 (웹훅, Gateway를 거치지 않는 직접 호출)
 브라우저·BFF ──▶ Gateway ──▶ payment 앱 (GET /api/v1/payments/**)
+브라우저·BFF ──▶ Gateway ──▶ settlement 앱 (GET /api/v1/settlements)
 ```
 
 ### 배포 단위
 
 | 단위 | 루트 패키지 | 역할 |
 |---|---|---|
-| `core` | `io.github.ticketing` | 결제를 제외한 도메인 로직(member, catalog, booking, settlement, coupon, notification, audit). Modulith. 결제는 별도 앱 `payment`가 맡고 core에는 결제 계약 이벤트만 남는다 |
+| `core` | `io.github.ticketing` | Modulith. member, catalog, booking, coupon, notification, audit와 결제 계약 이벤트를 담는다 |
 | `core-batch` | `io.github.ticketing` (core 코드 공유) | Spring Batch 실행 모듈. Kafka 발행 가능, 리스너 미기동. 추후 k8s CronJob |
 | `payment` | `io.github.ticketing` (패키지 `io.github.ticketing.payment`) | 결제 요청·환불·웹훅 처리·결제 조회. WebMVC + Virtual Thread, 포트 18085. 전용 DB `payment_db`와 자체 `event_publication`을 쓴다. 웹훅은 fake-pg가 직접 호출한다 |
 | `payment-batch` | `io.github.ticketing` (payment 코드 공유) | 결제 대사 Job(`paymentReconciliationJob`) 실행 모듈. 배치 메타데이터는 `payment_db`의 `batch` 스키마. 추후 k8s CronJob |
+| `settlement` | `io.github.ticketing.settlement` | 예매 확정·취소를 Kafka에서 수신하고 주최자 정산 조회를 제공한다. WebMVC + Virtual Thread, 포트 18086, 전용 DB `settlement_db` |
+| `settlement-batch` | `io.github.ticketing.settlement` (settlement 코드 공유) | 일별 정산 Job(`dailySettlementJob`) 실행 모듈. 결과와 새 배치 메타데이터는 `settlement_db`에 저장한다 |
 | `realtime` | `io.github.ticketing.realtime` | 대기열, SSE push. 상태 없음(Redis만 사용) |
 | `gateway` | `io.github.ticketing.gateway` | 라우팅, JWT·입장 토큰·SSE 티켓 검증, rate limit |
 | `fake-pg` | `io.github.ticketing.fakepg` | 지연·실패·중복 웹훅을 재현하는 가짜 PG |
@@ -114,7 +119,7 @@ payment 앱 ──▶ 가짜 PG 서버 (결제 요청) / 가짜 PG ──▶ pay
 
 `payment`는 M6 3단계에서 core에서 분리됐다([ADR 0040](./adr/0040-payment-separate-database-same-instance.md), [M6 계획](./plans/m6-msa.md)). Gateway는 `/api/v1/payments/**`를 payment 앱으로 보내고, `/api/v1/payments/webhooks` 하위 경로는 어떤 인증 상태에서도 404로 막는다. 웹훅 서명 검증과 `event_id` 멱등은 payment 앱이 맡는다. 결제 계약 이벤트 5종은 Kafka로만 오간다. 결제 DB 데이터 이전 절차는 [runbook](./runbook.md)을 따른다.
 
-M6 4단계에서 정산을 분리할 때는 점검 창에 판매·환불 사본과 일별 정산 결과를 같은 PostgreSQL 인스턴스의 `settlement_db`로 옮긴다. 기존 정산 배치 실행 이력은 core DB에 보관하고, 전환 이후 실행 이력은 `settlement_db`에 저장한다. [ADR 0051](./adr/0051-settlement-database-cutover.md)
+M6 4단계에서 정산 앱을 분리했다. 기존 환경은 점검 창에 판매·환불 사본과 일별 정산 결과를 `settlement_db`로 옮긴다. 전환 전 정산 배치 실행 이력과 옛 정산 스키마는 core DB에 보관한다. [ADR 0051](./adr/0051-settlement-database-cutover.md), [정산 이전 런북](./runbook.md#10-정산-db-이전-core-db-settlement-스키마--settlement_db)
 
 ## 4. 코어 모듈 (Modulith)
 
@@ -125,7 +130,6 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 | `member` | 회원 가입, 로그인, JWT 발급, 역할 | 계층형 |
 | `catalog` | 공연·장르·포스터, 회차, 공연장, 좌석 배치 | 계층형 |
 | `booking` | 좌석 선점, 예매 생성·확정·만료·취소 | 헥사고날 |
-| `settlement` | 정산 (Batch). 정가 기준 집계와 플랫폼 할인 부담 기록 | 헥사고날 |
 | `coupon` | 쿠폰 정의·발급·예약·사용 확정, 선착순 발급 | 헥사고날 |
 | `audit` | 관리자 행위 감사 로그 | 계층형 |
 | `notification` | 알림 (현재는 로그 출력) | 계층형 |
@@ -136,10 +140,9 @@ Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모�
 
 ### 모듈 규칙
 
-- 모듈 간 호출은 **Modulith 이벤트**와 이벤트 발행 레지스트리로 한다. 결제 계약 5종은 Kafka로 외부화해 `@KafkaListener`로 소비하고(요청 2종은 core가 발행해 payment 앱이, 결과 3종은 payment 앱이 발행해 core가 소비), 나머지 로컬 이벤트는 `@ApplicationModuleListener`로 소비한다([이벤트 카탈로그](./architecture/events.md#kafka-외부화-대상-m6)).
+- 모듈 간 호출은 **Modulith 이벤트**와 이벤트 발행 레지스트리로 한다. 프로세스 경계를 넘는 결제 계약 5종과 예매 확정·취소는 Kafka로 외부화해 `@KafkaListener`로 소비한다. 로컬 이벤트와 예매 알림은 `@ApplicationModuleListener`로 소비한다. [이벤트 카탈로그](./architecture/events.md#kafka-외부화-대상-m6)
 - 다른 모듈의 데이터는 ID 참조와 이벤트로만 접근한다.
 - 경계와 의존 방향은 Modulith 검증 테스트(`ApplicationModules.verify()`)와 ArchUnit으로 강제한다.
-- MSA 분리 1순위는 `payment`, `settlement`. `payment`는 분리를 마쳤고 `settlement`가 남았다.
 - **결제 계약 이벤트의 소유**: `PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`는 모두 `payment` 패키지(`io.github.ticketing.payment`, 구현은 `contract` 모듈)에 둔다. core 안의 의존 방향은 `booking → payment`(이벤트만) 하나다. payment 앱은 예매를 모르고 `orderId`만 안다. 양쪽이 각자 이벤트를 소유하면 순환이 생겨 `ApplicationModules.verify()`가 실패한다. [ADR 0017](./adr/0017-payment-owns-payment-events.md) 참고.
 
 ### 헥사고날 모듈의 패키지 구조
@@ -167,9 +170,9 @@ io.github.ticketing.booking
 Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulith/`). 기본 `test`에서는 생성하지 않는다. 모듈 의존을 바꾸면 `./gradlew :core:modulithDocs`로 다시 생성해 바뀐 `.puml`을 함께 커밋한다.
 
 - [전체 모듈 의존](./modulith/components.puml)
-- 모듈별: [audit](./modulith/module-audit.puml), [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml)(core에는 계약 이벤트 패키지만 남아 있어 구현 없는 모듈로 나온다), [coupon](./modulith/module-coupon.puml), [member](./modulith/module-member.puml), [settlement](./modulith/module-settlement.puml), [notification](./modulith/module-notification.puml)
+- 모듈별 다이어그램은 [audit](./modulith/module-audit.puml), [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [coupon](./modulith/module-coupon.puml), [member](./modulith/module-member.puml), [notification](./modulith/module-notification.puml)에 있다.
 
-의존 방향은 `booking → catalog`(회차 사본 수신), `booking → payment`(결제 계약 이벤트. payment 앱과는 Kafka로 오간다), `notification → booking`(예매 알림 이벤트), `settlement → booking`(정산 사본 이벤트)이다. `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → coupon`(관리자 행위 이벤트)도 있다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다([ADR 0017](./adr/0017-payment-owns-payment-events.md)과 같은 방식, 근거는 ADR 0035).
+의존 방향은 `booking → catalog`(회차 사본), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림), `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → coupon`(관리자 행위 이벤트)이다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다. [ADR 0017](./adr/0017-payment-owns-payment-events.md), [ADR 0035](./adr/0035-coupon-module-reservation-saga.md)
 
 ### 이벤트 목록
 
@@ -205,7 +208,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 ## 5. 데이터
 
-- PostgreSQL은 인스턴스 하나에 core DB(모듈별 스키마 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`)와 payment 전용 DB `payment_db`(스키마 `payment`, `batch`, `public.event_publication`)를 두고 모듈 간 외래 키·조인을 금지한다. 접근 경계는 애플리케이션 계정 기준이다. core 앱 계정은 `payment_db` 접근 권한을 받지 않도록 설계하고, 로컬 compose의 관리자 계정(슈퍼유저)은 예외다(DB·계정 생성과 테스트용 임시 DB에 쓴다). core Flyway V18은 이전과 전환 검증을 마친 환경에서 옛 `payment` 스키마를 제거한다([ADR 0040](./adr/0040-payment-separate-database-same-instance.md)). 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
+- PostgreSQL 인스턴스 하나에 core DB, 결제 전용 `payment_db`, 정산 전용 `settlement_db`를 둔다. 앱 계정은 자기 DB에만 접속하며 모듈 간 외래 키와 조인은 금지한다. 로컬 Compose의 관리자 계정은 DB와 계정을 준비하는 슈퍼유저다. 스키마와 테이블의 소유자는 [데이터 소유](./architecture/data-ownership.md)와 [ERD](./architecture/erd.md)를 본다.
 - booking의 불변 좌석 사본은 요청 좌석 단위 Redis 캐시로 읽고 누락·장애 시 DB에서 조회한다. 캐시는 커밋 후 채운다([ADR 0025](./adr/0025-booking-seat-copy-cache.md)).
 - 선착순 쿠폰 발급은 Redis Lua로 재고와 회원 중복 Set을 원자적으로 처리한 뒤 동기 DB INSERT를 하고, 최종 방어선은 DB `(정의, 회원)` 유니크 제약이다. Redis–DB 불일치는 `reconcileCouponStockJob`이 DB 기준으로 보정한다([ADR 0037](./adr/0037-limited-coupon-claim-redis-lua.md)).
 - Redis는 좌석 선점·스냅샷·Streams, 대기열, 입장 토큰, SSE 티켓, rate limit, 조회 캐시에 쓴다. 용도와 키 형식은 [redis.md](./architecture/redis.md)를 본다.
@@ -234,7 +237,7 @@ Gateway의 요청 한도는 검증된 회원 ID 또는 클라이언트 IP에 적
 
 ## 9. Batch
 
-Job은 `dailySettlementJob`, `expirePendingBookingsJob`, `reconcileSeatSnapshotJob`, `paymentReconciliationJob`, `releaseStaleCouponReservationsJob`, `reconcileCouponStockJob` 여섯 개다. `paymentReconciliationJob`은 payment 앱이 소유하며 `payment-batch`가 실행하고, 나머지는 `core-batch`가 실행한다. 파라미터와 규칙은 [batch.md](./architecture/batch.md)를 본다.
+`dailySettlementJob`은 `settlement-batch`, `paymentReconciliationJob`은 `payment-batch`가 실행한다. `core-batch`는 미결제 예매 만료, 좌석 스냅샷 보정, 쿠폰 예약 해제와 쿠폰 재고 보정을 실행한다. [Batch 파라미터와 규칙](./architecture/batch.md)
 
 ## 10. 외부 연동
 

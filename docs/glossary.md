@@ -40,7 +40,7 @@ ticketing의 문서·코드 주석·issue·PR·커밋 메시지에서 쓰는 표
 | 멱등성 / 멱등 키 | idempotency / idempotency key | 같은 요청을 반복해도 업무 결과가 중복되지 않는 성질 / 결제 요청·웹훅 중복 처리의 기준 키 |
 | 환불 | refund | 결제 금액을 돌려주는 처리. 예매 취소라는 상태 변경과 구분한다 |
 | 만료 후 결제 성공 | — | 좌석 선점이 만료된 뒤 결제 성공이 도착한 경우. 자동 환불로 보상한다 |
-| 정산 | `settlement` | 이벤트로 받은 자기 스키마의 사본을 기준으로 주최자 지급액·수수료 등을 계산하는 업무 |
+| 정산 | `settlement` | Kafka에서 받은 예매 확정·취소 사본을 `settlement_db`에 적재하고 주최자 지급액·수수료를 계산하는 업무 |
 | 결제 대사 | reconciliation | PG 거래 내역과 내부 기록을 비교해 불일치를 검출·기록하는 작업 |
 | 알림 | `notification` | 예매 확정·취소 이벤트에 반응하는 코어 모듈. 초기 구현 범위는 로그 출력이다 |
 
@@ -67,11 +67,11 @@ ticketing의 문서·코드 주석·issue·PR·커밋 메시지에서 쓰는 표
 
 | 표준 표기 | 영어·식별자 | 프로젝트에서의 뜻 |
 | --- | --- | --- |
-| 코어 모듈 | Modulith application module | core 앱에서 `io.github.ticketing` 바로 아래의 member, catalog, booking, settlement, coupon, notification, audit 패키지 경계. payment는 별도 앱이라 core 모듈이 아니다 |
-| Gradle 모듈 | subproject | core, core-batch, payment, payment-batch, realtime, gateway, fake-pg 등 빌드 단위. 코어 모듈과 구분한다 |
-| 실행 앱 / 배포 단위 | application | 별도로 실행하는 앱. `core-batch`는 코어 코드를, `payment-batch`는 payment 코드를 공유하는 배치 실행 앱이다 |
+| 코어 모듈 | Modulith application module | core 앱의 member, catalog, booking, coupon, notification, audit, payment 패키지 경계. core의 payment 패키지는 계약 이벤트 노출을 담당한다 |
+| Gradle 모듈 | subproject | core, core-batch, payment, payment-batch, settlement, settlement-batch, realtime, gateway, fake-pg 등 빌드 단위 |
+| 실행 앱 / 배포 단위 | application | 별도로 실행하는 앱. `core-batch`, `payment-batch`, `settlement-batch`는 각 업무 앱의 코드를 공유하는 배치 실행 앱이다 |
 | Modulith | Spring Modulith | 코어를 한 앱으로 실행하면서 패키지별 모듈 경계를 검증하고 이벤트로 연동하는 구조 |
-| MSA | Microservices Architecture | 모듈을 독립 배포 단위로 분리하는 후속 구조. payment는 분리했고 settlement가 다음 후보다 |
+| MSA | Microservices Architecture | 모듈을 독립 배포 단위로 분리하는 구조. payment와 settlement가 전용 DB를 쓰는 앱으로 분리됐다 |
 | 헥사고날 | hexagonal architecture | booking·payment·settlement에 적용하는 도메인·포트·어댑터 구조 |
 | 입력 포트 / 출력 포트 | `provided` / `required` | 유스케이스를 제공하는 경계 / 영속성·외부 시스템에 요구하는 경계. 패키지 명명은 ADR 0016을 따른다 |
 | application 서비스 | `application.service` | 유스케이스를 구현하는 계층. 제품 전체나 독립 배포 서비스를 뜻하는 표현과 구분한다 |

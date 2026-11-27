@@ -29,6 +29,8 @@
 | `core-batch/` | Spring Batch 실행 모듈 (core 코드 공유) |
 | `payment/` | 결제 앱. WebMVC + Virtual Thread, 포트 18085, 전용 DB `payment_db` |
 | `payment-batch/` | 결제 대사 Batch 실행 모듈 (payment 코드 공유, `payment_db`) |
+| `settlement/` | 정산 앱. WebMVC + Virtual Thread, 포트 18086, 전용 DB `settlement_db` |
+| `settlement-batch/` | 일별 정산 Batch 실행 모듈 (settlement 코드 공유, `settlement_db`) |
 | `realtime/` | WebFlux + Coroutines + SSE. 대기열. Redis만 사용 |
 | `gateway/` | Spring Cloud Gateway. 입장 토큰·SSE 티켓 검증 |
 | `fake-pg/` | 가짜 PG 서버 |
@@ -76,6 +78,7 @@ docker compose -f compose.yaml -f compose.observability.yaml up -d   # 관측 �
 ./scripts/dev/seed-demo.sh [--reset [--yes]]  # 화면 시연 데이터
 ./gradlew :core:bootRun
 ./gradlew :payment:bootRun          # 결제 앱(18085). fake-pg 웹훅이 직접 호출. scripts/dev/run.sh --payment
+./gradlew :settlement:bootRun       # 정산 앱(18086). scripts/dev/run.sh --settlement
 ./gradlew :realtime:bootRun
 ./gradlew :gateway:bootRun           # BFF·클라이언트는 Gateway(18000)를 거쳐 호출
 # 최초 1회: web 환경 변수 파일 생성

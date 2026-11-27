@@ -22,14 +22,14 @@
 ## 8. BFF (Next.js)
 
 - 일반 API 요청은 전부 BFF를 거친다.
-- BFF는 core·payment·realtime의 OpenAPI 스펙에서 생성한 Zod 스키마로 HTTP 요청 본문과 JSON 응답을 검증한다. 각 앱은 로컬 프로필과 통합 테스트에서만 스펙을 제공한다. SSE 본문은 이벤트 카탈로그를 따른다. [ADR 0047](../adr/0047-openapi-codegen-for-bff-boundary.md)
+- BFF는 core·payment·settlement·realtime의 OpenAPI 스펙에서 생성한 Zod 스키마로 HTTP 요청 본문과 JSON 응답을 검증한다. 각 앱은 로컬 프로필과 통합 테스트에서만 스펙을 제공한다. SSE 본문은 이벤트 카탈로그를 따른다. [ADR 0047](../adr/0047-openapi-codegen-for-bff-boundary.md)
 - 세션은 Redis `bff:session:<sessionId>`에 회원 ID, 이름, 역할, access·refresh 토큰과 access 만료 시각을 저장하며 TTL은 14일이다. 쿠키 `ticketing_session`에는 불투명 세션 ID만 담고 `HttpOnly`, `SameSite=Lax`, `Path=/`, 14일 만료를 설정한다. `SESSION_COOKIE_SECURE` 환경 변수로 `Secure`를 켜며 로컬 HTTP에서는 끈다.
 - access 토큰은 만료 30초 전 또는 하위 API가 401을 반환하면 갱신한다. 세션당 한 번만 갱신하도록 프로세스 안 single-flight와 Redis 락을 사용하며, 갱신 실패 시 세션을 파기하고 로그인으로 보낸다.
 - 상태를 바꾸는 Route Handler는 `Origin`(없으면 `Referer`)이 web origin과 같은지 검사한다. Server Action도 Next 내장 검사에 더해 같은 검사를 적용한다.
 - 조합(Aggregation) 화면
   - 공연 상세: 공연 정보는 핵심 데이터, 회차별 잔여 좌석과 내 예매 여부는 부가 데이터다.
   - 마이페이지: 예매 목록은 핵심 데이터, 결제 상태는 부가 데이터다.
-  - 주최자 대시보드: 판매 현황과 정산은 둘 다 부가 데이터이며 둘 다 실패하면 오류 화면을 표시한다.
+  - 주최자 대시보드는 판매 현황을 core에서, `GET /api/v1/settlements` 결과를 Gateway를 통해 정산 앱에서 읽는다. 두 요청이 모두 실패하면 오류 화면을 표시한다.
 - 조합에 사용하는 API는 `GET /api/v1/schedules/availability?scheduleIds=...`, 확장된 `GET /api/v1/bookings/me?performanceId=...`, `GET /api/v1/payments/me?bookingIds=...`, `GET /api/v1/organizer/sales`다. `payments/me`는 Gateway가 payment 앱으로 보내고 나머지는 코어가 처리한다. 각 API는 소유 모듈(앱)의 스키마만 조회한다.
 - 세션·갱신·조합 API 결정은 [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)를 따른다.
 - 예매 화면은 공개 `GET /api/v1/schedules/{id}`에서 공연 ID·제목과 회차 시각을 조회한다 ([ADR 0023](../adr/0023-schedule-detail-api.md)).

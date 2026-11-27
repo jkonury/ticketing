@@ -12,6 +12,7 @@ Kotlin, Spring Boot 4.x, Java 25 기반이다. 설계 근거는 [아키텍처](.
 | `core-batch/` | [core-batch 작성 지침](backend-core-batch.md) |
 | `payment/` | [payment 작성 지침](backend-payment.md) |
 | `payment-batch/` | [payment-batch 작성 지침](backend-payment-batch.md) |
+| `settlement/`, `settlement-batch/` | [정산 데이터 소유](../architecture/data-ownership.md), [배치 설계](../architecture/batch.md) |
 | `realtime/` | [realtime 작성 지침](backend-realtime.md) |
 | `gateway/` | [gateway 작성 지침](backend-gateway.md) |
 | `fake-pg/` | [fake-pg 작성 지침](backend-fake-pg.md) |
@@ -43,7 +44,7 @@ Kotlin, Spring Boot 4.x, Java 25 기반이다. 설계 근거는 [아키텍처](.
 
 ## Virtual Thread
 
-`core`, `payment`, `fake-pg`에 적용한다.
+`core`, `payment`, `settlement`, `fake-pg`에 적용한다.
 
 - `spring.threads.virtual.enabled=true`.
 - 블로킹 I/O를 감싸는 `synchronized` 대신 `ReentrantLock`을 쓴다. 라이브러리 pinning 여부는 부하 테스트 단계에서 확인한다.

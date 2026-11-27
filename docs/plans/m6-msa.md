@@ -39,7 +39,7 @@ M6 본 작업 전에 끝낸다. 로드맵의 "M6 사전 작업" 체크리스트�
 
 후속(미포함): 완료된 `event_publication` 행 정리(삭제·`CompletedEventPublications` 이용). 현재는 행이 계속 쌓이며 `completion_date` 인덱스가 있어 지표 조회에는 영향이 작다. Kafka 외부화 후 이벤트량이 늘면 정리 정책과 알림 임계값을 정한다.
 
-**P2 Batch 기준선**: `BatchBaselineE2eTests`가 `core-batch.jar`를 별도 프로세스(`java -jar`, k8s CronJob과 같은 형태)로 실행한다. `scripts/e2e/run.sh`가 jar 경로와 DB 접속 정보를 넘기고, 검증은 `docker compose exec psql`로 한다(정산·대사 결과 API가 없고 `batch` 스키마 상태도 읽어야 하므로). 같은 DB에 이전 실행 데이터가 남으므로 테스트가 만든 회차·주문으로만 검증한다. 분리 후(4단계 등)에도 같은 값이 나와야 한다.
+**P2 Batch 기준선**: `BatchBaselineE2eTests`는 분리 전 세 Job을 `core-batch.jar`로 실행했다. 분리 후에는 일별 정산을 `settlement-batch.jar`와 `settlement_db`에서, 결제 대사를 `payment-batch.jar`와 `payment_db`에서, 미결제 정리를 `core-batch.jar`와 core DB에서 검증한다. `scripts/e2e/run.sh`가 JAR 경로와 DB 접속 정보를 넘긴다. 배치 실행 상태와 결과는 `docker compose exec psql`로 확인하며, 정산은 Gateway를 통한 주최자 조회도 검증한다. 검증 범위는 테스트가 만든 회차·주문으로 한정한다.
 
 | Job | 시나리오 | 기준선 |
 |---|---|---|

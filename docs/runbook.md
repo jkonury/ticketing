@@ -6,9 +6,10 @@
 
 | 구성 | 포트 | 의존 | 상태 확인 |
 |---|---|---|---|
-| gateway | 18000 | Redis, core, payment, realtime | `/actuator/health` |
+| gateway | 18000 | Redis, core, payment, settlement, realtime | `/actuator/health` |
 | core | 18080 | PostgreSQL, Redis, Kafka | `/actuator/health` |
 | payment | 18085 | PostgreSQL(`payment_db`), Kafka, fake-pg | `/actuator/health` |
+| settlement | 18086 | PostgreSQL(`settlement_db`), Kafka | `/actuator/health` |
 | realtime | 18081 | Redis | `/actuator/health` |
 | web | 13000 | Gateway, Redis(BFF 세션) | 브라우저 |
 | fake-pg | 18090 | payment(웹훅) | `/actuator/health` (호스트 jar) |
@@ -16,7 +17,7 @@
 | Redis | 16379 | - | `redis-cli ping` |
 | Kafka | 19092 | - | `docker compose ps` (healthy) |
 
-기동 순서는 PostgreSQL·Redis·Kafka·fake-pg → core·payment·realtime → gateway → web이다. 종료는 역순이다.
+기동 순서는 PostgreSQL·Redis·Kafka·fake-pg → core·payment·settlement·realtime → gateway → web이다. 종료는 역순이다.
 
 ## 2. 기동·종료·초기화
 
@@ -24,13 +25,15 @@
 docker compose up -d --wait         # 인프라(PostgreSQL, Redis, Kafka) 기동
 ./scripts/dev/run.sh --fake-pg      # fake-pg는 호스트 jar로 기동(로그: build/dev/logs/fake-pg.log)
 ./scripts/dev/run.sh --payment      # 결제 앱(18085). 결제 흐름에는 core와 함께 띄운다
+./scripts/dev/run.sh --settlement   # 정산 앱(18086)
 ./scripts/db/ensure-payment-db.sh   # 기존 볼륨에 payment_db·전용 계정이 없을 때(멱등)
 docker compose ps                   # 상태
 docker compose down                 # 종료 (데이터 유지)
 docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이터 전부 사라짐)
 ```
 
-- `down -v`는 되돌릴 수 없다. 로컬 데이터를 버려도 될 때만 쓴다. Flyway 마이그레이션은 core와 payment 앱 기동 때 각자의 DB에 다시 적용된다. 분리 전 결제 데이터도 함께 사라진다.
+- `down -v`는 되돌릴 수 없다. 로컬 데이터를 버려도 될 때만 쓴다. core·payment·settlement 앱은 기동 때 각자의 DB에 Flyway 마이그레이션을 적용한다.
+- core에 옛 정산 데이터가 있으면 정산 앱을 시작하기 전에 [정산 DB 이전](#10-정산-db-이전-core-db-settlement-스키마--settlement_db)을 진행한다.
 - Redis는 볼륨이 없어서 컨테이너를 다시 만들면 대기열·선점·세션이 사라진다.
 - Compose 기본 네트워크의 브릿지 이름은 `br-ticketing`으로 고정한다(서브넷은 Docker가 배정). 방화벽 규칙을 서브넷이 아닌 이 인터페이스에 걸어서 네트워크를 재생성해도, 다른 프로젝트와 서브넷이 겹쳐도 유지된다. 다른 프로젝트도 고유한 브릿지 이름을 쓰고 인터페이스 기준으로 허용하면 같은 문제를 피한다.
 - Linux에서 UFW를 쓰면 최초 1회 `sudo ./scripts/setup-firewall.sh`를 실행한다(멱등). 기존 네트워크에는 이름이 적용되지 않으므로 `docker compose down` 후 다시 기동한다(Redis 데이터는 사라진다).
@@ -191,25 +194,25 @@ returning id, listener_id, event_type;
 
 ## 4. Batch 실행
 
-Job은 `core-batch`(결제 대사는 `payment-batch`)에서 하나씩 실행한다. 규칙과 파라미터의 기준은 [batch.md](./architecture/batch.md)다.
+Job은 업무별 배치 앱에서 하나씩 실행한다. 규칙과 파라미터의 기준은 [batch.md](./architecture/batch.md)다.
 
 | Job | 파라미터 | 언제 |
 |---|---|---|
-| `dailySettlementJob` | `targetDate`, `run.id` | 일별 정산 |
+| `dailySettlementJob` | `targetDate`, `run.id` | 일별 정산(`settlement-batch`, `settlement_db`) |
 | `expirePendingBookingsJob` | `run.id` | 미결제 예매 만료 처리 |
 | `reconcileSeatSnapshotJob` | `run.id` | 좌석 스냅샷 보정 |
 | `releaseStaleCouponReservationsJob` | `run.id` | 기한 지난 RESERVED 쿠폰 복원 |
 | `paymentReconciliationJob` | `targetDate`, `run.id` | 결제 대사(`payment-batch`, `payment_db`) |
 
 ```bash
-./gradlew :core-batch:bootRun --args='--spring.batch.job.name=dailySettlementJob targetDate=2026-11-10,java.time.LocalDate run.id=1,java.lang.Long'
+./gradlew :settlement-batch:bootRun --args='--spring.batch.job.name=dailySettlementJob targetDate=2026-11-10,java.time.LocalDate run.id=1,java.lang.Long'
 ```
 
 - 완료된 같은 날짜를 다시 계산하려면 `run.id`를 새 값으로 바꾼다. 결과는 upsert 또는 날짜 단위 재적재라서 같다.
 - 실패한 실행은 같은 `targetDate`와 `run.id`로 재시작한다. 새 `run.id`를 쓰면 새 실행이 된다.
-- 정산일은 Asia/Seoul 기준이다. 지난 날짜의 정산은 다시 계산하지 않는다.
+- 정산일은 Asia/Seoul 기준이다. 늦게 도착한 이벤트가 영향을 준 날짜는 소비가 끝난 뒤 새 `run.id`로 다시 계산한다. [배치 전 점검과 복구](#복귀와-지연-이벤트)
 - 결제 대사는 `java -jar payment-batch/build/libs/payment-batch.jar --spring.batch.job.name=paymentReconciliationJob targetDate=<Asia/Seoul 날짜>`로 실행한다([payment-batch 지침](rules/backend-payment-batch.md)).
-- Batch 메타데이터는 PostgreSQL `batch` 스키마에 있다(core DB와 `payment_db`가 각자). 실행 이력은 여기서 조회한다.
+- 실행 이력은 core DB, `payment_db`, `settlement_db` 각자의 `batch` 스키마에서 조회한다. 분리 전 정산 실행 이력은 core DB에 보존한다.
 
 ```bash
 docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" \
@@ -218,7 +221,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 
 ## 5. 데이터 확인
 
-- core Flyway V18 적용 이후 core DB의 애플리케이션 스키마는 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`이고, 결제는 `payment_db`의 `payment`, `batch`다. 스키마 사이의 조인은 코드에서 만들지 않는다. 디버깅용 조회도 한 스키마씩 한다.
+- core는 core DB의 `member`, `catalog`, `booking`, `coupon`, `audit`, `batch`를 쓴다. 결제는 `payment_db`의 `payment`, `batch`를, 정산은 `settlement_db`의 `settlement`, `batch`를 쓴다. core DB의 옛 `settlement` 스키마는 이전과 복귀를 위해 보존한다. 디버깅용 조회도 한 스키마씩 한다.
 - 구조는 [erd.md](./architecture/erd.md)를 본다.
 - 스키마 변경은 Flyway 마이그레이션으로만 한다. 적용된 마이그레이션 파일은 수정하지 않고 새 버전을 추가한다.
 

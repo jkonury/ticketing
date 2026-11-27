@@ -11,7 +11,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 - 이벤트 리스너는 **멱등**하게 만든다. 같은 이벤트가 다시 와도 결과가 같아야 한다.
 - 모듈을 추가하거나 의존을 바꾸면 Modulith 검증 테스트를 실행하고, `./gradlew :core:modulithDocs`로 `docs/modulith/` 다이어그램을 다시 생성해 같은 변경에 포함한다. 기본 `test`는 문서를 생성하지 않는다.
 
-## 헥사고날 (`booking`, `settlement`, `coupon`)
+## 헥사고날 (`booking`, `coupon`)
 
 ```
 <module>
@@ -25,7 +25,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
     └── required.jpa / required.jooq / required.redis / required.pg
 ```
 
-- 의존 방향: `adapter → application → domain`. 반대 방향 import 금지. 현재 ArchUnit 계층 검사의 대상은 `booking`, `settlement`다. `coupon`에도 설계 규칙을 적용하며 검사 범위 확대는 별도 작업으로 확인한다.
+- 의존 방향: `adapter → application → domain`. 반대 방향 import 금지. core의 ArchUnit 계층 검사는 `booking`을 대상으로 한다. `coupon`에도 설계 규칙을 적용하며 검사 범위 확대는 별도 작업으로 확인한다. 독립 정산 앱은 같은 계층 구조를 자체 ArchUnit 테스트로 검증한다.
 - 도메인 모델과 JPA 엔티티를 분리한다. 변환은 `adapter.required.jpa` 안의 매퍼가 맡는다.
 - 컨트롤러는 `port.provided`만 호출한다. 요청/응답 DTO는 `adapter.provided.web`에 두고 도메인 타입을 그대로 응답으로 내보내지 않는다.
 - 비즈니스 규칙(상태 전이, 최대 4매 등)은 `domain`에 둔다. 서비스는 흐름 조율만 한다.
@@ -106,10 +106,6 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 - core에는 payment 구현이 없다. 결제·환불 처리, 웹훅 서명·멱등, 결제 대사는 payment 앱이 맡는다([payment 작성 지침](backend-payment.md)).
 - `io.github.ticketing.payment` 패키지는 contract의 결제 계약 이벤트 5종만 담는다. Modulith는 이를 `payment` 모듈로 인식하고 `booking`이 이 이벤트에만 의존한다([코어 모듈 규칙](../architecture.md#모듈-규칙)). 이 패키지에 core 구현 클래스를 두지 않는다.
 - 예매는 `orderId`로 결제를 참조한다. 결과 이벤트는 순서와 중복이 보장되지 않으므로 booking의 상태 전이 검사로 멱등하게 처리한다.
-
-### settlement
-
-- 다른 모듈 스키마를 읽지 않는다. 이벤트로 받아 자기 스키마에 저장한 사본만 읽는다. 정산 기준은 [Batch 설계](../architecture/batch.md)를 따른다.
 
 ### coupon
 

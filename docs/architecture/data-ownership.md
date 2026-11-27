@@ -13,14 +13,13 @@
 
 ## 2. PostgreSQL 스키마 소유
 
-PostgreSQL 인스턴스에는 core DB와 payment 전용 DB(`payment_db`)가 있다. 아래 표는 core DB 기준이고 payment는 별도 표로 둔다. 접근 경계는 애플리케이션 계정 기준이다. core 앱 계정은 `payment_db` 접근 권한을 받지 않도록 설계하고, 로컬 compose의 관리자 계정(슈퍼유저)은 예외다.
+PostgreSQL 인스턴스 하나에 core DB, `payment_db`, `settlement_db`를 둔다. 접근 경계는 앱 계정 기준이며 로컬 Compose의 관리자는 DB를 준비하는 슈퍼유저다.
 
 | 스키마 | 소유 모듈 | 주요 테이블 | 비고 |
 |---|---|---|---|
 | `member` | member | `member`, `refresh_token` | refresh 토큰은 SHA-256 해시만 저장 |
 | `catalog` | catalog | `venue`, `venue_seat`, `performance`, `performance_price`, `schedule` | 공연·회차의 원본 |
 | `booking` | booking | `schedule`, `schedule_seat`, `booking`, `booking_seat`, `sold_seat` | `schedule`, `schedule_seat`는 catalog 사본. `sold_seat`가 좌석 확정의 유니크 제약 |
-| `settlement` | settlement | `booking_sale`, `booking_refund`, `daily_settlement` | 앞의 둘은 booking 이벤트 사본 |
 | `coupon` | coupon | `coupon_definition`, `issued_coupon`, `reservation_attempt`, `use_mismatch` | `issued_coupon`의 `(definition_id, member_id)` 유니크가 중복 발급의 최종 방어선. `booking`은 발급 쿠폰 ID와 예매별 시도 ID를 값으로 보관 |
 | `audit` | audit | `admin_action` | 관리자 행위 이벤트 사본. `source_event_id` 유니크로 멱등 |
 | `batch` | core-batch | Spring Batch 메타데이터 | 공식 DDL을 Flyway로 생성 |
@@ -35,7 +34,15 @@ PostgreSQL 인스턴스에는 core DB와 payment 전용 DB(`payment_db`)가 있�
 | `public` | Modulith | `event_publication` | payment 앱 자체 레지스트리. core와 공유하지 않는다 |
 
 분리 전 데이터는 `scripts/db/migrate-payment-data.sh`로 core DB의 `payment` 스키마에서 옮긴다. 이전을 대조하고 결제·환불 동작을 검증한 뒤, 원본 백업을 보존하고 core Flyway V18을 적용한다. V18은 core DB의 옛 결제 테이블 네 개와 `payment` 스키마를 제거한다. [runbook](../runbook.md#9-결제-db-이전-core-db-payment-스키마--payment_db), [ADR 0040](../adr/0040-payment-separate-database-same-instance.md)
-컬럼과 관계는 [erd.md](./erd.md)가 기준이다. 원본은 core DB는 `core/src/main/resources/db/migration/V*.sql`, `payment_db`는 `payment/src/main/resources/db/migration/V*.sql`이다.
+
+**`settlement_db`** (소유 계정 `TICKETING_SETTLEMENT_POSTGRES_USER`, Flyway 경로 `settlement/src/main/resources/db/migration/`)
+
+| 스키마 | 소유 | 주요 테이블 | 비고 |
+|---|---|---|---|
+| `settlement` | settlement 앱·배치 | `booking_sale`, `booking_refund`, `daily_settlement` | 앱은 Kafka에서 판매·환불 사본을 받아 적재하고 배치는 일별 결과를 쓴다 |
+| `batch` | settlement-batch | Spring Batch 메타데이터 | 전환 이후 정산 실행 이력 |
+
+점검 창에 core DB의 정산 테이블 세 개를 이전한다. 옛 정산 스키마와 기존 정산 배치 실행 이력은 core DB에 보관한다. [ERD](./erd.md), [정산 이전 런북](../runbook.md#10-정산-db-이전-core-db-settlement-스키마--settlement_db)
 
 ## 3. Redis 키 소유
 
@@ -75,7 +82,7 @@ PostgreSQL 인스턴스에는 core DB와 payment 전용 DB(`payment_db`)가 있�
 
 ## 5. 분리 대비 규칙
 
-MSA 분리 1순위는 `payment`, `settlement`다. `payment`는 별도 DB(`payment_db`)로 분리를 마쳤고 `settlement`가 남았다. 분리할 때 스키마를 별도 DB로 옮기므로 아래를 지킨다.
+도메인 소유권을 배포 단위로 옮길 수 있도록 아래 규칙을 지킨다.
 
 - 스키마 간 FK와 조인 금지. 조회가 필요하면 사본이나 API로 해결한다.
 - 한 트랜잭션이 두 모듈의 스키마를 함께 쓰지 않는다. 모듈 간 일관성은 이벤트와 보상 흐름으로 맞춘다.

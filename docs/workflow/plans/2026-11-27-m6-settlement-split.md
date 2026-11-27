@@ -103,7 +103,7 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 
 ### T7. core의 정산 구현 제거와 문서 갱신
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T6
 - 변경 범위와 제약: core에 남은 정산 구현과 jOOQ 생성 범위, 이전된 테스트와 Modulith 모듈 목록을 정리한다. 옛 core Flyway 마이그레이션과 정산 스키마를 보존한다. 정산 앱의 헥사고날 구조 검사를 유지하고 Modulith 다이어그램, 아키텍처·데이터 소유·ERD·이벤트·Batch·HTTP 계약 문서, 용어사전과 실행 지침을 갱신한다. M6 정산 완료 체크는 이전 리허설과 P2 기준선 검증 결과를 확인한 후 갱신한다.
 - 테스트 경계와 선례: core의 `ModularityTests`가 정산 모듈 없이 통과하고 `notification → booking` 이벤트 의존이 남는지 확인한다. core와 정산 앱의 `HexagonalArchitectureTests`가 각자 소유하는 구조를 검증한다. `BatchBaselineE2eTests`로 분리 후 계산과 조회가 계속 동작하는지 확인한다.
@@ -122,3 +122,8 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 - 시작 SHA부터 HEAD까지 `./scripts/agent/test/verify-changed.sh <시작-SHA>..HEAD`를 실행한다. 필터 없는 `./scripts/agent/test/run-tests.sh`와 `./scripts/agent/test/check-summary.sh ktlintCheck detekt`를 실행한다.
 - 격리된 Compose 환경에서 `./scripts/e2e/run.sh --web`으로 백엔드·웹 전체 E2E를 실행한다. PR CI에서는 전체 백엔드 E2E 및 web E2E 결과와 OpenAPI 생성물 drift 검사를 확인한다.
 - 같은 SHA 범위를 승인 계획을 명세로 삼아 `review-diff`의 Standards·Spec으로 검토한다. P2 정산 결과와 이전 리허설 결과를 계획에 남긴다.
+
+### 정산 분리 검증 결과
+
+- 격리 Compose의 `BatchBaselineE2eTests` 3개가 통과했다. `settlement-batch.jar`는 종료 코드 0으로 종료했고, `settlement_db`에서 `dailySettlementJob` 실행 상태는 `COMPLETED`였다. 판매 3건·30,000원, 환불 1건·10,000원, 순액 20,000원, 수수료율 0.10, 수수료 2,000원, 정산액 18,000원, 플랫폼 할인 부담 3,000원으로 P2와 일치했다. Gateway를 통한 주최자 조회와 다른 주최자의 데이터 격리도 통과했다.
+- 격리 PostgreSQL·Kafka의 이전 리허설에서 세 테이블의 건수와 체크섬 일치, 이관된 과거 정산 조회, 옛 Batch 이력 보존을 확인했다. 종료 오프셋까지 재생한 뒤 사본이 중복되지 않았고, 불일치·복사 실패 시 대상 트랜잭션 롤백과 쓰기 재개 전 원본 복귀를 검증했다.
