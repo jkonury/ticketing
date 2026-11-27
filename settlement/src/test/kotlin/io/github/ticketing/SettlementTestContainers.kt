@@ -6,6 +6,7 @@ import org.springframework.test.context.DynamicPropertyRegistrar
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.MountableFile
 import java.nio.file.Path
+import java.sql.Connection
 import java.sql.DriverManager
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -42,6 +43,18 @@ internal object SettlementTestDatabases {
     }
 
     fun jdbcUrl(database: String) = "jdbc:postgresql://${postgres.host}:${postgres.firstMappedPort}/$database"
+
+    val containerId: String get() = postgres.containerId
+
+    fun adminConnection(database: String): Connection = DriverManager.getConnection(jdbcUrl(database), postgres.username, postgres.password)
+
+    fun newLegacyDatabase(): String {
+        val database = "legacy_settlement_${namespaces.incrementAndGet()}"
+        adminConnection(postgres.databaseName).use { connection ->
+            connection.createStatement().use { it.execute("CREATE DATABASE $database") }
+        }
+        return database
+    }
 
     fun newNamespace(): Map<String, String> {
         val namespace = namespaces.incrementAndGet()
