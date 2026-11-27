@@ -39,7 +39,6 @@ export function Seats({
   const [selected, setSelected] = useState<number[]>([]);
   const [notice, setNotice] = useState('');
   const [pending, setPending] = useState(false);
-  const [zoomed, setZoomed] = useState(false);
   const [flashing, setFlashing] = useState<ReadonlySet<number>>(new Set());
   const key = useRef(crypto.randomUUID());
   const router = useRouter();
@@ -166,19 +165,12 @@ export function Seats({
     key.current = crypto.randomUUID();
   }
   return (
-    <div className="grid gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:pb-0">
-      <Card padding="lg" className="grid gap-4">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-heading font-bold text-fg">좌석 선택</h2>
-          <Button
-            variant="secondary"
-            className="lg:hidden"
-            aria-pressed={zoomed}
-            onClick={() => setZoomed((value) => !value)}
-          >
-            {zoomed ? '전체 보기' : '확대'}
-          </Button>
-        </div>
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:pb-0">
+      <Card
+        padding="none"
+        className="grid grid-cols-[minmax(0,1fr)] gap-4 overflow-visible! p-4 lg:p-6"
+      >
+        <h2 className="text-heading font-bold text-fg">좌석 선택</h2>
         <p className="text-caption text-fg-muted">
           최대 4석까지 고를 수 있어요. 좌석 현황은 참고용이고, 실제 선점 결과는
           예매할 때 확정돼요.
@@ -204,13 +196,12 @@ export function Seats({
           selected={selected}
           flashing={flashing}
           interactive={ready && !pending}
-          zoomed={zoomed}
           onToggle={toggle}
         />
       </Card>
       <aside
         aria-label="선택 요약"
-        className="fixed inset-x-0 bottom-0 z-30 grid gap-3 border-t border-line bg-surface p-3 shadow-bar lg:sticky lg:top-4 lg:rounded-card lg:border lg:p-5 lg:shadow-none"
+        className="fixed inset-x-0 bottom-0 z-30 grid gap-3 border-t border-line bg-surface p-3 shadow-bar lg:sticky lg:top-20 lg:rounded-card lg:border lg:p-5 lg:shadow-none"
       >
         <div className="hidden gap-2 lg:grid">
           <h3 className="text-body font-semibold text-fg">선택한 좌석</h3>

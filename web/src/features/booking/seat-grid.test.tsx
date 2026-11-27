@@ -36,15 +36,14 @@ const statuses: Record<number, SeatStatus> = {
   13: 'AVAILABLE',
 };
 
-function setup(selected: number[] = [], onToggle = vi.fn()) {
+function setup(selected: number[] = [], onToggle = vi.fn(), layout = seats) {
   render(
     <SeatGrid
-      seats={seats}
+      seats={layout}
       statuses={statuses}
       selected={selected}
       flashing={new Set([2])}
       interactive
-      zoomed={false}
       onToggle={onToggle}
     />,
   );
@@ -73,7 +72,7 @@ describe('좌석 그리드', () => {
   it('탭 정지는 하나이고 방향키로 행과 열을 이동한다', () => {
     setup();
     const stops = screen
-      .getAllByRole('button')
+      .getAllByRole('button', { name: /구역 .+열 \d+번,/ })
       .filter((button) => button.tabIndex === 0);
     expect(stops).toHaveLength(1);
     const first = seat(/1열 1번/);
@@ -89,6 +88,37 @@ describe('좌석 그리드', () => {
     expect(seat(/2열 1번/)).toHaveFocus();
     fireEvent.keyDown(seat(/2열 1번/), { key: 'ArrowUp' });
     expect(seat(/1열 1번/)).toHaveFocus();
+  });
+
+  it('두 자릿수 행이 있어도 번호 순으로 표시하고 이동한다', () => {
+    setup([], vi.fn(), [
+      { ...seats[0], seatId: 20, row: '10' },
+      seats[3],
+      seats[0],
+    ]);
+    const buttons = screen.getAllByRole('button', { name: /구역 .+열 \d+번,/ });
+    const first = seat(/1열 1번/);
+    const second = seat(/2열 1번/);
+    const tenth = seat(/10열 1번/);
+    expect(buttons).toEqual([first, second, tenth]);
+    expect(first.tabIndex).toBe(0);
+    act(() => first.focus());
+    fireEvent.keyDown(first, { key: 'ArrowDown' });
+    expect(second).toHaveFocus();
+    fireEvent.keyDown(second, { key: 'ArrowDown' });
+    expect(tenth).toHaveFocus();
+  });
+
+  it('모든 구역은 확대 모드로 시작하고 구역별로 전체 보기를 전환한다', () => {
+    setup([], vi.fn(), [...seats, { ...seats[0], seatId: 30, section: 'E' }]);
+    fireEvent.click(screen.getByRole('button', { name: 'E구역 전체 보기' }));
+    expect(
+      screen.getByRole('button', { name: 'A구역 전체 보기' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'E구역 확대' }));
+    expect(
+      screen.getByRole('button', { name: 'E구역 전체 보기' }),
+    ).toBeInTheDocument();
   });
 
   it('포커스하면 툴팁 문구를 보여 주고 선택 가능한 좌석만 토글한다', () => {
