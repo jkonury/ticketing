@@ -76,7 +76,10 @@ flowchart LR
 
 전체 절차는 [온보딩](docs/onboarding.md)을 따른다.
 
-개발 스택은 `./scripts/dev/run.sh`로 기동한다. `--infra`, `--core`, `--payment`, `--settlement`, `--realtime`, `--gateway`, `--web`, `--observability`를 조합해 선택할 수 있으며, 자세한 사용법은 `--help`를 참고한다. 앱은 Ctrl+C로 종료하고 Docker 컨테이너는 유지한다.
+개발 스택은 `./scripts/dev/run.sh`로 기동한다. `--infra`, `--core`, `--payment`, `--settlement`, `--realtime`, `--gateway`, `--web`, `--observability`를 조합해 선택할 수 있으며, 자세한 사용법은 `--help`를 참고한다.
+
+- `./scripts/dev/run.sh --reuse-jar`는 기존 `bootJar`로 전체 개발 스택을 기동한다. `--core --reuse-jar`처럼 앱을 선택할 수도 있다. 필요한 JAR이 없으면 빌드 명령을 안내한다.
+- `./scripts/dev/run.sh --stop`은 이 작업 트리에서 스크립트가 기록한 앱을 모두 종료한다. 앱을 기동한 터미널에서는 Ctrl+C로 해당 실행을 종료할 수 있다. Docker 컨테이너는 유지된다.
 
 개발 Java 앱은 Scouter를 연결한다. `.env` 또는 환경 변수의 `SCOUTER_AGENT_DIR`에 에이전트 디렉터리 절대 경로를 지정한다. 개발·부하 테스트 모두 코어는 `deploy/scouter/ticketing.conf`, Gateway는 `deploy/scouter/ticketing-gateway.conf`, realtime은 `deploy/scouter/ticketing-realtime.conf`를 사용한다. Gateway·realtime은 SSE 계측 비용을 줄이기 위해 Reactor 훅을 끄므로 WebFlux HTTP XLog·요청 TPS·응답시간을 수집하지 않는다. HTTP 관측은 Micrometer 지표·추적을 사용한다.
 
