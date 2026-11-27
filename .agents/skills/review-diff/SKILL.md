@@ -19,8 +19,8 @@ disable-model-invocation: true
 
 사용자가 말한 값이 기준점이다(커밋 SHA, 브랜치, 태그, `main`, `HEAD~5` 등). 없으면 묻는다.
 
-- 먼저 `git rev-parse <기준점>`으로 ref가 유효한지, `git diff --stat <기준점>...HEAD`가 비어 있지 않은지 확인한다. 잘못된 ref나 빈 diff는 여기서 멈춘다.
-- diff 명령은 `git diff <기준점>...HEAD`(three-dot, merge-base와 비교)로 고정하고, 커밋 목록은 `git log <기준점>..HEAD --oneline`으로 적어 둔다.
+- `git rev-parse`로 기준점과 HEAD를 각각 전체 커밋 SHA로 고정하고 `git diff --stat <기준SHA>...<검토SHA>`가 비어 있지 않은지 확인한다. 잘못된 ref나 빈 diff는 여기서 멈춘다.
+- diff 범위는 `<기준SHA>...<검토SHA>`(three-dot, merge-base와 비교)로 고정하고 커밋 목록은 `git log <기준SHA>..<검토SHA> --oneline`으로 적어 둔다.
 - 커밋되지 않은 변경이 있으면 사용자에게 포함 여부를 묻는다.
 
 ### 2. Spec 출처 찾기
@@ -55,18 +55,18 @@ disable-model-invocation: true
 2. 저장소 루트에서 축마다 한 번씩 호출한다. 두 호출은 서로 독립이므로 동시에 실행해도 된다.
 
    ```bash
-   SKILL_DIR/scripts/run-reviewer.sh <codex|claude> <프롬프트 파일> <결과 파일>
+   SKILL_DIR/scripts/run-reviewer.sh <codex|claude> <프롬프트 파일> <결과 파일> <기준SHA...검토SHA>
    ```
 
-   - 리뷰어는 읽기 전용이다. Codex는 `read-only` 샌드박스, Claude는 읽기·검색·git 조회 도구만 허용해서 파일을 고치지 못한다. 호출 방식을 바꾸려면 스크립트를 고친다.
+   - 리뷰어는 읽기 전용이다. Codex는 `read-only` 샌드박스에서 Git으로 diff를 읽는다. Claude는 스크립트가 고정 범위에서 만든 diff 파일과 저장소 문맥을 읽기·검색 도구로 확인한다. 호출 방식을 바꾸려면 스크립트를 고친다.
    - 호출이 실패하면(CLI 없음, 인증 만료, 시간 초과) 결과 파일의 `.log`를 확인해 사용자에게 알리고 멈춘다. 같은 모델로 대신 리뷰하는 것은 독립성이 사라지므로 사용자가 동의할 때만 한다. 이때 보고에 "교차 모델이 아님"이라고 적는다.
    - 호출은 축당 1회다. 재호출은 사용자가 승인한 경우에만 한다.
 3. 두 축을 합치거나 서로의 결과를 한 프롬프트에 넣지 않는다. 한 축의 결론이 다른 축을 물들이지 않게 한다.
 
-**Standards 입력**: diff 명령과 커밋 목록, 3단계에서 모은 규칙 파일 경로, 스멜 기준선 본문(`references/smell-baseline.md`).
+**Standards 입력**: 고정 diff 범위와 커밋 목록, 3단계에서 모은 규칙 파일 경로, 스멜 기준선 본문(`references/smell-baseline.md`).
 지시: "위반을 파일·행 단위로 보고한다. (a) 문서화된 규칙 위반은 규칙 문서와 절을 인용하고 `backend-review.md`·`frontend-review.md`의 심각도(차단·주의·제안)를 따른다. (b) 기준선 스멜은 이름과 해당 코드를 적고 판단 사항으로 표시한다. 이번 변경이 건드리지 않은 기존 코드는 지적하지 않는다. 취향 차이는 차단·주의로 올리지 않는다. 400단어 이내."
 
-**Spec 입력**: diff 명령과 커밋 목록, 명세 경로(또는 본문).
+**Spec 입력**: 고정 diff 범위와 커밋 목록, 명세 경로(또는 본문).
 지시: "(a) 명세가 요구했는데 빠졌거나 일부만 구현된 것, (b) 요청하지 않은 동작(범위 확장), (c) 구현된 것처럼 보이지만 틀려 보이는 것을 보고한다. 각 항목에 해당 명세 줄을 인용한다. 400단어 이내."
 
 명세가 없으면 Spec 축은 건너뛴다.
