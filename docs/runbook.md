@@ -218,7 +218,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 
 ## 5. 데이터 확인
 
-- core DB의 스키마는 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`이고, 결제는 `payment_db`의 `payment`, `batch`다(core DB에는 이전 후 제거 전까지 옛 `payment` 스키마가 남아 있다). 스키마 사이의 조인은 코드에서 만들지 않는다. 디버깅용 조회도 한 스키마씩 한다.
+- core Flyway V18 적용 이후 core DB의 애플리케이션 스키마는 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`이고, 결제는 `payment_db`의 `payment`, `batch`다. 스키마 사이의 조인은 코드에서 만들지 않는다. 디버깅용 조회도 한 스키마씩 한다.
 - 구조는 [erd.md](./architecture/erd.md)를 본다.
 - 스키마 변경은 Flyway 마이그레이션으로만 한다. 적용된 마이그레이션 파일은 수정하지 않고 새 버전을 추가한다.
 
@@ -293,6 +293,8 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 
 대상 테이블은 `payment.payment`, `payment.webhook_event`, `payment.pg_transaction_snapshot`, `payment.reconciliation_mismatch` 네 개다. Flyway 이력과 `event_publication`은 옮기지 않는다.
 
+이전 스크립트의 원본은 옛 `payment` 스키마가 남아 있는 V18 적용 전 core DB다. 분리와 전환 검증을 먼저 배포하고, 10단계의 백업을 마친 후 V18이 포함된 core와 core-batch를 배포한다.
+
 **대상 DB는 한 번만 정한다.** payment 앱과 payment-batch는 환경 변수 `TICKETING_PAYMENT_POSTGRES_DB`(기본 `payment_db`)가 가리키는 DB에 접속하고, 이전 스크립트의 `--target-db` 기본값도 `.env`의 같은 변수다. 다른 이름의 DB로 이전하려면 `--target-db`만 바꾸지 말고 `.env`의 `TICKETING_PAYMENT_POSTGRES_DB`를 그 이름으로 바꾼 뒤 아래 모든 단계(DB 준비, Flyway, 이전, 재대조, 앱 기동, 복구)를 같은 값으로 수행한다. `--target-db`만 다르면 이전은 성공해도 앱은 기본 DB를 봐서 기존 결제가 조회되지 않는다. 이 절의 명령은 `TARGET_DB`를 쓴다.
 
 ```bash
@@ -334,7 +336,7 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
    docker compose exec -T postgres psql -X -At -U "$TICKETING_POSTGRES_USER" -d "$TARGET_DB" \
      -c "select current_database(), count(*) from public.flyway_schema_history where success"   # 대상 DB 이름과 3건
    ```
-3. 스크립트 자체를 임시 DB로 확인하려면 `./scripts/db/test-migrate-payment-data.sh`(`--full`은 실제 core DB를 읽기만 해 대용량 경로까지 본다)를 실행한다.
+3. 이전 스크립트를 확인하려면 V18 적용 전 core DB의 사본과 대상 스키마가 준비된 별도 환경에서 `./scripts/db/test-migrate-payment-data.sh`를 실행한다. 기본 모드는 원본 스키마를 복제하고, `--full`은 원본 데이터도 복제해 대용량 경로까지 확인한다.
 
 **점검 창 절차**
 
@@ -373,7 +375,7 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
    ```bash
    ./scripts/db/migrate-payment-data.sh --verify-only --target-db "$TARGET_DB"
    ```
-6. **새 구성 기동(유입은 아직 닫혀 있다)**: 이전이 일치하면 payment 앱을 **같은 셸**(`TICKETING_PAYMENT_POSTGRES_DB`가 `$TARGET_DB`와 같은 상태)에서 일반 모드로 띄우고, 결제 구현이 제거된 core를 올린다. **gateway와 web은 아직 올리지 않는다.**
+6. **새 구성 기동(유입은 아직 닫혀 있다)**에서 이전이 일치하면 payment 앱을 **같은 셸**(`TICKETING_PAYMENT_POSTGRES_DB`가 `$TARGET_DB`와 같은 상태)에서 일반 모드로 띄운다. 분리 후 결제 구현이 제거됐고 V18은 포함하지 않은 core 빌드를 올린다. **gateway와 web은 아직 올리지 않는다.**
 7. **fake-pg 웹훅 목적지 확인(유입을 열기 전)**: 실행 중인 fake-pg가 새 payment 주소(`http://localhost:18085/api/v1/payments/webhooks/fake-pg`)로 웹훅을 보내는지 확인한다. 설정은 환경 변수 `FAKE_PG_WEBHOOK_URL`이다(비밀 값인 `FAKE_PG_WEBHOOK_SECRET`은 출력하지 않는다).
 
    ```bash
@@ -383,7 +385,7 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
    변수가 없으면 jar의 기본값을 쓴다. 기본값은 `fake-pg/src/main/resources/application.yml`에서 payment 앱(18085)이다(분리 전에 빌드한 jar는 core 18080일 수 있으므로 같은 커밋의 jar인지 확인한다). 목적지가 다르면 **유입이 닫힌 지금** fake-pg를 올바른 값으로 재기동하고 기동 확인(`curl localhost:18090/actuator/health`)과 같은 확인 명령으로 목적지를 다시 확인한 뒤에만 다음으로 간다. 재기동하면 아래 한계대로 기존 거래와 예약이 사라진다. 이 확인이 끝나기 전에는 gateway·web을 올리지 않는다. 열린 상태에서 접수한 신규 결제의 웹훅이 옛 주소로 가거나 재기동으로 신규 거래가 사라질 수 있기 때문이다.
 8. **유입 재개**: 목적지 확인이 끝나면 gateway, web을 올려 사용자 요청을 받는다.
 9. **전환 후 검증**(아래).
-10. **점검 창 종료 후**: core DB의 payment 스키마는 지금 지우지 않는다. 한 단계 동안 payment 앱이 정상 운영되는지 검증한 뒤 별도 Flyway 마이그레이션으로 제거한다. 그 전까지 이 스키마가 원본 사본 역할을 하므로 core는 읽지도 쓰지도 않는다.
+10. **옛 스키마 제거**는 이전 대조가 끝나고 9단계에서 새 결제·환불 동작을 검증한 뒤 별도 배포에서 진행한다. core DB의 옛 `payment` 스키마를 복원 가능한 백업으로 보존하고 접근을 제한한다. 그 뒤 V18이 포함된 core와 core-batch를 배포한다. 적용 뒤 `information_schema.schemata`에서 core DB의 `payment` 스키마가 사라졌고 `$TARGET_DB`의 `payment` 스키마가 남아 있는지 각각 확인한다.
 
 **커밋 결과를 알 수 없을 때**
 
@@ -447,4 +449,4 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
 - fake-pg는 거래·멱등 키 상태를 메모리(`TransactionStore`)에만 두고 웹훅 발송·재시도도 메모리 스케줄러에 예약한다. 재기동하면 이전 거래가 모두 사라져 이전한 결제의 환불·조회·대사 요청이 PG에서 거래를 찾지 못해 실패한다. 그래서 점검 창 중에 fake-pg를 끄지 않는다. 앱 구성을 되돌리는 롤백으로도 사라진 PG 거래와 예약은 복원되지 않는다.
 - 웹훅 목적지는 `FAKE_PG_WEBHOOK_URL`(`fake-pg.webhook.url`)이며 fake-pg가 기동 때 설정으로 읽고 실행 중 바꾸는 수단이 없다. 이 저장소의 기본값은 payment 앱(18085)이므로 이미 이 기본값으로 떠 있는 fake-pg는 재기동하지 않아도 된다. 분리 전 기본값(core 18080)이나 다른 값으로 떠 있다면 목적지를 바꾸려면 재기동해야 하고, 그러면 위와 같이 이전 거래가 사라진다. 이 경우 이전 결제에 대한 환불·대사는 로컬에서 검증할 수 없는 것으로 받아들이거나, 데이터를 이전하지 않고 새 볼륨으로 시작한다.
 
-**롤백**: 8단계(유입 재개) 전에는 core DB의 `payment` 스키마가 그대로 있고 대상 DB(`$TARGET_DB`)만 위 복구 절차로 비우면 이전 구성으로 돌릴 수 있다. payment 앱이 새 결제를 받기 시작한 뒤에는 데이터가 대상 DB에서 갈라지므로 단순 롤백이 불가능하다. fake-pg를 재기동했다면 위 한계 때문에 이전 거래는 복원되지 않는다.
+**롤백**은 8단계(유입 재개) 전에 core DB의 `payment` 스키마가 있는 상태에서 대상 DB(`$TARGET_DB`)를 위 복구 절차로 비워 이전 구성으로 돌리는 절차다. 유입 재개 뒤에는 대상 DB가 새 거래의 원본이다. V18 적용 후에는 옛 스키마의 백업을 별도 DB에 복원해 이전 원본을 조회할 수 있다. fake-pg를 재기동했다면 위 한계 때문에 이전 거래는 복원되지 않는다.

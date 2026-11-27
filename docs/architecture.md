@@ -203,7 +203,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 
 ## 5. 데이터
 
-- PostgreSQL은 인스턴스 하나에 core DB(모듈별 스키마 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`)와 payment 전용 DB `payment_db`(스키마 `payment`, `batch`, `public.event_publication`)를 두고 모듈 간 외래 키·조인을 금지한다. 접근 경계는 애플리케이션 계정 기준이다. core 앱 계정은 `payment_db` 접근 권한을 받지 않도록 설계하고, 로컬 compose의 관리자 계정(슈퍼유저)은 예외다(DB·계정 생성과 테스트용 임시 DB에 쓴다). 이전이 끝났어도 core DB의 `payment` 스키마는 한 단계 검증 뒤 별도 마이그레이션으로 제거할 때까지 남아 있다([ADR 0040](./adr/0040-payment-separate-database-same-instance.md)). 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
+- PostgreSQL은 인스턴스 하나에 core DB(모듈별 스키마 `member`, `catalog`, `booking`, `settlement`, `coupon`, `audit`, `batch`)와 payment 전용 DB `payment_db`(스키마 `payment`, `batch`, `public.event_publication`)를 두고 모듈 간 외래 키·조인을 금지한다. 접근 경계는 애플리케이션 계정 기준이다. core 앱 계정은 `payment_db` 접근 권한을 받지 않도록 설계하고, 로컬 compose의 관리자 계정(슈퍼유저)은 예외다(DB·계정 생성과 테스트용 임시 DB에 쓴다). core Flyway V18은 이전과 전환 검증을 마친 환경에서 옛 `payment` 스키마를 제거한다([ADR 0040](./adr/0040-payment-separate-database-same-instance.md)). 스키마 규칙, ERD, JPA·jOOQ 역할 분담은 [erd.md](./architecture/erd.md)를 본다.
 - booking의 불변 좌석 사본은 요청 좌석 단위 Redis 캐시로 읽고 누락·장애 시 DB에서 조회한다. 캐시는 커밋 후 채운다([ADR 0025](./adr/0025-booking-seat-copy-cache.md)).
 - 선착순 쿠폰 발급은 Redis Lua로 재고와 회원 중복 Set을 원자적으로 처리한 뒤 동기 DB INSERT를 하고, 최종 방어선은 DB `(정의, 회원)` 유니크 제약이다. Redis–DB 불일치는 `reconcileCouponStockJob`이 DB 기준으로 보정한다([ADR 0037](./adr/0037-limited-coupon-claim-redis-lua.md)).
 - Redis는 좌석 선점·스냅샷·Streams, 대기열, 입장 토큰, SSE 티켓, rate limit, 조회 캐시에 쓴다. 용도와 키 형식은 [redis.md](./architecture/redis.md)를 본다.

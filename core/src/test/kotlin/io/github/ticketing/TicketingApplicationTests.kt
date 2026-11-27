@@ -7,11 +7,14 @@ import kotlin.test.assertEquals
 class TicketingApplicationTests(private val jdbc: JdbcTemplate) : IntegrationTestSupport() {
 
     @Test
-    fun `컨텍스트가 뜨고 모듈별 스키마가 생성된다`() {
+    fun `core 기동 후 core가 사용하는 스키마만 남는다`() {
         val schemas = jdbc.queryForList(
-            "select schema_name from information_schema.schemata where schema_name in ('member','catalog','booking','payment','settlement')",
+            """
+            select schema_name from information_schema.schemata
+            where schema_name in ('member', 'catalog', 'booking', 'payment', 'settlement', 'coupon', 'audit', 'batch')
+            """.trimIndent(),
             String::class.java,
         )
-        assertEquals(setOf("member", "catalog", "booking", "payment", "settlement"), schemas.toSet())
+        assertEquals(setOf("member", "catalog", "booking", "settlement", "coupon", "audit", "batch"), schemas.toSet())
     }
 }

@@ -17,7 +17,7 @@
 
 ## 테이블 구조 (ERD)
 
-스키마별로 그린다. 스키마를 넘는 관계는 FK가 없고 값으로만 참조하므로 선을 긋지 않고 주석으로 표시한다. 원본은 core DB는 `core/src/main/resources/db/migration/V*.sql`, `payment_db`는 `payment/src/main/resources/db/migration/V*.sql`이다. 이 외에 각 DB에 `public.event_publication`(Modulith 이벤트 발행 레지스트리)과 `batch` 스키마(Spring Batch 메타데이터, 공식 DDL)가 있다. core DB의 `payment` 스키마는 이전 뒤에도 한 단계 검증 때까지 남지만 core는 쓰지 않으며, 별도 마이그레이션으로 제거할 예정이다.
+스키마별로 그린다. 스키마를 넘는 관계는 FK가 없고 값으로만 참조하므로 선을 긋지 않고 주석으로 표시한다. 원본은 core DB는 `core/src/main/resources/db/migration/V*.sql`, `payment_db`는 `payment/src/main/resources/db/migration/V*.sql`이다. 이 외에 각 DB에 `public.event_publication`(Modulith 이벤트 발행 레지스트리)과 `batch` 스키마(Spring Batch 메타데이터, 공식 DDL)가 있다. core Flyway V18 적용 이후 `payment` 스키마는 `payment_db`에만 존재한다.
 
 ### member
 
