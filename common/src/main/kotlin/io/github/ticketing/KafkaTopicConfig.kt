@@ -9,7 +9,7 @@ import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.KafkaAdmin
 
 /**
- * 결제 계약 이벤트 5종의 토픽 이름. 규칙은 docs/architecture/events.md "Kafka 외부화 대상 (M6)"를 따른다.
+ * 프로세스 간 계약 이벤트의 토픽 이름. 규칙은 docs/architecture/events.md "Kafka 외부화 대상 (M6)"를 따른다.
  * 접두어(`ticketing.kafka.topic-prefix`, 기본 `ticketing`)는 한 브로커를 여러 환경이 나눠 쓸 때 충돌을 막는다.
  * 테스트는 컨텍스트마다 접두어를 달리해 컨텍스트 사이에 이벤트가 섞이지 않게 한다. 리스너는 `#{@kafkaTopics.paymentRequested}`로 참조한다.
  */
@@ -19,8 +19,18 @@ class KafkaTopics(prefix: String) {
     val paymentSucceeded = "$prefix.payment.payment-succeeded"
     val paymentFailed = "$prefix.payment.payment-failed"
     val paymentRefunded = "$prefix.payment.payment-refunded"
+    val bookingConfirmed = "$prefix.booking.booking-confirmed"
+    val bookingCancelled = "$prefix.booking.booking-cancelled"
 
-    val all = listOf(paymentRequested, refundRequested, paymentSucceeded, paymentFailed, paymentRefunded)
+    val all = listOf(
+        paymentRequested,
+        refundRequested,
+        paymentSucceeded,
+        paymentFailed,
+        paymentRefunded,
+        bookingConfirmed,
+        bookingCancelled,
+    )
 
     /** 재시도를 소진한 레코드가 가는 토픽. 원본과 같은 키로 보존한다. */
     fun deadLetterOf(topic: String) = "$topic.dlt"

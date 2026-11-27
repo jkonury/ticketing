@@ -67,7 +67,7 @@
 
 ### Kafka 외부화 대상 (M6)
 
-프로세스 경계를 넘는 계약 이벤트 7종이 대상이다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 2단계에서 결제 5종을 외부화했고, 3단계에서 payment가 별도 앱으로 분리돼 이 5종이 core와 payment 앱 사이를 Kafka로만 오간다. booking 2종은 4단계에 예정되어 있다. 토픽은 이벤트별이다. core-batch·payment-batch는 발행 가능하지만 리스너를 기동하지 않는다.
+프로세스 경계를 넘는 계약 이벤트 7종이 대상이다([ADR 0039](../adr/0039-kafka-externalizes-modulith-events-only.md), [M6 계획](../plans/m6-msa.md)). 2단계에서 결제 5종을 외부화했고, 3단계에서 payment가 별도 앱으로 분리돼 이 5종이 core와 payment 앱 사이를 Kafka로만 오간다. 4단계에서 core가 예매 확정·취소도 Kafka로 발행한다. 정산 전환 전까지 core의 정산 리스너가 사본을 적재한다. 토픽은 이벤트별이다. core-batch·payment-batch는 발행 가능하지만 리스너를 기동하지 않는다.
 
 | 이벤트 | 발행 (현재 → 분리 후. 분리를 마친 이벤트는 현재만) | 구독 (현재 → 분리 후. 같은 규칙) | 외부화 단계 | 토픽 | 메시지 키 | 파티션 | 소비자 멱등 근거 | 비고 |
 |---|---|---|---|---|---|---|---|---|
@@ -76,8 +76,8 @@
 | `PaymentSucceeded` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-succeeded` | `orderId` | 3 | 예매 상태 전이 검사(이미 `CONFIRMED`면 `AlreadyConfirmed` 무시, `EXPIRED`·`CANCELLED`면 환불 경로) | |
 | `PaymentFailed` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-failed` | `orderId` | 3 | 예매 상태 전이 검사 | 토픽이 달라 같은 주문의 성공·실패·환불 간 순서는 보장되지 않는다. 상태 전이 검사에 의존 |
 | `PaymentRefunded` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-refunded` | `orderId` | 3 | 로그만 남김(부작용 없음) | |
-| `BookingConfirmed` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 예정(settlement 분리 시) | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | settlement: `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음(로그만, 중복 가능) | notification은 core에 남으므로 **같은 JVM 로컬 리스너를 유지**한다. settlement만 Kafka 소비로 바꾼다 |
-| `BookingCancelled` | booking(core) → booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 예정 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | settlement: `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음 | 위와 같다 |
+| `BookingConfirmed` | booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 외부화 | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | settlement: `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음(로그만, 중복 가능) | notification은 core에 남으므로 **같은 JVM 로컬 리스너를 유지**한다. settlement만 Kafka 소비로 바꾼다 |
+| `BookingCancelled` | booking(core) | notification(core), settlement(core) → notification(core), settlement 앱 | 4단계 외부화 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | settlement: `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING`. notification: 없음 | 위와 같다 |
 | 외부화 안 함 | | | | | | | | `ScheduleRegistered`(catalog→booking), 쿠폰 계약 이벤트 5종(booking↔coupon), `BookingExpired`, audit 이벤트(`MemberRoleChanged`, 쿠폰 관리자 행위 5종): 분리 후에도 core 한 JVM 안에서 소비한다. Modulith 이벤트 그대로 둔다 |
 
 `orderId`와 `bookingId`는 같은 값(예매 ID)이다. 같은 토픽 안에서는 같은 키가 같은 파티션으로 가 순서가 보장되지만, 토픽이 다르면 순서가 보장되지 않는다. 그래서 같은 예매의 이벤트 간 순서 의존은 소비자의 상태 전이 검사로 막는다.
@@ -85,8 +85,8 @@
 **규칙**
 
 - 토픽 이름: `ticketing.<이벤트 클래스가 속한 도메인>.<이벤트 이름 kebab-case>`. 도메인은 클래스의 루트 패키지이며, 결제 계약 이벤트 5종은 발행 모듈과 무관하게 `payment`다([ADR 0017](../adr/0017-payment-owns-payment-events.md)). 접두어는 `ticketing.kafka.topic-prefix`로 설정하며 기본값 `ticketing`은 한 브로커를 다른 용도와 나눠 쓸 때 충돌을 피한다.
-- 메시지 키: 같은 예매의 이벤트가 한 파티션에서 순서대로 처리되도록 `orderId`(예정된 `booking*`은 `bookingId`). Spring에 의존하지 않는 계약 클래스에 애노테이션을 붙이지 않고 core의 `BookingEventExternalizationConfig`(요청 2종)와 payment 앱의 `PaymentEventExternalizationConfig`(결과 3종)가 토픽과 문자열 키를 지정한다.
-- 파티션 수: 결제 원본 토픽당 3, DLT당 1, 복제본 1이다. [2-5 측정](../performance/m6/02-kafka-externalization-gatling.md) 후 현 설정을 유지했다. 다른 설정과의 비교 실험은 하지 않았다.
+- 메시지 키: 같은 예매의 이벤트가 한 파티션에서 순서대로 처리되도록 결제 계약 이벤트에는 `orderId`, 예매 확정·취소에는 `bookingId`를 쓴다. Spring에 의존하지 않는 계약 클래스에 애노테이션을 붙이지 않고 core의 `BookingEventExternalizationConfig`와 payment 앱의 `PaymentEventExternalizationConfig`가 토픽과 문자열 키를 지정한다.
+- 파티션 수: 원본 토픽당 3, DLT당 1, 복제본 1이다. [2-5 측정](../performance/m6/02-kafka-externalization-gatling.md) 후 현 설정을 유지했다.
 - 페이로드는 §1의 JSON 규칙(골든 파일)을 따른다. 토픽 이름 변경은 소비자를 깨뜨리므로 필드 삭제와 같은 취급이다.
 
 **같은 JVM 리스너와 외부화**
