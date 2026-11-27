@@ -28,7 +28,7 @@ web UI 개편(U 트랙) 작업을 지시서 범위 안에서 구현한다. 지�
 ## 확인 방법
 
 1. `./scripts/agent/test/web-check.sh` (지시서가 요구하면 `--build`). 실패하면 직접 고친다. Prettier 위반은 `cd web && pnpm exec prettier --write <파일>`로 고친다.
-2. 화면 확인: dev 서버가 `http://localhost:13000`에 떠 있다(재시작하지 않는다). 캡처는 web 디렉터리에서 headless Playwright로 한다. 스크립트는 `/tmp` 아래 작업용 디렉터리에 둔다.
+2. 화면 확인: dev 서버가 `http://localhost:13000`에 떠 있다(재시작하지 않는다). 캡처는 web 디렉터리에서 headless Playwright로 한다. 임시 스크립트는 `mktemp -d`로 만든 디렉터리에 두고, 확인할 화면 캡처와 콘솔 로그는 저장소 루트의 `build/ui-builder/` 아래 실행별 디렉터리에 보관한다.
    ```js
    const { chromium } = require(require.resolve('@playwright/test', { paths: [process.cwd()] }));
    // viewport 390x844(모바일), 1440x900(데스크톱). goto 후
