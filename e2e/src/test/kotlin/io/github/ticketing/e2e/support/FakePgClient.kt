@@ -1,11 +1,14 @@
 package io.github.ticketing.e2e.support
 
+import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.test.assertEquals
 
 class FakePgClient {
@@ -22,6 +25,16 @@ class FakePgClient {
     fun holdState(orderId: Long): String? {
         val response = request("GET", "/v1/test/approval-holds/$orderId")
         return if (response.statusCode() == 200) json.readTree(response.body())["state"].asString() else null
+    }
+
+    fun transactions(orderId: Long, since: LocalDate): List<JsonNode> {
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        val dates = setOf(since, today)
+        return dates.flatMap { date ->
+            val response = request("GET", "/v1/transactions?date=$date")
+            assertEquals(200, response.statusCode())
+            json.readTree(response.body()).filter { it["orderId"].asString() == orderId.toString() }
+        }
     }
 
     private fun request(method: String, path: String): HttpResponse<String> = http.send(

@@ -11,6 +11,7 @@ dependencies {
     testImplementation("tools.jackson.core:jackson-databind")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
+    testImplementation("org.apache.kafka:kafka-clients")
 }
 
 tasks.test { enabled = false }
@@ -26,6 +27,9 @@ tasks.register<Test>("e2eTest") {
     classpath = sourceSets.test.get().runtimeClasspath
     systemProperty("e2e.gatewayUrl", gatewayUrl.get())
     systemProperty("e2e.realtimeBUrl", realtimeBUrl.get())
+    if (providers.systemProperty("e2e.sagaRecovery").orNull != "true") {
+        exclude("**/SagaRecoveryE2eTests.class")
+    }
     providers.systemProperty("e2e.adminEmail").orNull?.let { systemProperty("e2e.adminEmail", it) }
     providers.systemProperty("e2e.adminPassword").orNull?.let { systemProperty("e2e.adminPassword", it) }
     // 각 앱의 배치를 별도 프로세스로 실행하고 해당 DB의 결과를 검증한다.
@@ -42,6 +46,12 @@ tasks.register<Test>("e2eTest") {
         "e2e.settlementDbName",
         "e2e.paymentUrl",
         "e2e.fakePgUrl",
+        "e2e.sagaDir",
+        "e2e.composeProject",
+        "e2e.kafkaContainer",
+        "e2e.kafkaBootstrap",
+        "e2e.paymentJar",
+        "e2e.paymentPort",
     ).forEach { key ->
         providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }
