@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # 다른 모델의 에이전트 CLI를 읽기 전용 비대화 모드로 한 번 호출해 리뷰 결과를 파일로 받는다.
-# 사용법: run-reviewer.sh <claude|codex> <프롬프트 파일> <결과 파일> [제한 시간(초, 기본 900)]
+# 사용법: run-reviewer.sh <claude|codex> <프롬프트 파일> <결과 파일> <기준SHA...검토SHA> [제한 시간(초, 기본 900)]
 # 대상 저장소 루트에서 실행한다. 프롬프트는 stdin으로 넘기므로 길이 제한이 없다.
 # 종료 코드: 0 성공, 1 호출 실패·시간 초과·빈 결과, 2 사용법 오류·CLI 없음
 set -uo pipefail
 
-reviewer="${1:-}" prompt_file="${2:-}" out_file="${3:-}" limit="${4:-900}"
+reviewer="${1:-}" prompt_file="${2:-}" out_file="${3:-}" range="${4:-}" limit="${5:-900}"
 
-if [ -z "$reviewer" ] || [ ! -f "$prompt_file" ] || [ -z "$out_file" ]; then
-  echo "사용법: $0 <claude|codex> <프롬프트 파일> <결과 파일> [제한 시간(초)]" >&2
+if [ -z "$reviewer" ] || [ ! -f "$prompt_file" ] || [ -z "$out_file" ] ||
+   [[ ! "$range" =~ ^[[:xdigit:]]{40}\.\.\.[[:xdigit:]]{40}$ ]]; then
+  echo "사용법: $0 <claude|codex> <프롬프트 파일> <결과 파일> <기준SHA...검토SHA> [제한 시간(초)]" >&2
   exit 2
 fi
 command -v "$reviewer" >/dev/null 2>&1 || { echo "CLI를 찾을 수 없음: $reviewer" >&2; exit 2; }
@@ -19,10 +20,24 @@ log_file="${out_file}.log"
 
 case "$reviewer" in
   claude)
-    # 읽기·검색과 git 조회만 허용한다. dontAsk는 허용 목록 밖의 도구를 묻지 않고 거부한다.
+    review_dir=$(mktemp -d) || exit 1
+    trap 'rm -f -- "$review_dir/changes.diff"; rmdir -- "$review_dir"' EXIT
+    git diff --no-color --no-ext-diff --no-textconv "$range" -- >"$review_dir/changes.diff" 2>"$log_file" || {
+      echo "리뷰 diff 생성 실패. 로그: $log_file" >&2
+      exit 1
+    }
+    if [ ! -s "$review_dir/changes.diff" ]; then
+      echo "리뷰할 변경 없음: $range" >&2
+      exit 1
+    fi
     timeout "$limit" claude -p \
       --permission-mode dontAsk \
-      --allowedTools 'Read,Grep,Glob,Bash(git diff *),Bash(git log *),Bash(git show *),Bash(git rev-parse *),Bash(git status *),Bash(git merge-base *)' \
+      --tools 'Read,Grep,Glob' \
+      --allowedTools 'Read,Grep,Glob' \
+      --strict-mcp-config \
+      --settings '{"disableAllHooks":true}' \
+      --add-dir "$review_dir" \
+      --append-system-prompt "리뷰 범위 $range의 전체 diff는 $review_dir/changes.diff 에 있다. Read로 확인하고 길면 offset을 지정해 끝까지 읽는다. 저장소 파일은 문맥 확인에 사용한다. 이 세션에는 파일 조회 도구만 있으며 테스트 결과는 직접 재현하지 않는다." \
       --no-session-persistence \
       <"$prompt_file" >"$out_file" 2>"$log_file"
     ;;
