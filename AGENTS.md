@@ -98,7 +98,7 @@ cd web && pnpm install && pnpm dev
 - 요약 스크립트(`run-tests.sh`, `check-summary.sh`)는 `build/.agent-gradle.lock`으로 직렬화된다. 직접 `./gradlew`·E2E·부하 스크립트는 같은 작업 디렉터리의 다른 Gradle 실행과 동시에 돌리지 않는다. 동시에 실행하면 결과 파일이 충돌한다.
 - 모듈 의존을 바꾸면 [core 작성 지침](docs/rules/backend-core.md#코어-모듈-구조-modulith)의 Modulith 검증·다이어그램 갱신을 따른다.
 - 실패하면 실패한 그대로 보고한다(실패한 테스트 이름과 메시지 일부). 실패를 우회하려고 테스트를 지우거나 `@Disabled` 처리하지 않는다.
-- E2E(`scripts/e2e/run.sh`)·부하 테스트·CI는 `build`·`check`에 포함되지 않는다. core·payment·gateway·realtime·fake-pg 흐름을 바꾼 작업에서는 E2E를 실행한다. 사전 조건, 포트, 옵션은 [E2E·부하·CI 실행](docs/rules/backend-testing.md#e2e부하ci-실행)을 따른다.
+- E2E(`scripts/e2e/run.sh`)와 부하 테스트는 `build`·`check`에 포함되지 않는다. 전체 E2E는 PR의 CI에서 검증한다. 로컬 E2E는 개별 시나리오를 재현할 때 사용한다. 사전 조건, 포트, 옵션은 [E2E·부하·CI 실행](docs/rules/backend-testing.md#e2e부하ci-실행)을 따른다.
 
 ## 7. 공통 규칙
 
