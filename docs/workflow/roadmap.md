@@ -52,3 +52,27 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 
 - Codex 프로젝트 훅은 훅마다 해시로 신뢰를 기록한다. `.codex/hooks.json`을 바꾸면 Codex 대화형 세션의 `/hooks`에서 다시 승인해야 동작한다.
 - 게이트는 커밋하지 않은 변경 전체를 검사한다. 파이프라인은 깨끗한 작업 트리에서 시작해야 한다(W3 `/implement`의 시작 조건).
+
+## W3. `/plan-next`, `/implement`, 계획 템플릿
+
+미착수(W2.5 이후). 세부 항목과 완료 기준은 착수 때 합의해 이 절을 채운다. 아래는 착수 전에 정리한 **설계 입력 메모**다.
+
+### 설계 입력: mattpocock/skills의 `to-spec`·`to-tickets` 검토 (2026-11-27)
+
+두 스킬은 별도 스킬로 도입하지 않고, 아래 요소만 계획 템플릿과 `/plan-next` 설계에 흡수하기로 했다. 이슈 트래커 게시를 전제하고 스펙 문서를 새로 만드는 방식이 [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md) 결정 1·7(계획을 `docs/workflow/plans/`에 두고 `status`로 승인)과 겹치기 때문이다. 원본은 [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/engineering)의 `to-spec`, `to-tickets`(commit `6f7f783`)다.
+
+계획 템플릿과 `/plan-next`에 반영할 요소:
+
+- **task는 수직 슬라이스로 쪼갠다.** task 하나는 모든 계층을 가로지르는 얇은 경로이고, 혼자 시연하거나 검증할 수 있어야 하며, 새 컨텍스트 하나에 들어가는 크기여야 한다. 준비 리팩터링이 필요하면 먼저 둔다. `subagent-delegation.md`에 AC 작성 규칙은 있으나 task를 쪼개는 기준이 없어 이 부분을 채운다.
+- **task마다 선행 task(`Blocked by`)를 적는다.** 선행이 없으면 바로 시작할 수 있는 task다. 선행이 모두 끝난 task부터 진행한다.
+- **폭이 넓은 기계적 변경은 expand → migrate → contract로 나눈다.** 새 형태를 옛 형태 옆에 추가하고(expand), 호출처를 영향 범위 단위(패키지, 디렉터리)로 나눠 옮기고(migrate), 호출처가 남지 않으면 옛 형태를 지운다(contract). 각 migrate task는 expand에, contract task는 모든 migrate task에 막힌다. M6 분리 작업이 대상이다.
+- **쪼갠 결과를 사람이 승인한다.** 세분도(너무 크거나 작은가), 선행 관계(정말 막는 것만 걸었는가), 합치거나 더 쪼갤 task를 사용자에게 확인하고, 승인되면 `status: approved`로 바꾼다. ADR 0048의 "사람 승인"과 같은 단계다.
+- **테스트 결정을 계획에 담는다.** 테스트할 seam(가능하면 가장 높은 곳에 하나), 테스트 대상 모듈, 같은 종류의 기존 테스트(선례)를 적는다. 구현 단계의 [`tdd` 스킬](../../.agents/skills/tdd/SKILL.md)이 seam 합의를 요구하므로 계획에서 미리 정한다.
+- **범위 밖(Out of Scope)을 적는다.** `docs/roadmap.md`의 "단계와 무관한 후속 항목"을 앞당기지 않는 규칙과 맞춘다.
+
+가져오지 않는 요소: User Stories 목록, 이슈 트래커 게시와 `ready-for-agent` 라벨, `/setup-matt-pocock-skills`, "경로·코드 조각을 넣지 말 것"(이 저장소는 `check-docs.sh`가 백틱 경로를 검사한다).
+
+착수 시 확인할 것:
+
+- 계획 형식이 [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md) 결정 7(계획 문서 형식과 `status`)을 바꾸면 새 ADR로 남긴다. 사용자와 합의한 뒤에 쓴다.
+- `/plan-next`의 앞 단계(요구 정리)는 [`grill-with-docs` 스킬](../../.agents/skills/grill-with-docs/SKILL.md)을 쓴다. 뒤 단계는 `tdd`(구현)와 `review-diff`(리뷰)다. 이 흐름에서 `/implement`가 맡을 범위를 정한다.
