@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 class KafkaInfrastructureTests(private val kafkaAdmin: KafkaAdmin, private val topics: KafkaTopics) : IntegrationTestSupport() {
 
     @Test
-    fun `결제 계약 이벤트 토픽 5종이 파티션 3개로 만들어진다`() {
+    fun `프로세스 간 계약 이벤트 토픽이 각각 파티션 3개로 만들어진다`() {
         val expected = topics.all
 
         val partitions = AdminClient.create(kafkaAdmin.configurationProperties).use { admin ->

@@ -41,11 +41,11 @@ class KafkaRecoveryIntegrationTests {
     }
 
     private fun verifyRecovery(namespace: TestNamespace, kafka: KafkaContainer) {
-        val args = arguments(namespace, kafka)
+        val args = KafkaRecoveryTestSupport.arguments(namespace, kafka)
         val docker = DockerClientFactory.instance().client()
         lateinit var publicationId: UUID
         var bookingId = 0L
-        start(args + "--spring.kafka.listener.auto-startup=false").use { context ->
+        KafkaRecoveryTestSupport.start(args + "--spring.kafka.listener.auto-startup=false").use { context ->
             assertThat(context.getBean(KafkaListenerEndpointRegistry::class.java).listenerContainers).allMatch { !it.isRunning }
             val jdbc = context.getBean(JdbcTemplate::class.java)
             bookingId = pendingBooking(context)
@@ -80,7 +80,7 @@ class KafkaRecoveryIntegrationTests {
                 },
             )
         }
-        start(args, approveBeforeRequest).use { context ->
+        KafkaRecoveryTestSupport.start(args, approveBeforeRequest).use { context ->
             assertThat(context.getBean(KafkaListenerEndpointRegistry::class.java).listenerContainers).anyMatch { it.isRunning }
             val jdbc = context.getBean(JdbcTemplate::class.java)
             val stub = context.getBean(KafkaPaymentStub::class.java)
@@ -130,7 +130,13 @@ class KafkaRecoveryIntegrationTests {
         return created.booking.bookingId
     }
 
-    private fun arguments(namespace: TestNamespace, kafka: KafkaContainer): Array<String> = (
+    private companion object {
+        const val MEMBER_ID = 1L
+    }
+}
+
+internal object KafkaRecoveryTestSupport {
+    fun arguments(namespace: TestNamespace, kafka: KafkaContainer): Array<String> = (
         namespace.properties.map { (key, value) -> "--$key=$value" } + listOf(
             "--spring.config.import=",
             "--spring.profiles.active=recovery-test",
@@ -146,7 +152,7 @@ class KafkaRecoveryIntegrationTests {
         )
         ).toTypedArray()
 
-    private fun start(
+    fun start(
         args: Array<String>,
         initializer: ApplicationContextInitializer<ConfigurableApplicationContext>? = null,
     ): ConfigurableApplicationContext =
@@ -156,8 +162,4 @@ class KafkaRecoveryIntegrationTests {
             assertThat(context.environment.activeProfiles).containsExactly("recovery-test")
             assertThat(context.environment.getProperty("ticketing.startup-warmup.enabled")).isEqualTo("false")
         }
-
-    private companion object {
-        const val MEMBER_ID = 1L
-    }
 }

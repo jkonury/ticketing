@@ -22,7 +22,7 @@ M6 사전 작업과 Kafka 도입·payment 분리·HTTP 계약 생성이 완료�
 
 ### T1. core에서 예매 확정·취소를 Kafka로 발행
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: core의 `BookingEventExternalizationConfig`와 common의 `KafkaTopics`에 `ticketing.booking.booking-confirmed`, `ticketing.booking.booking-cancelled`를 연결한다. 토픽당 파티션 3개, 문자열 `bookingId` 키, 타입 헤더 없는 기존 골든 JSON, 기존 DLT 규칙을 적용한다. 전환 전에는 core의 정산 리스너와 알림 리스너를 유지한다.
 - 테스트 경계와 선례: core가 게시한 계약 이벤트를 실제 Kafka 레코드에서 확인한다. `PaymentEventExternalizationTests`와 `KafkaRecoveryIntegrationTests`를 선례로 골든 본문·키·헤더를 검증하고, 브로커 중단 중 발생한 정산 이벤트가 미완료 레지스트리에 남았다가 복구 후 발행되는지 확인한다. 기존 직렬화·토픽 선언·Modulith 검사도 실행한다.

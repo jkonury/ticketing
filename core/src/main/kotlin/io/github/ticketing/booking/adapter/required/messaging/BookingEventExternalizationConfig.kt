@@ -1,6 +1,8 @@
 package io.github.ticketing.booking.adapter.required.messaging
 
 import io.github.ticketing.KafkaTopics
+import io.github.ticketing.booking.BookingCancelled
+import io.github.ticketing.booking.BookingConfirmed
 import io.github.ticketing.payment.PaymentRequested
 import io.github.ticketing.payment.RefundRequested
 import org.springframework.context.annotation.Bean
@@ -10,9 +12,7 @@ import org.springframework.modulith.events.EventExternalizationConfiguration
 import org.springframework.modulith.events.RoutingTarget
 
 /**
- * core가 발행하는 결제 요청 이벤트 2종만 Kafka로 외부화한다. 토픽은 이벤트별, 메시지 키는 `orderId`다(events.md "Kafka 외부화 대상 (M6)").
- * 결제 결과 3종(`PaymentSucceeded`·`PaymentFailed`·`PaymentRefunded`)은 payment 앱이 발행하므로 core는 외부화하지 않고 구독만 한다.
- * 외부화 설정 빈은 하나뿐이라 4단계에서 `BookingConfirmed`·`BookingCancelled`를 추가할 때도 이 구성에 더한다.
+ * core의 결제·환불 요청과 예매 확정·취소를 이벤트별 토픽으로 외부화한다.
  * `contract` 모듈은 Spring에 의존하지 않으므로 `@Externalized` 대신 여기서 라우팅한다.
  */
 @Configuration(proxyBeanMethods = false)
@@ -30,15 +30,19 @@ class BookingEventExternalizationConfig {
     private fun route(topics: KafkaTopics, event: Any): RoutingTarget = when (event) {
         is PaymentRequested -> to(topics.paymentRequested, event.orderId)
         is RefundRequested -> to(topics.refundRequested, event.orderId)
+        is BookingConfirmed -> to(topics.bookingConfirmed, event.bookingId)
+        is BookingCancelled -> to(topics.bookingCancelled, event.bookingId)
         else -> error("외부화 대상이 아닌 이벤트: ${event.javaClass.name}")
     }
 
-    private fun to(topic: String, orderId: Long): RoutingTarget = RoutingTarget.forTarget(topic).andKey(orderId.toString())
+    private fun to(topic: String, bookingId: Long): RoutingTarget = RoutingTarget.forTarget(topic).andKey(bookingId.toString())
 
     private companion object {
         val EXTERNALIZED: Set<Class<*>> = setOf(
             PaymentRequested::class.java,
             RefundRequested::class.java,
+            BookingConfirmed::class.java,
+            BookingCancelled::class.java,
         )
     }
 }
