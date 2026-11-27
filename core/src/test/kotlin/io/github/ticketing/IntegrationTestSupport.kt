@@ -17,7 +17,6 @@ import java.util.UUID
     classes = [TicketingApplication::class],
     properties = [
         "ticketing.jwt.secret=test-secret-test-secret-test-secret-0123",
-        "ticketing.settlement.chunk-size=1",
         "spring.batch.job.enabled=false",
         "springdoc.api-docs.enabled=true",
         // batch 프로필이 끄는 웹 환경을 되살려 MockMvc를 같은 컨텍스트에서 쓴다.

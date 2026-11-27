@@ -23,11 +23,12 @@ data class GatewayProperties(
     val coreUri: String = "http://localhost:18080",
     val realtimeUri: String = "http://localhost:18081",
     val paymentUri: String = "http://localhost:18085",
+    val settlementUri: String = "http://localhost:18086",
     val bookingBodyMaxBytes: Int = DEFAULT_BOOKING_BODY_MAX_BYTES,
 )
 
 private const val QUEUE_ROUTE_ORDER = -2
-private const val PAYMENT_ROUTE_ORDER = -1
+private const val SERVICE_ROUTE_ORDER = -1
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(GatewayProperties::class)
@@ -61,8 +62,11 @@ class GatewayRoutes {
                 path("/api/v1/queues/**").filters { filters -> filters.filter(requireMember).filter(rateLimitFilter) }
             }
             // 웹훅 차단은 RequestPathGuardFilter가 라우트 선택 전에 한다
-            route(id = "payment-api", order = PAYMENT_ROUTE_ORDER, uri = properties.paymentUri) {
+            route(id = "payment-api", order = SERVICE_ROUTE_ORDER, uri = properties.paymentUri) {
                 path("/api/v1/payments/**").filters { filters -> filters.filter(rateLimitFilter) }
+            }
+            route(id = "settlement-api", order = SERVICE_ROUTE_ORDER, uri = properties.settlementUri) {
+                path("/api/v1/settlements").filters { filters -> filters.filter(rateLimitFilter) }
             }
             route(id = "realtime-streams", order = -1, uri = properties.realtimeUri) {
                 path("/api/v1/streams/**").filters { filters -> filters.filter(sseTicketFilter) }

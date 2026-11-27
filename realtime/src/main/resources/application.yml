@@ -13,7 +13,7 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: 16379
+      port: ${TICKETING_REDIS_PORT:16379}
 
 management:
   endpoints:

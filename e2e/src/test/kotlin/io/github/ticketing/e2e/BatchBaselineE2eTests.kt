@@ -14,14 +14,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * M6 분리 전후 비교용 Batch 기준선. core-batch(정산·미결제 정리)와 payment-batch(결제 대사)를 별도 프로세스로 실행해 E2E로 만든 데이터의 결과를 고정한다.
+ * M6 분리 전후 비교용 Batch 기준선. 정산, 미결제 정리, 결제 대사를 각 앱의 배치로 실행한다.
  * 같은 DB에 이전 실행 데이터가 남으므로 이 테스트가 만든 회차·예매로만 검증한다.
  */
 class BatchBaselineE2eTests {
     private val client = E2eClient(System.getProperty("e2e.gatewayUrl", "http://localhost:18000"))
     private val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
 
-    private class Sales(val schedule: Schedule, val plain: Long, val discounted: Long, val refunded: Long)
+    private class Sales(val organizer: Member, val schedule: Schedule, val plain: Long, val discounted: Long, val refunded: Long)
 
     /** 정가 10000 좌석 3개: 일반 확정 1, 쿠폰(3000) 확정 1, 확정 후 환불 1. */
     private suspend fun createSales(): Sales {
@@ -49,26 +49,27 @@ class BatchBaselineE2eTests {
         client.cancelBooking(refundBuyer, refunded)
         client.poll { client.bookingDetail(refundBuyer, refunded)["status"].asString() == "CANCELLED" }
         client.poll { BatchSupport.paymentPsql("SELECT status FROM payment.payment WHERE order_id = $refunded") == listOf("REFUNDED") }
-        client.poll {
-            // 정산 복사본(이벤트 비동기 수신)이 판매 3건·환불 1건을 모두 받을 때까지 기다린다
-            BatchSupport.psql("SELECT count(*) FROM settlement.booking_sale WHERE schedule_id = ${schedule.id}") == listOf("3") &&
-                BatchSupport.psql("SELECT count(*) FROM settlement.booking_refund WHERE booking_id = $refunded") == listOf("1")
-        }
-        return Sales(schedule, plain, discounted, refunded)
+        return Sales(organizer, schedule, plain, discounted, refunded)
     }
 
     @Test
     fun `정산 Job은 정가 합과 환불과 할인 부담을 공연별로 집계한다`() = runTest {
         val sales = createSales()
-        val performanceId = BatchSupport.psql(
+        client.poll {
+            BatchSupport.settlementPsql("SELECT count(*) FROM settlement.booking_sale WHERE schedule_id = ${sales.schedule.id}") ==
+                listOf("3") &&
+                BatchSupport.settlementPsql("SELECT count(*) FROM settlement.booking_refund WHERE booking_id = ${sales.refunded}") ==
+                listOf("1")
+        }
+        val performanceId = BatchSupport.settlementPsql(
             "SELECT DISTINCT performance_id FROM settlement.booking_sale WHERE schedule_id = ${sales.schedule.id}",
         ).single()
 
-        val run = BatchSupport.runJob("dailySettlementJob", "targetDate=$today")
+        val run = BatchSupport.runJob("dailySettlementJob", "targetDate=$today", target = BatchTarget.SETTLEMENT)
 
         assertEquals(0, run.exitCode, run.log.path)
         assertEquals("COMPLETED", run.status, run.log.path)
-        val row = BatchSupport.psql(
+        val row = BatchSupport.settlementPsql(
             "SELECT sale_count, sale_amount, refund_count, refund_amount, net_amount, fee_rate, fee_amount, " +
                 "payout_amount, platform_discount_amount " +
                 "FROM settlement.daily_settlement WHERE settlement_date = '$today' AND performance_id = $performanceId",
@@ -82,6 +83,18 @@ class BatchBaselineE2eTests {
         assertMoney(2000, row[6])
         assertMoney(18000, row[7])
         assertMoney(DISCOUNT, row[8])
+
+        val path = "/api/v1/settlements?from=$today&to=$today"
+        val response = client.request("GET", path, sales.organizer)
+        assertEquals(200, response.status)
+        val view = response.body.values().single()
+        assertEquals(performanceId, view["performanceId"].asString())
+        assertEquals(today.toString(), view["settlementDate"].asString())
+        assertMoney(18000, view["payoutAmount"].asString())
+
+        val otherResponse = client.request("GET", path, client.signUp("ORGANIZER"))
+        assertEquals(200, otherResponse.status)
+        assertTrue(otherResponse.body.isArray && otherResponse.body.isEmpty)
     }
 
     @Test

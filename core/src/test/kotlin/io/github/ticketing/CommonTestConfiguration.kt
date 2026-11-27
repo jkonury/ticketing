@@ -3,9 +3,6 @@ package io.github.ticketing
 import io.github.ticketing.booking.application.port.provided.ExpireBookingUseCase
 import io.github.ticketing.booking.application.port.provided.ExpireResult
 import io.github.ticketing.booking.application.service.ExpireBookingService
-import io.github.ticketing.settlement.adapter.required.jooq.DailySettlementJooqAdapter
-import io.github.ticketing.settlement.application.port.required.DailySettlementCommandPort
-import io.github.ticketing.settlement.domain.DailySettlement
 import io.github.ticketing.support.KafkaPaymentStub
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.boot.test.context.TestConfiguration
@@ -40,33 +37,23 @@ class CommonTestConfiguration {
     fun eventCollector() = EventCollector()
 
     @Bean
-    fun sharedTestBeansResetter(
-        clock: MutableClock,
-        paymentStub: KafkaPaymentStub,
-        expireUseCase: FailingExpireBookingUseCase,
-        settlementWriter: FailingDailySettlementWriter,
-    ) = SharedTestBeansResetter(clock, paymentStub, expireUseCase, settlementWriter)
+    fun sharedTestBeansResetter(clock: MutableClock, paymentStub: KafkaPaymentStub, expireUseCase: FailingExpireBookingUseCase) =
+        SharedTestBeansResetter(clock, paymentStub, expireUseCase)
 
     @Bean
     @Primary
     fun failingExpireBookingUseCase(delegate: ExpireBookingService) = FailingExpireBookingUseCase(delegate)
-
-    @Bean
-    @Primary
-    fun failingDailySettlementWriter(adapter: DailySettlementJooqAdapter) = FailingDailySettlementWriter(adapter)
 }
 
 class SharedTestBeansResetter(
     private val clock: MutableClock,
     private val paymentStub: KafkaPaymentStub,
     private val expireUseCase: FailingExpireBookingUseCase,
-    private val settlementWriter: FailingDailySettlementWriter,
 ) {
     fun reset() {
         clock.reset()
         paymentStub.reset()
         expireUseCase.reset()
-        settlementWriter.reset()
     }
 }
 
@@ -127,22 +114,5 @@ class FailingExpireBookingUseCase(private val delegate: ExpireBookingService) : 
             throw OptimisticLockingFailureException("동시 수정")
         }
         return delegate.expireIfDue(bookingId)
-    }
-}
-
-class FailingDailySettlementWriter(private val delegate: DailySettlementJooqAdapter) : DailySettlementCommandPort {
-    val failNext = AtomicBoolean(false)
-    var failingPerformance = 0L
-
-    fun reset() {
-        failNext.set(false)
-        failingPerformance = 0L
-    }
-
-    override fun upsertAll(settlements: List<DailySettlement>) {
-        if (settlements.any { it.performanceId == failingPerformance } && failNext.compareAndSet(true, false)) {
-            error("의도된 두 번째 청크 실패")
-        }
-        delegate.upsertAll(settlements)
     }
 }

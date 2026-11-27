@@ -20,14 +20,14 @@ spring:
       # @ApplicationModuleListener(비동기)로 넘어간 처리도 같은 trace에 이어 붙인다
       propagate-context: true
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:15432/${TICKETING_PAYMENT_POSTGRES_DB:payment_db}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${TICKETING_POSTGRES_PORT:15432}/${TICKETING_PAYMENT_POSTGRES_DB:payment_db}
     username: ${TICKETING_PAYMENT_POSTGRES_USER:payment}
     password: ${TICKETING_PAYMENT_POSTGRES_PASSWORD}
     hikari:
       # 계정과 payment 스키마의 이름이 같으므로 이벤트 발행 레지스트리의 public 스키마를 명시한다.
       schema: public
   kafka:
-    bootstrap-servers: ${KAFKA_HOST:localhost}:19092
+    bootstrap-servers: ${KAFKA_HOST:localhost}:${TICKETING_KAFKA_PORT:19092}
     producer:
       # 본문은 JSON 바이트 배열이다(KafkaMessageConfig). DLT도 원본 바이트를 그대로 보존한다
       value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
@@ -100,7 +100,7 @@ ticketing:
     secret: ${TICKETING_JWT_SECRET}
   payment:
     fake-pg:
-      base-url: http://localhost:18090
+      base-url: ${FAKE_PG_BASE_URL:http://localhost:18090}
       connect-timeout: 3s
       read-timeout: 3s
       webhook-secret: ${FAKE_PG_WEBHOOK_SECRET}

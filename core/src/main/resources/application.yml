@@ -20,15 +20,15 @@ spring:
       # @ApplicationModuleListener(비동기)로 넘어간 처리도 같은 trace에 이어 붙인다
       propagate-context: true
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:15432/${TICKETING_POSTGRES_DB:ticketing}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${TICKETING_POSTGRES_PORT:15432}/${TICKETING_POSTGRES_DB:ticketing}
     username: ${TICKETING_POSTGRES_USER:ticketing}
     password: ${TICKETING_POSTGRES_PASSWORD}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: 16379
+      port: ${TICKETING_REDIS_PORT:16379}
   kafka:
-    bootstrap-servers: ${KAFKA_HOST:localhost}:19092
+    bootstrap-servers: ${KAFKA_HOST:localhost}:${TICKETING_KAFKA_PORT:19092}
     producer:
       # 본문은 JSON 바이트 배열이다(KafkaMessageConfig). DLT도 원본 바이트를 그대로 보존한다
       value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer

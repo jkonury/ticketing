@@ -178,19 +178,6 @@ export type CursorPageIssuedCouponView = {
   nextCursor?: number | null;
 };
 
-export type DailySettlementResponse = {
-  feeAmount: number;
-  feeRate: number;
-  netAmount: number;
-  payoutAmount: number;
-  performanceId: number;
-  refundAmount: number;
-  refundCount: number;
-  saleAmount: number;
-  saleCount: number;
-  settlementDate: string;
-};
-
 export type GradePrice = {
   grade: string;
   price: number;
@@ -1070,25 +1057,6 @@ export type SeatsResponses = {
 };
 
 export type SeatsResponse = SeatsResponses[keyof SeatsResponses];
-
-export type FindData = {
-  body?: never;
-  path?: never;
-  query?: {
-    from?: string;
-    to?: string;
-  };
-  url: '/api/v1/settlements';
-};
-
-export type FindResponses = {
-  /**
-   * OK
-   */
-  200: Array<DailySettlementResponse>;
-};
-
-export type FindResponse = FindResponses[keyof FindResponses];
 
 export type IssueData = {
   body?: never;

@@ -15,13 +15,13 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:15432/${TICKETING_SETTLEMENT_POSTGRES_DB:settlement_db}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${TICKETING_POSTGRES_PORT:15432}/${TICKETING_SETTLEMENT_POSTGRES_DB:settlement_db}
     username: ${TICKETING_SETTLEMENT_POSTGRES_USER:settlement}
     password: ${TICKETING_SETTLEMENT_POSTGRES_PASSWORD}
     hikari:
       schema: public
   kafka:
-    bootstrap-servers: ${KAFKA_HOST:localhost}:19092
+    bootstrap-servers: ${KAFKA_HOST:localhost}:${TICKETING_KAFKA_PORT:19092}
     producer:
       value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
     consumer:
