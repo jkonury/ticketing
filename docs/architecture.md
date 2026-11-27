@@ -114,6 +114,8 @@ payment 앱 ──▶ 가짜 PG 서버 (결제 요청) / 가짜 PG ──▶ pay
 
 `payment`는 M6 3단계에서 core에서 분리됐다([ADR 0040](./adr/0040-payment-separate-database-same-instance.md), [M6 계획](./plans/m6-msa.md)). Gateway는 `/api/v1/payments/**`를 payment 앱으로 보내고, `/api/v1/payments/webhooks` 하위 경로는 어떤 인증 상태에서도 404로 막는다. 웹훅 서명 검증과 `event_id` 멱등은 payment 앱이 맡는다. 결제 계약 이벤트 5종은 Kafka로만 오간다. 결제 DB 데이터 이전 절차는 [runbook](./runbook.md)을 따른다.
 
+M6 4단계에서 정산을 분리할 때는 점검 창에 판매·환불 사본과 일별 정산 결과를 같은 PostgreSQL 인스턴스의 `settlement_db`로 옮긴다. 기존 정산 배치 실행 이력은 core DB에 보관하고, 전환 이후 실행 이력은 `settlement_db`에 저장한다. [ADR 0051](./adr/0051-settlement-database-cutover.md)
+
 ## 4. 코어 모듈 (Modulith)
 
 Spring Modulith는 메인 클래스 패키지의 직계 하위 패키지를 모듈로 인식한다. 따라서 `io.github.ticketing.<모듈명>` 구조가 곧 모듈 경계다.

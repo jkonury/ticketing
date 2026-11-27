@@ -64,3 +64,4 @@
 | [0048](0048-ai-dev-workflow-pipeline.md) | Claude Code·Codex 공용 반자율 개발 파이프라인 | 합의 |
 | [0049](0049-ui-redesign-direction.md) | web UI 개편 방향과 디자인 시스템 구성 | 합의 |
 | [0050](0050-poster-storage-minio-presigned.md) | 공연 포스터 저장소와 presigned URL 업로드 | 합의 |
+| [0051](0051-settlement-database-cutover.md) | 정산 전용 DB의 점검 창 전환과 기존 배치 실행 이력 보존 | 합의 |
