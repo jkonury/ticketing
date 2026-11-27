@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Page, PageHeader } from '@/components/layout/page';
 import { formatSeoul } from '@/lib/datetime';
 import {
@@ -28,14 +28,26 @@ export function BookingFlow({
   const [booking, setBooking] = useState<Booking | null>(null);
   const [done, setDone] = useState(false);
   const [queueVersion, setQueueVersion] = useState(0);
-  useEffect(
-    () => () => {
-      void call(`/api/queues/${schedule.id}/entries/me`, 'DELETE').catch(
-        () => {},
-      );
-    },
-    [schedule.id],
-  );
+  const pendingLeave = useRef<{
+    scheduleId: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const scheduleId = schedule.id;
+  useEffect(() => {
+    // 개발 모드에서 같은 회차의 효과가 즉시 다시 실행되면 이탈을 취소한다.
+    if (pendingLeave.current?.scheduleId === scheduleId) {
+      clearTimeout(pendingLeave.current.timer);
+      pendingLeave.current = null;
+    }
+    return () => {
+      const timer = setTimeout(() => {
+        void call(`/api/queues/${scheduleId}/entries/me`, 'DELETE').catch(
+          () => {},
+        );
+      }, 0);
+      pendingLeave.current = { scheduleId, timer };
+    };
+  }, [scheduleId]);
   const reset = () => {
     setAdmission(null);
     setBooking(null);

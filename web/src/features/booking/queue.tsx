@@ -96,9 +96,32 @@ export function Queue({
     const timer = setTimeout(() => setShowQueue(true), 2000);
     return () => clearTimeout(timer);
   }, [waiting]);
+  function showRemoved() {
+    stream.close();
+    setWaiting(false);
+    setShowQueue(false);
+    setRemoved(true);
+  }
   const stream = useEventStream({
     request: { kind: 'queue', scheduleId },
     enabled: waiting,
+    async beforeReconnect(signal) {
+      try {
+        const data = await call(`/api/queues/${scheduleId}/entries/me`, 'GET');
+        if (signal.aborted) return;
+        const entry = queueSchema.parse(data);
+        if (entry.status === 'ADMITTED') {
+          const admission = admissionSchema.parse(entry);
+          stream.close();
+          onAdmitted(admission);
+        } else {
+          setPosition(entry.position ?? null);
+        }
+      } catch (failure) {
+        if (!signal.aborted && codeOf(failure) === 'QUEUE_ENTRY_NOT_FOUND')
+          showRemoved();
+      }
+    },
     handlers: {
       position(data) {
         const parsed = z.object({ position: z.number() }).safeParse(data);
@@ -111,12 +134,7 @@ export function Queue({
           onAdmitted(parsed.data);
         }
       },
-      removed() {
-        stream.close();
-        setWaiting(false);
-        setShowQueue(false);
-        setRemoved(true);
-      },
+      removed: showRemoved,
     },
   });
   const connected = stream.state === 'open';

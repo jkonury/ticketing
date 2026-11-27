@@ -11,6 +11,7 @@ type Options = {
   enabled?: boolean;
   freshSnapshot?: boolean;
   onDisconnect?: () => void;
+  beforeReconnect?: (signal: AbortSignal) => Promise<void>;
 };
 
 export function useEventStream({
@@ -19,6 +20,7 @@ export function useEventStream({
   enabled = true,
   freshSnapshot = false,
   onDisconnect,
+  beforeReconnect,
 }: Options) {
   const { kind, scheduleId } = request;
   const [state, setState] = useState<State>('connecting');
@@ -30,11 +32,13 @@ export function useEventStream({
   }, []);
   const handlersRef = useRef(handlers);
   const disconnectRef = useRef(onDisconnect);
+  const beforeReconnectRef = useRef(beforeReconnect);
   const closeRef = useRef<() => void>(() => {});
   useEffect(() => {
     handlersRef.current = handlers;
     disconnectRef.current = onDisconnect;
-  }, [handlers, onDisconnect]);
+    beforeReconnectRef.current = beforeReconnect;
+  }, [handlers, onDisconnect, beforeReconnect]);
   const close = useCallback(() => closeRef.current(), []);
 
   useEffect(() => {
@@ -67,6 +71,8 @@ export function useEventStream({
     };
     async function connect() {
       try {
+        if (failures > 0) await beforeReconnectRef.current?.(abort.signal);
+        if (stopped) return;
         const response = await fetch('/api/streams/tickets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

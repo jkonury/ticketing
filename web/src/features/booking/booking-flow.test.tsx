@@ -5,6 +5,7 @@ import {
   render,
   screen,
 } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingFlow } from './booking-flow';
 import { Payment } from './payment';
@@ -14,6 +15,8 @@ import { aheadOf, progressOf, Queue } from './queue';
 const stream = vi.hoisted(() => ({
   state: 'open',
   onDisconnect: () => {},
+  beforeReconnect: async (_signal: AbortSignal) => {},
+  close: vi.fn(),
   handlers: {} as Record<string, (data: unknown, id: string | null) => void>,
 }));
 vi.mock('next/navigation', () => {
@@ -25,16 +28,20 @@ vi.mock('@/features/stream/use-event-stream', () => ({
     request,
     handlers,
     onDisconnect,
+    beforeReconnect,
   }: {
     request: { kind: string };
     handlers: typeof stream.handlers;
     onDisconnect?: () => void;
+    beforeReconnect?: (signal: AbortSignal) => Promise<void>;
   }) => {
     if (request.kind === 'seats') {
       stream.handlers = handlers;
       stream.onDisconnect = onDisconnect ?? (() => {});
+    } else if (beforeReconnect) {
+      stream.beforeReconnect = beforeReconnect;
     }
-    return { state: stream.state, close: vi.fn(), restart: vi.fn() };
+    return { state: stream.state, close: stream.close, restart: vi.fn() };
   },
 }));
 const seats = Array.from({ length: 5 }, (_, index) => ({
@@ -56,6 +63,7 @@ function response(data: unknown, status = 200) {
 describe('예매 흐름', () => {
   beforeEach(() => {
     stream.state = 'open';
+    stream.close.mockClear();
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((path: string) =>
@@ -71,8 +79,9 @@ describe('예매 흐름', () => {
       ),
     );
   });
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -96,6 +105,21 @@ describe('예매 흐름', () => {
     expect(screen.queryByText('대기열')).not.toBeInTheDocument();
     await screen.findByText('좌석 선택');
     expect(screen.queryByText('대기열')).not.toBeInTheDocument();
+  });
+  it('Strict Mode에서 화면을 열 때는 대기열을 유지하고 실제로 떠날 때 이탈한다', async () => {
+    const { unmount } = render(
+      <StrictMode>
+        <BookingFlow schedule={schedule} seats={seats} />
+      </StrictMode>,
+    );
+    await screen.findByText('좌석 선택');
+    const leave = ['/api/queues/1/entries/me', { method: 'DELETE' }];
+    expect(fetch).not.toHaveBeenCalledWith(...leave);
+    unmount();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(fetch).toHaveBeenCalledWith(...leave);
   });
   it('좌석은 4개까지만 선택하고 선점된 좌석을 선택에서 뺀다', async () => {
     await openSeats();
@@ -327,6 +351,47 @@ describe('예매 흐름', () => {
     expect(
       screen.queryByText(/대기열 연결에 실패했어요/),
     ).not.toBeInTheDocument();
+  });
+  it('재연결 전에 대기열 항목이 사라지면 다시 줄 서기를 안내한다', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        response({ status: 'WAITING', position: 2 }) as Response,
+      )
+      .mockResolvedValueOnce(
+        response({ code: 'QUEUE_ENTRY_NOT_FOUND' }, 404) as Response,
+      );
+    stream.state = 'reconnecting';
+    render(<Queue scheduleId={1} onAdmitted={vi.fn()} />);
+    await screen.findByText(/대기열에 다시 연결하고 있어요/);
+    await act(() => stream.beforeReconnect(new AbortController().signal));
+    expect(fetch).toHaveBeenLastCalledWith('/api/queues/1/entries/me', {
+      method: 'GET',
+    });
+    expect(stream.close).toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: '다시 줄 서기' }),
+    ).toBeInTheDocument();
+  });
+
+  it('재연결 전에 이미 입장했다면 스트림을 닫고 좌석 선택으로 진행한다', async () => {
+    const admission = {
+      admissionToken: 'opaque',
+      expiresAt: '2099-01-01T00:00:00Z',
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        response({ status: 'WAITING', position: 2 }) as Response,
+      )
+      .mockResolvedValueOnce(
+        response({ status: 'ADMITTED', ...admission }) as Response,
+      );
+    stream.state = 'reconnecting';
+    const onAdmitted = vi.fn();
+    render(<Queue scheduleId={1} onAdmitted={onAdmitted} />);
+    await screen.findByText(/대기열에 다시 연결하고 있어요/);
+    await act(() => stream.beforeReconnect(new AbortController().signal));
+    expect(stream.close).toHaveBeenCalled();
+    expect(onAdmitted).toHaveBeenCalledWith(admission);
   });
   it('앞 인원과 진행 바 값을 계산한다', () => {
     expect(aheadOf(1)).toBe(0);
