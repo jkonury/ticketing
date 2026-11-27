@@ -1,0 +1,5 @@
+interface:
+  display_name: "Implement Plan"
+  short_description: "승인된 계획을 task 순서대로 구현하고 검증한 뒤 커밋"
+policy:
+  allow_implicit_invocation: false
