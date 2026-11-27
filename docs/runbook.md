@@ -94,7 +94,12 @@ Gateway의 Redis rate limiter가 응답을 429로 내린다. 부하 테스트 �
 
 ### 3.7 미완료 이벤트 발행이 쌓인다
 
-Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. payment 앱은 자기 DB(`payment_db`)에 별도 레지스트리를 두므로 결제 쪽 미완료 행은 거기서 본다(아래 확인 SQL의 접속 대상만 `payment_db`·전용 계정으로 바꾼다. 예: `scripts/loadtest/verify-compensation.sh`의 `psql_payment`). 리스너가 실패했거나 처리 중 프로세스가 죽으면 남는다. Kafka 외부화 전송 실패도 같은 테이블에 쌓인다. Kafka 소비 실패는 별도의 DLT에서 확인한다.
+Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `completion_date`가 비어 있는 행이 미완료 발행이다. 로컬 리스너 처리나 Kafka 외부화 전송이 실패했거나 처리 중 프로세스가 종료되면 이 테이블에 남는다. 이벤트를 발행한 앱의 DB에서 찾는다.
+
+| 발행 앱 | 조회 DB | 이벤트 예 |
+|---|---|---|
+| core | core DB (`TICKETING_POSTGRES_DB`) | `PaymentRequested`, `RefundRequested`, `BookingConfirmed`, `BookingCancelled`, 쿠폰 예약·보상 이벤트 |
+| payment | `payment_db` (`TICKETING_PAYMENT_POSTGRES_DB`) | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` |
 
 **증상·지표** (core만 수집한다. core-batch는 `ticketing.event-publication.metrics.enabled=false`로 중복 수집을 끈다)
 
@@ -111,30 +116,32 @@ Grafana `Ticketing Overview` 하단의 "미완료 이벤트 발행 건수", "최
 
 ```bash
 docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_POSTGRES_DB" -c \
-  "select listener_id, event_type, status, completion_attempts, publication_date, last_resubmission_date
+  "select id, listener_id, event_type, status, completion_attempts, publication_date, last_resubmission_date
      from public.event_publication where completion_date is null order by publication_date limit 20;"
 ```
 
-- `listener_id`로 어느 리스너가 실패했는지, `event_type`으로 어떤 이벤트인지 본다. 원인은 core 로그에서 해당 리스너의 예외를 찾는다.
+- payment DB를 확인할 때는 위 명령의 `-U`·`-d`에 `$TICKETING_PAYMENT_POSTGRES_USER`·`$TICKETING_PAYMENT_POSTGRES_DB`를 사용한다.
+- `listener_id`와 `event_type`을 확인하고 해당 발행 앱에서 예외 로그를 찾는다. 주문을 좁힐 때는 `serialized_event::jsonb ->> 'orderId'` 또는 `serialized_event::jsonb ->> 'bookingId'`를 주문 ID와 비교한다. 발행 `id`를 기록해 복구 후 같은 행을 조회한다.
 - `status`는 `PUBLISHED`, `PROCESSING`, `FAILED`, `RESUBMITTED`다(Modulith 2.x). 과거 행은 null일 수 있다.
 
 **재처리 절차** (별도 운영 API는 두지 않는다. 결정은 [m6-msa.md](./plans/m6-msa.md) P5)
 
 1. 원인을 먼저 고친다(리스너 버그, 외부 시스템 장애, 설정). 원인이 남은 채 재처리하면 같은 실패가 반복된다.
-2. core를 재시작한다. core는 `republish-outstanding-events-on-restart: true`라서 기동 시 미완료 발행을 다시 처리한다.
-3. 건수가 줄고 최고령이 0으로 돌아오는지 지표로 확인한다. 줄지 않으면 같은 SQL로 `completion_attempts`와 로그를 다시 본다.
+2. Kafka 장애였다면 기존 데이터와 주소로 복구하고 브로커 요청이 성공하는지 확인한다. 미완료 행을 가진 발행 앱(core 또는 payment)을 재기동한다. 두 앱은 `republish-outstanding-events-on-restart: true`로 기동 시 미완료 발행을 다시 처리한다. 다중 인스턴스에서는 다른 인스턴스의 처리 상황도 확인한다.
+3. 같은 발행 `id`에 `completion_date`가 기록됐는지 확인한다. Kafka 외부화는 소비 그룹의 커밋 오프셋이 해당 레코드를 지났는지도 확인한다. 미완료가 남으면 `completion_attempts`와 해당 앱 로그를 다시 본다. core는 미완료 건수와 최고령 지표도 확인한다.
 
 **쿠폰 예약 응답 지연**
 
 결제 요청 전이고 만료되지 않은 예매는 결제 화면에서 `쿠폰 해제`를 누른 뒤 정가로 결제할 수 있다. 해제가 성공하면 예매 상세에서 쿠폰이 비고 결제 예정 금액이 정가로 돌아온다. 운영자는 미완료 발행과 core 로그에서 `CouponReservationRequested`, `CouponReserved`, `CouponRejected`, `CouponReleaseRequested`를 확인한다. 같은 주문과 쿠폰의 `reservationAttemptId`로 관련 발행을 대조한다. 제거 직후 결과 리스너가 예매의 낙관적 락 충돌로 실패했다면 미완료로 남고 위 재처리 절차가 적용된다. 제거한 시도의 늦은 성공은 같은 시도의 해제를 요청하고, 늦은 거절은 예매를 바꾸지 않는다.
 
-**Kafka 장애와 복구**
+**예매·결제 상태 확인**
 
-Kafka가 내려간 상태에서도 core는 기동할 수 있다. 토픽 생성 실패 경고와 연결 오류를 로그에서 확인한다. 이때 결제 이벤트는 전달되지 않으며 외부화 실패 행이 위 레지스트리에 남는다. Kafka와 PostgreSQL을 기존 데이터 및 주소로 복구하고 브로커가 정상인지 확인한 다음 core를 재시작한다. 재기동 자동 재발행은 브로커 복구 자체만으로 실행되지 않는다. 위 SQL에서 해당 행의 완료 여부를 확인하고 결제·예매의 실제 상태도 확인한다. 다중 인스턴스에서는 다른 인스턴스가 처리 중인 발행과 겹칠 수 있으므로 재기동 전에 처리 상황을 확인한다.
+- 브로커 장애 때 PG 승인이 처리되면 payment는 `SUCCEEDED`를 커밋했더라도 `PaymentSucceeded` 외부화가 payment DB에 미완료로 남을 수 있다. 이때 core는 `PENDING`, 적용 쿠폰은 `RESERVED`일 수 있다. 브로커 복구 후 payment를 재기동한다. 이미 만료 시각이 지난 주문이면 예매 `EXPIRED`, payment와 PG `REFUNDED`, 쿠폰 `ISSUED`, 판매 좌석 기록 없음과 좌석 재선점을 확인한다.
+- payment 중단 중 확정 예매를 취소하면 core는 `CANCELLED` 전이와 판매 좌석 삭제를 커밋한다. 커밋 후 같은 좌석을 다시 선점할 수 있고 `RefundRequested`는 Kafka에 적재된다. core의 발행 행이 완료됐고 PG가 `APPROVED`라면 payment를 같은 DB와 브로커, 기존 `ticketing-payment` 그룹으로 기동한다. 해당 레코드까지 소비가 진행된 뒤 payment와 PG가 같은 거래를 `REFUNDED`로 표시하고 쿠폰이 `USED`이며 정산 환불 사본이 생겼는지 확인한다.
 
 **DLT 확인과 재처리**
 
-소비자 처리 예외는 기본적으로 최초 1회와 지수 백오프 재시도 3회(1초부터 시작, 최대 간격 10초) 후 원본 토픽 이름에 `.dlt`를 붙인 토픽으로 보낸다. 역직렬화 오류 등 재시도 불가능한 예외는 바로 DLT로 간다. `ticketing_kafka_dead_letter_total`의 원본 토픽별 증가와 core 예외 로그를 함께 확인한다. 카운터는 DLT 전송 시도 시 증가하므로 적재 성공의 증거는 아니다.
+소비자 처리 예외는 기본적으로 최초 1회와 지수 백오프 재시도 3회(1초부터 시작, 최대 간격 10초) 후 원본 토픽 이름에 `.dlt`를 붙인 토픽으로 보낸다. 역직렬화 오류 등 재시도 불가능한 예외는 바로 DLT로 간다. 발행은 완료됐는데 소비 그룹이 레코드를 지났고 주문이 여전히 `PENDING`이거나 환불을 기다린다면 원본 토픽의 DLT에서 주문 키를 찾는다. `ticketing_kafka_dead_letter_total`의 원본 토픽별 증가에는 전송 시도가 포함되므로 소비 앱 로그와 실제 DLT 레코드를 함께 확인한다. 장애 전 파티션별 끝 오프셋이 있다면 그 지점부터 새 끝 오프셋 직전까지 확인한다.
 
 1. 브로커의 DLT를 별도 소비자 그룹으로 읽고 토픽·파티션·오프셋, 원본 키와 JSON 본문, 예외 헤더를 보관한다. 기존 소비자 그룹의 오프셋은 변경하지 않는다. 예를 들어 단일 토픽은 다음 명령으로 확인한다(출력에 결제 정보가 있으므로 접근을 제한한다).
 
@@ -240,6 +247,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
   ./scripts/e2e/run.sh
   ./scripts/e2e/run.sh --web
   ```
+- Saga 장애 재현은 위와 같이 앱과 인프라가 격리된 Linux 작업 디렉터리에서 `./scripts/e2e/run.sh --saga-recovery`를 실행한다. 호출 환경에 기본 프로젝트와 다른 `COMPOSE_PROJECT_NAME`을 명시하고 고유 브리지와 별도 포트·볼륨을 사용한다. `--web`과 함께 지정하면 종료 코드 2를 반환한다. `--tests '*SagaRecoveryE2eTests'`로 장애 시나리오만 실행할 수 있다. 실행기는 `--keep`에서도 일시 중지한 Kafka를 재개하며, payment의 재기동 로그는 `build/e2e/logs/saga-*/payment-restart-*.log`에 남긴다.
 - Testcontainers 컨테이너가 남아 있으면 `docker ps`로 확인하고 Ryuk이 정리하지 못한 것만 지운다.
 
 ## 7. 변경 시 확인 사항
