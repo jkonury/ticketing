@@ -37,8 +37,11 @@ if ! (cd -- "$WORK_DIR") 2>/dev/null; then
 fi
 
 # 실행마다 다른 파일을 쓰고 다른 사용자가 읽을 수 없게 만든다.
+ROOT="$(cd -- "$(dirname -- "$0")/../../.." && pwd -P)" || exit 2
+LOG_DIR="$ROOT/build/agent/logs"
+mkdir -p -- "$LOG_DIR" || exit 2
 # macOS mktemp는 템플릿이 X로 끝나야 치환하므로 확장자를 뒤에 붙이지 않는다.
-LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/ticketing-command.XXXXXXXX") || exit 2
+LOG_FILE=$(mktemp "$LOG_DIR/ticketing-command.XXXXXXXX") || exit 2
 
 (cd -- "$WORK_DIR" && "$@") > "$LOG_FILE" 2>&1
 COMMAND_EXIT=$?

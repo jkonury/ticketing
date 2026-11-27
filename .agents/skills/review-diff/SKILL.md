@@ -51,14 +51,17 @@ disable-model-invocation: true
 | Claude Code | `codex` |
 | Codex | `claude` |
 
-1. 두 축의 프롬프트를 각각 파일로 쓴다. `mktemp -d`로 만든 저장소 밖 임시 디렉터리에 `standards.md`, `spec.md`를 둔다. 리뷰어는 이 대화를 보지 못하므로 아래 입력을 프롬프트에 모두 넣는다. 비밀 값(`.env` 등)은 넣지 않는다.
+1. `mktemp -d`로 만든 임시 디렉터리에 두 축의 프롬프트 `standards.md`, `spec.md`를 둔다. 리뷰어는 이 대화를 보지 못하므로 아래 입력을 프롬프트에 모두 넣는다. 비밀 값(`.env` 등)은 넣지 않는다.
 2. 저장소 루트에서 축마다 한 번씩 호출한다. 두 호출은 서로 독립이므로 동시에 실행해도 된다.
 
+   - 저장소 루트에서 `mkdir -p build/review-diff`를 실행한 뒤 `mktemp -d "$PWD/build/review-diff/run.XXXXXXXX"`로 두 축의 결과를 보관할 디렉터리를 만든다.
+
    ```bash
-   SKILL_DIR/scripts/run-reviewer.sh <codex|claude> <프롬프트 파일> <결과 파일> <기준SHA...검토SHA>
+   SKILL_DIR/scripts/run-reviewer.sh <codex|claude> <프롬프트 파일> <실행 디렉터리의 결과 파일> <기준SHA...검토SHA>
    ```
 
    - 리뷰어는 읽기 전용이다. Codex는 `read-only` 샌드박스에서 Git으로 diff를 읽는다. Claude는 스크립트가 고정 범위에서 만든 diff 파일과 저장소 문맥을 읽기·검색 도구로 확인한다. 호출 방식을 바꾸려면 스크립트를 고친다.
+   - 실행 디렉터리에 `standards.out`과 `spec.out`을 리뷰 전문으로 보관한다. CLI 오류 로그는 같은 디렉터리의 `.out.log` 파일에 남는다. 최종 보고에서 리뷰 전문 경로를 연결한다.
    - 호출이 실패하면(CLI 없음, 인증 만료, 시간 초과) 결과 파일의 `.log`를 확인해 사용자에게 알리고 멈춘다. 같은 모델로 대신 리뷰하는 것은 독립성이 사라지므로 사용자가 동의할 때만 한다. 이때 보고에 "교차 모델이 아님"이라고 적는다.
    - 호출은 축당 1회다. 재호출은 사용자가 승인한 경우에만 한다.
 3. 두 축을 합치거나 서로의 결과를 한 프롬프트에 넣지 않는다. 한 축의 결론이 다른 축을 물들이지 않게 한다.

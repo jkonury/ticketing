@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 다른 모델의 에이전트 CLI를 읽기 전용 비대화 모드로 한 번 호출해 리뷰 결과를 파일로 받는다.
 # 사용법: run-reviewer.sh <claude|codex> <프롬프트 파일> <결과 파일> <기준SHA...검토SHA> [제한 시간(초, 기본 900)]
-# 대상 저장소 루트에서 실행한다. 프롬프트는 stdin으로 넘기므로 길이 제한이 없다.
+# 저장소 루트에서 실행하고 build/review-diff의 실행 디렉터리에 결과를 보관한다.
 # 종료 코드: 0 성공, 1 호출 실패·시간 초과·빈 결과, 2 사용법 오류·CLI 없음
 set -uo pipefail
 
@@ -15,8 +15,20 @@ fi
 command -v "$reviewer" >/dev/null 2>&1 || { echo "CLI를 찾을 수 없음: $reviewer" >&2; exit 2; }
 command -v timeout >/dev/null 2>&1 || { echo "timeout 명령이 필요하다" >&2; exit 2; }
 
+review_root="$(pwd -P)/build/review-diff"
+out_dir=$(cd -- "$(dirname -- "$out_file")" && pwd -P) || exit 2
+if [[ "$out_dir" != "$review_root/"* ]]; then
+  echo "결과 파일은 $review_root 아래 실행 디렉터리에 둔다." >&2
+  exit 2
+fi
+out_file="$out_dir/$(basename -- "$out_file")"
 log_file="${out_file}.log"
-: >"$out_file"
+if [[ -L "$out_file" || -L "$log_file" ]]; then
+  echo "결과 파일과 오류 로그에는 심볼릭 링크를 사용할 수 없다." >&2
+  exit 2
+fi
+umask 077
+: > "$out_file" || exit 2
 
 case "$reviewer" in
   claude)
