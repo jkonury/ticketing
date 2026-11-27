@@ -34,6 +34,25 @@ class ApprovalHoldTest(mockMvcTester: MockMvcTester, clock: MutableClock) : Fake
     }
 
     @Test
+    fun `보류 거래를 실패 처리하면 실패 웹훅을 한 번만 보낸다`() {
+        val holdPath = "/v1/test/approval-holds/order-fail-held"
+        assertThat(mockMvcTester.post().uri(holdPath).exchange()).hasStatus(HttpStatus.CREATED)
+        val transactionId = transactionIdOf(requestPayment("order-fail-held", scenario = "SUCCESS"))
+        assertThat(mockMvcTester.get().uri(holdPath).exchange())
+            .hasStatusOk().bodyJson().extractingPath("$.state").isEqualTo("HELD")
+
+        assertThat(mockMvcTester.post().uri("$holdPath/fail").exchange()).hasStatus(HttpStatus.ACCEPTED)
+        assertThat(mockMvcTester.post().uri("$holdPath/fail").exchange()).hasStatus(HttpStatus.CONFLICT)
+        assertThat(mockMvcTester.post().uri("$holdPath/release").exchange()).hasStatus(HttpStatus.CONFLICT)
+
+        val webhook = awaitWebhooks("order-fail-held", 1).single()
+        assertThat(webhook.type).isEqualTo("PAYMENT_FAILED")
+        assertThat(webhook.json.get("transactionId").asString()).isEqualTo(transactionId)
+        assertThat(statusOf(transactionId)).isEqualTo("FAILED")
+        assertNoMoreWebhooks("order-fail-held", 1)
+    }
+
+    @Test
     fun `보류를 등록하지 않은 주문은 그대로 승인된다`() {
         requestPayment("order-nohold", scenario = "SUCCESS")
 

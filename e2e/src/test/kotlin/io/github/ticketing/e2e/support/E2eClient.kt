@@ -204,6 +204,12 @@ class E2eClient(private val gatewayUrl: String) {
         poll { bookingDetail(member, bookingId)["status"].asString() == "CONFIRMED" }
     }
 
+    suspend fun paymentFor(member: Member, bookingId: Long): JsonNode? {
+        val result = request("GET", "/api/v1/payments/me?bookingIds=$bookingId", member)
+        check(result.status == 200) { "결제 조회 실패: ${result.status}" }
+        return result.body.singleOrNull()
+    }
+
     suspend fun sseTicket(member: Member): String {
         val result = request("POST", "/api/v1/sse-tickets", member)
         check(result.status == 201) { "SSE 티켓 발급 실패: ${result.status}" }

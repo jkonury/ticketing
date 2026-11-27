@@ -14,6 +14,7 @@ class ApprovalHoldDisabledTest(mockMvcTester: MockMvcTester, clock: MutableClock
         assertThat(mockMvcTester.post().uri("/v1/test/approval-holds/order-closed").exchange()).hasStatus(HttpStatus.NOT_FOUND)
         assertThat(mockMvcTester.get().uri("/v1/test/approval-holds/order-closed").exchange()).hasStatus(HttpStatus.NOT_FOUND)
         assertThat(mockMvcTester.post().uri("/v1/test/approval-holds/order-closed/release").exchange()).hasStatus(HttpStatus.NOT_FOUND)
+        assertThat(mockMvcTester.post().uri("/v1/test/approval-holds/order-closed/fail").exchange()).hasStatus(HttpStatus.NOT_FOUND)
     }
 
     @Test

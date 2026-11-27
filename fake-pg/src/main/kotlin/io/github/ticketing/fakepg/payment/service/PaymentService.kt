@@ -59,6 +59,13 @@ class PaymentService(
         return true
     }
 
+    fun failHeldApproval(orderId: String): Boolean {
+        val tx = holds.ifAvailable?.release(orderId) ?: return false
+        log.info("보류된 거래를 실패 처리한다 transactionId={} orderId={}", tx.transactionId, orderId)
+        scheduleFailure(tx, Duration.ZERO)
+        return true
+    }
+
     fun findTransactions(date: LocalDate): List<Transaction> = store.findByRequestedDate(date)
 
     // 거래 상태는 웹훅이 나가는 시점에 확정한다. 지연 시나리오에서는 그동안 PENDING으로 남는다.
