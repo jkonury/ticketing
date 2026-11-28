@@ -63,7 +63,7 @@ class GatewayRoutes {
             }
             // 웹훅 차단은 RequestPathGuardFilter가 라우트 선택 전에 한다
             route(id = "payment-api", order = SERVICE_ROUTE_ORDER, uri = properties.paymentUri) {
-                path("/api/v1/payments/**").filters { filters -> filters.filter(rateLimitFilter) }
+                path("/api/v1/payments/**", "/api/v1/admin/payments").filters { filters -> filters.filter(rateLimitFilter) }
             }
             route(id = "settlement-api", order = SERVICE_ROUTE_ORDER, uri = properties.settlementUri) {
                 path("/api/v1/settlements").filters { filters -> filters.filter(rateLimitFilter) }
