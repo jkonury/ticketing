@@ -34,3 +34,8 @@ class PosterStorageUnavailableException(cause: Throwable) :
         initCause(cause)
     }
 }
+
+class PerformanceSuspendedException : DomainException("PERFORMANCE_SUSPENDED", HttpStatus.CONFLICT, "판매가 중지된 공연입니다.")
+
+class PerformanceSuspensionUnchangedException :
+    DomainException("PERFORMANCE_SUSPENSION_UNCHANGED", HttpStatus.CONFLICT, "공연의 판매 상태가 이미 요청한 상태입니다.")

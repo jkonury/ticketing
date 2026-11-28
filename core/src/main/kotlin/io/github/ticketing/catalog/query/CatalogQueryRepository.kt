@@ -1,6 +1,8 @@
 package io.github.ticketing.catalog.query
 
 import io.github.ticketing.catalog.domain.PerformanceGenre
+import io.github.ticketing.catalog.domain.PerformanceStatus
+import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
@@ -14,11 +16,20 @@ import java.math.BigDecimal
 @Repository
 class CatalogQueryRepository(private val dsl: DSLContext) {
 
+    private val activePerformance get() = PERFORMANCE.STATUS.eq(PerformanceStatus.ACTIVE.name)
+
+    fun isPublicPerformance(id: Long): Boolean = dsl.fetchExists(PERFORMANCE, PERFORMANCE.ID.eq(id).and(activePerformance))
+
+    fun isPublicSchedule(id: Long): Boolean = dsl.fetchExists(
+        dsl.selectOne().from(SCHEDULE).join(PERFORMANCE).on(PERFORMANCE.ID.eq(SCHEDULE.PERFORMANCE_ID))
+            .where(SCHEDULE.ID.eq(id), activePerformance),
+    )
+
     fun findSchedule(id: Long): ScheduleDetail? = dsl
         .select(SCHEDULE.ID, PERFORMANCE.ID, PERFORMANCE.TITLE, SCHEDULE.STARTS_AT)
         .from(SCHEDULE)
         .join(PERFORMANCE).on(PERFORMANCE.ID.eq(SCHEDULE.PERFORMANCE_ID))
-        .where(SCHEDULE.ID.eq(id))
+        .where(SCHEDULE.ID.eq(id), activePerformance)
         .fetchOne {
             ScheduleDetail(
                 requireNotNull(it[SCHEDULE.ID]),
@@ -37,7 +48,8 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
         val rows = dsl.select(PERFORMANCE.ID, PERFORMANCE.TITLE, VENUE.NAME, firstStartsAt, PERFORMANCE.GENRE, PERFORMANCE.POSTER_KEY)
             .from(PERFORMANCE)
             .join(VENUE).on(VENUE.ID.eq(PERFORMANCE.VENUE_ID))
-            .where(if (cursor != null) PERFORMANCE.ID.lt(cursor) else DSL.noCondition())
+            .where(activePerformance)
+            .and(if (cursor != null) PERFORMANCE.ID.lt(cursor) else DSL.noCondition())
             .and(if (genre != null) PERFORMANCE.GENRE.eq(genre.name) else DSL.noCondition())
             .orderBy(PERFORMANCE.ID.desc())
             .limit(size + 1)
@@ -56,19 +68,25 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
         return PerformancePage(items, if (rows.size > size) items.last().id else null)
     }
 
-    fun findPerformanceDetail(id: Long): PerformanceDetail? {
+    fun findPerformanceDetail(id: Long): PerformanceDetail? = findPerformance(id, activePerformance)?.performance
+
+    fun findOwnedPerformance(id: Long, organizerId: Long): OwnedPerformanceDetail? =
+        findPerformance(id, PERFORMANCE.ORGANIZER_ID.eq(organizerId))
+
+    private fun findPerformance(id: Long, visibility: Condition): OwnedPerformanceDetail? {
         val head = dsl.select(
             PERFORMANCE.ID,
             PERFORMANCE.TITLE,
             PERFORMANCE.DESCRIPTION,
             PERFORMANCE.VENUE_ID,
+            PERFORMANCE.STATUS,
             VENUE.NAME,
             PERFORMANCE.GENRE,
             PERFORMANCE.POSTER_KEY,
         )
             .from(PERFORMANCE)
             .join(VENUE).on(VENUE.ID.eq(PERFORMANCE.VENUE_ID))
-            .where(PERFORMANCE.ID.eq(id))
+            .where(PERFORMANCE.ID.eq(id), visibility)
             .fetchOne() ?: return null
 
         val prices = dsl.select(PERFORMANCE_PRICE.GRADE, PERFORMANCE_PRICE.PRICE)
@@ -85,7 +103,7 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
             .orderBy(SCHEDULE.STARTS_AT.asc())
             .fetch { ScheduleSummary(requireNotNull(it[SCHEDULE.ID]), requireNotNull(it[SCHEDULE.STARTS_AT]).toInstant()) }
 
-        return PerformanceDetail(
+        val performance = PerformanceDetail(
             id = requireNotNull(head[PERFORMANCE.ID]),
             title = requireNotNull(head[PERFORMANCE.TITLE]),
             description = requireNotNull(head[PERFORMANCE.DESCRIPTION]),
@@ -96,12 +114,12 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
             genre = head[PERFORMANCE.GENRE]?.let(PerformanceGenre::valueOf),
             posterKey = head[PERFORMANCE.POSTER_KEY],
         )
+        return OwnedPerformanceDetail(performance, PerformanceStatus.valueOf(requireNotNull(head[PERFORMANCE.STATUS])))
     }
 
     /** 회차가 없으면 null. 좌석이 있어도 회차가 없는 경우와 구분하려고 회차를 먼저 확인한다. */
     fun findSeatLayout(scheduleId: Long): SeatLayout? {
-        val exists = dsl.fetchExists(SCHEDULE, SCHEDULE.ID.eq(scheduleId))
-        if (!exists) return null
+        if (!isPublicSchedule(scheduleId)) return null
 
         val seats = dsl.select(
             VENUE_SEAT.ID,
@@ -117,7 +135,7 @@ class CatalogQueryRepository(private val dsl: DSLContext) {
             .join(
                 PERFORMANCE_PRICE,
             ).on(PERFORMANCE_PRICE.PERFORMANCE_ID.eq(PERFORMANCE.ID).and(PERFORMANCE_PRICE.GRADE.eq(VENUE_SEAT.GRADE)))
-            .where(SCHEDULE.ID.eq(scheduleId))
+            .where(SCHEDULE.ID.eq(scheduleId), activePerformance)
             .orderBy(VENUE_SEAT.SECTION, VENUE_SEAT.ROW_LABEL, VENUE_SEAT.SEAT_NUMBER)
             .fetch {
                 SeatView(

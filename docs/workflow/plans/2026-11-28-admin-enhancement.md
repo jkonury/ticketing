@@ -62,14 +62,14 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T4. 공연 판매 중지·재개 (catalog)
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
-- 변경 범위와 제약: core Flyway에 `catalog.performance` 상태 컬럼(`ACTIVE`/`SUSPENDED`, 기본 `ACTIVE`)을 추가한다. 관리자 API로 중지(사유 필수)·재개와 공연 목록(상태·주최자 ID·제목 필터, 커서)을 제공한다. 중지된 공연은 공개 목록에서 제외하고 상세는 404로 응답한다. 주최자의 공연 수정·회차 추가는 거부하되 자기 공연 조회·판매 현황·정산은 유지한다. 공개 조회 캐시(`CatalogCacheConfig`)가 있으므로 상태 변경 시 무효화한다. `PerformanceSuspensionChanged` 이벤트를 catalog가 발행하고 audit가 멱등 기록한다. 같은 상태 재요청은 409다. 이벤트 외부화 여부는 T3와 같은 방식으로 확인한다.
+- 변경 범위와 제약: core Flyway에 `catalog.performance` 상태 컬럼(`ACTIVE`/`SUSPENDED`, 기본 `ACTIVE`)을 추가한다. 관리자 API로 중지(사유 필수)·재개와 공연 목록(상태·주최자 ID·제목 필터, 커서)을 제공한다. 중지된 공연은 공개 목록에서 제외하고 상세는 404로 응답한다. 주최자의 공연 수정·회차 추가는 거부하되 판매 현황과 정산은 유지한다. 주최자 전용 `GET /api/v1/organizer/performances/{id}`에서 판매 중지된 자기 공연 상세도 조회할 수 있게 한다. 공개 조회 캐시(`CatalogCacheConfig`)가 있으므로 상태 변경 시 무효화한다. `PerformanceSuspensionChanged` 이벤트를 catalog가 발행하고 audit가 멱등 기록한다. 같은 상태 재요청은 409다. 이벤트 외부화 여부는 T3와 같은 방식으로 확인한다.
 - 테스트 경계와 선례: 선례는 `CatalogQueryController`·`CatalogRegistrationController` 통합 테스트. 중지 후 목록 제외·상세 404, 주최자 수정·회차 추가 거부, 주최자 자기 공연 조회 유지, 재개 후 복구, 캐시 무효화(중지 직후 공개 조회에 반영), 감사 로그 기록을 확인한다.
 - AC:
 
   ```bash
-  ./scripts/agent/test/run-tests.sh :core:test --tests '*Catalog*' --tests '*AdminPerformance*' --tests '*Audit*'
+  ./scripts/agent/test/run-tests.sh :core:test --tests '*Catalog*' --tests '*AdminPerformance*' --tests '*Audit*' --tests '*ModularityTests*'
   ```
 
 ### T5. booking의 판매 중지 반영과 신규 예매 차단
