@@ -1,0 +1,8 @@
+# worktree 생성(wt switch --create) 직후 실행되는 프로젝트 hook. pre-start는 끝날 때까지 기다린다.
+# 1) 환경 파일 복사  2) web 의존성 설치: pnpm 전역 store에서 hardlink로 가져오므로 복사보다 빠르다.
+# Gradle 의존성·build cache는 ~/.gradle에서 공유되므로 별도 설치 단계가 없다.
+[[pre-start]]
+env = "wt step copy-ignored"
+
+[[pre-start]]
+web-install = "pnpm -C web install --frozen-lockfile"

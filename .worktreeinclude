@@ -1,0 +1,8 @@
+# worktree 생성 시 함께 복사할 gitignored 파일 목록 (gitignore 문법, wt step copy-ignored·Claude Code 공용).
+# 여기에 든 파일은 gitignore 대상이어야 복사된다. 비밀 값이 들어 있으므로 git에는 올리지 않는다.
+# 빌드 캐시·node_modules는 여기 넣지 않는다. Gradle(~/.gradle 캐시·build cache)과 pnpm(전역 store)이 worktree 사이에서 공유한다.
+
+.env
+web/.env
+web/.env.local
+.claude/settings.local.json
