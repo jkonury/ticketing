@@ -1,5 +1,5 @@
 ---
-status: approved
+status: done
 approved_at: 2026-11-28T20:21:06+09:00
 ---
 
