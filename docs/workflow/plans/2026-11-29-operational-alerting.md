@@ -88,7 +88,7 @@ approved_at: 2026-11-29T00:58:42+09:00
 
 ### T4. 알림 규칙, Alertmanager, 관측 설정 검사
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2, T3
 - 변경 범위와 제약:
   - `observability/prometheus/rules/`에 ADR 0055 결정 4의 알림 7종을 둔다. 대상은 `AppDown`, `HighErrorRate`, `EventPublicationStuck`, `KafkaConsumerLagHigh`, `KafkaDeadLetterIncreased`, `BatchJobFailed`, `HikariPoolExhausted`이고, 기준값은 인터뷰 Q8의 잠정값이다.

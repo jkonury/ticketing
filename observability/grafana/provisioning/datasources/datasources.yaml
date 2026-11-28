@@ -25,3 +25,11 @@ datasources:
         queries:
           - name: 요청 수
             query: sum(rate(http_server_requests_seconds_count{$$__tags}[1m]))
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

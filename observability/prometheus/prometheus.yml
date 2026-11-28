@@ -2,17 +2,30 @@ global:
   scrape_interval: 5s
   evaluation_interval: 15s
 
+rule_files:
+  - rules/*.rules.json
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: apps
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets:
-          - host.docker.internal:18000
-          - host.docker.internal:18080
-          - host.docker.internal:18081
-          - host.docker.internal:18085
-          - host.docker.internal:18086
-          - host.docker.internal:18090
+      - targets: ["host.docker.internal:18000"]
+        labels: { service: gateway }
+      - targets: ["host.docker.internal:18080"]
+        labels: { service: core }
+      - targets: ["host.docker.internal:18081"]
+        labels: { service: realtime }
+      - targets: ["host.docker.internal:18085"]
+        labels: { service: payment }
+      - targets: ["host.docker.internal:18086"]
+        labels: { service: settlement }
+      - targets: ["host.docker.internal:18090"]
+        labels: { service: fake-pg }
   - job_name: redis
     static_configs:
       - targets: ["redis-exporter:9121"]

@@ -50,7 +50,7 @@ declare -A DEPENDENTS=(
 )
 
 declare -A modules=()
-full_check=0 web=0 web_build=0 api_contract=0 docs=0 skills=0 hook=0 loadtest_py=0 e2e=0 modulith=0
+full_check=0 web=0 web_build=0 api_contract=0 docs=0 skills=0 hook=0 loadtest_py=0 e2e=0 modulith=0 observability=0
 unmapped=() sh_files=()
 
 for f in "${files[@]}"; do
@@ -71,6 +71,7 @@ for f in "${files[@]}"; do
     .agents/skills/*|.claude/skills/*) skills=1 ;;
     scripts/agent/hook/*) hook=1 ;;
     scripts/loadtest/*.py) loadtest_py=1 ;;
+    observability/*|compose.observability.yaml|scripts/observability/*) observability=1 ;;
     *.sh|.githooks/*) [ -f "$f" ] && sh_files+=("$f") ;;
     *)
       top="${f%%/*}"
@@ -108,6 +109,7 @@ fi
 [ "$hook" = 1 ] && checks+=("python3 -m unittest discover -s scripts/agent/hook -p test_*.py -q")
 for f in "${sh_files[@]}"; do checks+=("bash -n $f"); done
 [ "$loadtest_py" = 1 ] && checks+=("python3 -m unittest discover -s scripts/loadtest -p test_*.py -q")
+[ "$observability" = 1 ] && checks+=("./scripts/observability/check.sh")
 
 echo "변경 파일 ${#files[@]}개 (기준: $base)"
 if [ "${#checks[@]}" -eq 0 ]; then

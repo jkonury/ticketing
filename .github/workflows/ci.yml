@@ -124,6 +124,14 @@ jobs:
       - run: pnpm run format:check
       - run: pnpm run build
 
+  observability:
+    name: observability (알림 규칙과 대시보드)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: ./scripts/observability/check.sh
+
   docs:
     name: docs (링크, 경로 참조)
     runs-on: ubuntu-latest

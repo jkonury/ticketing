@@ -1,0 +1,174 @@
+rule_files:
+  - ../ticketing.rules.json
+evaluation_interval: 1m
+
+tests:
+  - name: AppDown
+    interval: 1m
+    input_series:
+      - series: 'up{job="apps",service="payment",instance="host.docker.internal:18085"}'
+        values: '1 0+0x8'
+      - series: 'up{job="apps",service="core",instance="host.docker.internal:18080"}'
+        values: '1+0x9'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AppDown
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: AppDown
+        exp_alerts:
+          - exp_labels:
+              job: apps
+              service: payment
+              instance: host.docker.internal:18085
+              severity: critical
+            exp_annotations:
+              summary: payment 앱을 스크레이프할 수 없음
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: 앱 상태
+
+  - name: HighErrorRate
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="apps",application="core",status="200"}'
+        values: '0+90x9'
+      - series: 'http_server_requests_seconds_count{job="apps",application="core",status="500"}'
+        values: '0+10x9'
+      - series: 'http_server_requests_seconds_count{job="apps",application="gateway",status="200"}'
+        values: '0+90x9'
+      - series: 'http_server_requests_seconds_count{job="apps",application="gateway",status="409"}'
+        values: '0+60x9'
+      - series: 'http_server_requests_seconds_count{job="apps",application="gateway",status="429"}'
+        values: '0+60x9'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HighErrorRate
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels:
+              application: core
+              severity: warning
+            exp_annotations:
+              summary: core 앱의 HTTP 5xx 비율이 5%를 초과함
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: HTTP 5xx 비율
+
+  - name: EventPublicationStuck
+    interval: 1m
+    input_series:
+      - series: 'ticketing_event_publication_oldest_incomplete_age_seconds{job="apps",application="payment"}'
+        values: '301+0x9'
+      - series: 'ticketing_event_publication_oldest_incomplete_age_seconds{job="apps",application="core"}'
+        values: '300+0x9'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EventPublicationStuck
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EventPublicationStuck
+        exp_alerts:
+          - exp_labels:
+              application: payment
+              severity: warning
+            exp_annotations:
+              summary: payment 앱에 300초를 넘긴 미완료 이벤트가 있음
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: 최고령 미완료 이벤트 경과
+
+  - name: KafkaConsumerLagHigh
+    interval: 1m
+    input_series:
+      - series: 'kafka_consumergroup_lag{job="kafka",consumergroup="ticketing-payment",topic="ticketing.payment.payment-requested",partition="0"}'
+        values: '650+0x9'
+      - series: 'kafka_consumergroup_lag{job="kafka",consumergroup="ticketing-payment",topic="ticketing.payment.payment-requested",partition="1"}'
+        values: '351+0x9'
+      - series: 'kafka_consumergroup_lag{job="kafka",consumergroup="ticketing-settlement",topic="ticketing.booking.booking-confirmed",partition="0"}'
+        values: '1000+0x9'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KafkaConsumerLagHigh
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: KafkaConsumerLagHigh
+        exp_alerts:
+          - exp_labels:
+              consumergroup: ticketing-payment
+              topic: ticketing.payment.payment-requested
+              severity: warning
+            exp_annotations:
+              summary: ticketing-payment 그룹의 ticketing.payment.payment-requested lag가 1000건을 초과함
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: 컨슈머 그룹 lag
+
+  - name: KafkaDeadLetterIncreased
+    interval: 1m
+    input_series:
+      - series: 'kafka_topic_partition_current_offset{job="kafka",topic="ticketing.payment.payment-requested.dlt",partition="0"}'
+        values: '0 0 1+0x7'
+      - series: 'kafka_topic_partition_current_offset{job="kafka",topic="ticketing.payment.refund-requested.dlt",partition="0"}'
+        values: '10+0x9'
+      - series: 'kafka_topic_partition_current_offset{job="kafka",topic="ticketing.payment.payment-requested",partition="0"}'
+        values: '0+1x9'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: KafkaDeadLetterIncreased
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: KafkaDeadLetterIncreased
+        exp_alerts:
+          - exp_labels:
+              topic: ticketing.payment.payment-requested.dlt
+              severity: warning
+            exp_annotations:
+              summary: ticketing.payment.payment-requested.dlt 토픽에 최근 10분 동안 DLT 레코드가 추가됨
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: 최근 10분 DLT 증가
+
+  - name: BatchJobFailed
+    interval: 1m
+    input_series:
+      - series: 'ticketing_batch_job_failed{job="apps",application="core",exported_job="expirePendingBookingsJob"}'
+        values: '1 1 0+0x7'
+      - series: 'ticketing_batch_job_failed{job="apps",application="settlement",exported_job="dailySettlementJob"}'
+        values: '0+0x9'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: BatchJobFailed
+        exp_alerts:
+          - exp_labels:
+              application: core
+              exported_job: expirePendingBookingsJob
+              severity: warning
+            exp_annotations:
+              summary: core 앱의 expirePendingBookingsJob 배치 실행이 실패함
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: Job별 마지막 상태
+      - eval_time: 2m
+        alertname: BatchJobFailed
+        exp_alerts: []
+
+  - name: HikariPoolExhausted
+    interval: 1m
+    input_series:
+      - series: 'hikaricp_connections_pending{job="apps",application="payment",pool="HikariPool-1"}'
+        values: '0 2+0x8'
+      - series: 'hikaricp_connections_pending{job="apps",application="core",pool="HikariPool-1"}'
+        values: '0+0x9'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HikariPoolExhausted
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: HikariPoolExhausted
+        exp_alerts:
+          - exp_labels:
+              job: apps
+              application: payment
+              pool: HikariPool-1
+              severity: warning
+            exp_annotations:
+              summary: payment 앱의 HikariPool-1 연결 풀에서 대기가 지속됨
+              runbook: https://github.com/jkonury/ticketing/blob/main/docs/runbook.md#38-알림이-울렸다
+              panel: Hikari 연결 대기
