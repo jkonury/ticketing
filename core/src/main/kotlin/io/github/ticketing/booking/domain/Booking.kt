@@ -128,23 +128,19 @@ class Booking private constructor(
 
     fun cancelByUser(memberId: MemberId, now: Instant): CancelOutcome {
         if (this.memberId != memberId) throw NotBookingOwnerException()
-        return when (status) {
-            BookingStatus.PENDING -> {
-                status = BookingStatus.CANCELLED
-                cancelledAt = now
-                cancelReason = CancelReason.USER_REQUESTED
-                CancelOutcome.ReleasedHold
-            }
+        return cancel(CancelReason.USER_REQUESTED, now)
+    }
 
-            BookingStatus.CONFIRMED -> {
-                status = BookingStatus.CANCELLED
-                cancelledAt = now
-                cancelReason = CancelReason.USER_REQUESTED
-                CancelOutcome.RefundRequired
-            }
-
+    fun cancel(reason: CancelReason, now: Instant): CancelOutcome {
+        val outcome = when (status) {
+            BookingStatus.PENDING -> CancelOutcome.ReleasedHold
+            BookingStatus.CONFIRMED -> CancelOutcome.RefundRequired
             BookingStatus.EXPIRED, BookingStatus.CANCELLED -> throw InvalidBookingStateException(status)
         }
+        status = BookingStatus.CANCELLED
+        cancelledAt = now
+        cancelReason = reason
+        return outcome
     }
 
     companion object {

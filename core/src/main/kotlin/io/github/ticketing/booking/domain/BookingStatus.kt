@@ -2,7 +2,7 @@ package io.github.ticketing.booking.domain
 
 enum class BookingStatus { PENDING, CONFIRMED, EXPIRED, CANCELLED }
 
-enum class CancelReason { USER_REQUESTED, PAYMENT_FAILED, SEAT_ALREADY_SOLD, AMOUNT_MISMATCH }
+enum class CancelReason { USER_REQUESTED, PAYMENT_FAILED, SEAT_ALREADY_SOLD, AMOUNT_MISMATCH, ADMIN_CANCELLED, PERFORMANCE_CANCELLED }
 
 /** 결제는 성공했지만 환불해야 하는 이유. */
 enum class RefundReason { BOOKING_EXPIRED, BOOKING_CANCELLED }
