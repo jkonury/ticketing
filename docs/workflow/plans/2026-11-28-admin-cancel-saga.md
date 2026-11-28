@@ -73,13 +73,13 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T4. 공연 취소 Saga의 예매 일괄 취소와 진행 확인 필터
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T3
-- 변경 범위와 제약: T3의 `PerformanceCancelled` 처리에 예매 일괄 취소를 이어 붙인다. 사본 반영 트랜잭션이 커밋된 뒤, 해당 공연 회차의 PENDING·CONFIRMED 예매 ID를 `booking.schedule.performance_id` 기준(같은 스키마 안의 조인)으로 청크 단위로 조회한다. 청크마다 별도 트랜잭션에서 T1의 공용 취소 경로(사유 `PERFORMANCE_CANCELLED`)로 취소한다. 커밋 후 Redis 반영은 예매마다 기존 방식을 따르고, 실패해도 로그만 남긴다. 청크 크기는 설정값(기본 100)으로 둔다. 리스너 트랜잭션 안에서 커넥션을 하나 더 잡지 않게 한다(`PaymentResultService` 주석의 풀 고갈 사유). 이 처리는 트랜잭션 없이 실행하는 리스너가 청크 트랜잭션을 차례로 여는 구조로 만들고, `@ApplicationModuleListener`의 기본 트랜잭션 전파와 충돌하지 않는지 프로젝트 Spring Modulith 버전 문서로 확인한다. 중간 실패는 예외를 전파해 이벤트 발행 레지스트리의 재발행에 맡긴다. 재실행 때 이미 취소된 예매는 조회 조건에서 빠진다. 예매 동시 변경으로 인한 낙관적 락 충돌은 해당 예매를 다시 읽어 처리하거나 예외를 전파한다. 관리자 예매 목록(`AdminBookingFilter`, `AdminBookingQueryJooqAdapter`)에 `performanceId` 필터를 추가한다(같은 스키마의 `booking.schedule` 조인).
+- 변경 범위와 제약: T3의 `PerformanceCancelled` 처리에 예매 일괄 취소를 이어 붙인다. 사본 반영 트랜잭션이 커밋된 뒤, 해당 공연 회차의 PENDING·CONFIRMED 예매 ID를 `booking.schedule.performance_id` 기준(같은 스키마 안의 조인)으로 청크 단위로 조회한다. 청크마다 별도 트랜잭션에서 T1의 공용 취소 경로(사유 `PERFORMANCE_CANCELLED`)로 취소한다. 커밋 후 Redis 반영은 예매마다 기존 방식을 따르고, 실패해도 로그만 남긴다. 청크 크기는 설정값(기본 100)으로 둔다. 리스너 트랜잭션 안에서 커넥션을 하나 더 잡지 않게 한다(`PaymentResultService` 주석의 풀 고갈 사유). 이 처리는 트랜잭션 없이 실행하는 리스너가 청크 트랜잭션을 차례로 여는 구조로 만들고, `@ApplicationModuleListener`의 기본 트랜잭션 전파와 충돌하지 않는지 프로젝트 Spring Modulith 버전 문서로 확인한다. 중간 실패는 예외를 전파해 이벤트 발행 레지스트리의 재발행에 맡긴다. 재실행 때 이미 취소된 예매는 조회 조건에서 빠진다. 예매 동시 변경으로 인한 낙관적 락 충돌은 해당 예매를 다시 읽어 처리하거나 예외를 전파한다. 관리자 예매 목록(`AdminBookingFilter`, `AdminBookingQueryJooqAdapter`)에 `performanceId` 필터를 추가한다(같은 스키마의 `booking.schedule` 조인). 관리자 예매 상세 응답에 선택적인 `cancelReason` 취소 유형을 추가한다. 관리자가 입력한 사유 원문은 감사 로그에만 보관한다.
 - 테스트 경계와 선례: 통합 테스트 `PerformanceCancellationSagaIntegrationTests`(신규)는 `ScheduleSuspensionIntegrationTests`와 `BookingCouponSagaTests`를 선례로 삼는다. 다음을 확인한다.
   - 청크 크기보다 많은 예매(PENDING·CONFIRMED·EXPIRED·CANCELLED 혼합)의 처리 결과: PENDING·CONFIRMED만 `PERFORMANCE_CANCELLED`, CONFIRMED만 `RefundRequested`·`sold_seat` 삭제, PENDING은 쿠폰 복원 요청, 다른 공연의 예매는 그대로
   - 중간 청크에서 실패시킨 뒤 재실행했을 때 중복 환불·중복 `BookingCancelled`가 없음
-  - 관리자 예매 목록 `performanceId` 필터 결과
+  - 관리자 예매 목록 `performanceId` 필터 결과와 관리자 상세 응답의 취소 유형
 - AC:
 
   ```bash

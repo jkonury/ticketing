@@ -18,6 +18,7 @@ internal class AdminBookingQueryJooqAdapter(private val dsl: DSLContext) : Admin
         val conditions = listOfNotNull(
             filter.memberId?.let(BOOKING.MEMBER_ID::eq),
             filter.scheduleId?.let(BOOKING.SCHEDULE_ID::eq),
+            filter.performanceId?.let(SCHEDULE.PERFORMANCE_ID::eq),
             filter.status?.let { BOOKING.STATUS.eq(it.name) },
             filter.createdFrom?.let { BOOKING.CREATED_AT.ge(it.atOffset(ZoneOffset.UTC)) },
             filter.createdTo?.let { BOOKING.CREATED_AT.le(it.atOffset(ZoneOffset.UTC)) },

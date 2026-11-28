@@ -13,6 +13,7 @@ interface AdminBookingQueryUseCase {
 data class AdminBookingFilter(
     val memberId: Long?,
     val scheduleId: Long?,
+    val performanceId: Long?,
     val status: BookingStatus?,
     val createdFrom: Instant?,
     val createdTo: Instant?,

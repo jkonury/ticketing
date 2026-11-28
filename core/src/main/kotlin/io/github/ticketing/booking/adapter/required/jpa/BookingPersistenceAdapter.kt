@@ -3,12 +3,14 @@ package io.github.ticketing.booking.adapter.required.jpa
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingId
+import io.github.ticketing.booking.domain.BookingStatus
 import io.github.ticketing.booking.domain.MemberId
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
 import org.jooq.DSLContext
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Repository
+import ticketing.jooq.booking.tables.references.SCHEDULE
 import ticketing.jooq.booking.tables.references.SOLD_SEAT
 import java.time.Instant
 import java.time.ZoneOffset
@@ -36,6 +38,16 @@ internal class BookingPersistenceAdapter(private val bookings: BookingJpaReposit
         if (!dsl.fetchExists(BOOKING, BOOKING.MEMBER_ID.eq(memberId.value).and(BOOKING.IDEMPOTENCY_KEY.eq(key)))) return null
         return bookings.findWithSeatsByMemberIdAndIdempotencyKey(memberId.value, key)?.toDomain()
     }
+
+    override fun findActiveIds(performanceId: Long, afterId: Long, limit: Int): List<BookingId> = dsl.select(BOOKING.ID)
+        .from(BOOKING)
+        .join(SCHEDULE).on(SCHEDULE.SCHEDULE_ID.eq(BOOKING.SCHEDULE_ID))
+        .where(SCHEDULE.PERFORMANCE_ID.eq(performanceId))
+        .and(BOOKING.STATUS.`in`(BookingStatus.PENDING.name, BookingStatus.CONFIRMED.name))
+        .and(BOOKING.ID.gt(afterId))
+        .orderBy(BOOKING.ID.asc())
+        .limit(limit)
+        .fetch { BookingId(requireNotNull(it.value1())) }
 
     override fun insertSoldSeats(bookingId: BookingId, scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant): Int {
         if (seatIds.isEmpty()) return 0

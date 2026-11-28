@@ -6,6 +6,7 @@ import io.github.ticketing.booking.application.port.provided.BookingPage
 import io.github.ticketing.booking.application.port.provided.BookingSeatResult
 import io.github.ticketing.booking.application.port.provided.BookingSummaryView
 import io.github.ticketing.booking.application.port.required.BookingQueryPort
+import io.github.ticketing.booking.domain.CancelReason
 import io.github.ticketing.booking.domain.CouponState
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -88,7 +89,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
 
     override fun findDetail(bookingId: Long): BookingDetailView? {
         val head = dsl.select(
-            BOOKING.ID, BOOKING.MEMBER_ID, BOOKING.SCHEDULE_ID, BOOKING.STATUS, SCHEDULE.PERFORMANCE_TITLE,
+            BOOKING.ID, BOOKING.MEMBER_ID, BOOKING.SCHEDULE_ID, BOOKING.STATUS, BOOKING.CANCEL_REASON, SCHEDULE.PERFORMANCE_TITLE,
             SCHEDULE.STARTS_AT, BOOKING.TOTAL_AMOUNT, BOOKING.EXPIRES_AT, BOOKING.CREATED_AT,
             BOOKING.COUPON_ISSUED_ID, BOOKING.COUPON_STATE, BOOKING.DISCOUNT_AMOUNT, BOOKING.COUPON_REJECT_REASON,
         )
@@ -130,6 +131,7 @@ internal class BookingQueryJooqAdapter(private val dsl: DSLContext) : BookingQue
             memberId = requireNotNull(head[BOOKING.MEMBER_ID]),
             scheduleId = requireNotNull(head[BOOKING.SCHEDULE_ID]),
             status = requireNotNull(head[BOOKING.STATUS]),
+            cancelReason = head[BOOKING.CANCEL_REASON]?.let(CancelReason::valueOf),
             performanceTitle = requireNotNull(head[SCHEDULE.PERFORMANCE_TITLE]),
             startsAt = requireNotNull(head[SCHEDULE.STARTS_AT]).toInstant(),
             totalAmount = listAmount,

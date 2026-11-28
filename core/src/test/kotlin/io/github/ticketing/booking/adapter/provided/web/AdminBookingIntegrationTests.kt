@@ -86,6 +86,25 @@ class AdminBookingIntegrationTests(
     }
 
     @Test
+    fun `공연 ID로 여러 회차의 예매를 함께 거른다`() {
+        val performanceId = uniqueId()
+        val memberId = uniqueId()
+        val now = clock.instant()
+        val first = booking(memberId, schedule(performanceId), "PENDING", now)
+        val second = booking(memberId, schedule(performanceId), "CONFIRMED", now)
+        booking(memberId, schedule(), "PENDING", now)
+
+        assertThat(mockMvcTester.get().uri(PATH).param("performanceId", "$performanceId").header("Authorization", bearer("ADMIN")))
+            .hasStatus(HttpStatus.OK).bodyJson().apply {
+                extractingPath("$.items.length()").isEqualTo(2)
+                extractingPath("$.items[0].bookingId").convertTo(Long::class.java).isEqualTo(second)
+                extractingPath("$.items[1].bookingId").convertTo(Long::class.java).isEqualTo(first)
+            }
+        assertThat(mockMvcTester.get().uri(PATH).param("performanceId", "0").header("Authorization", bearer("ADMIN")))
+            .hasStatus(HttpStatus.BAD_REQUEST)
+    }
+
+    @Test
     fun `일반 회원과 주최자는 관리자 예매 목록에 접근할 수 없다`() {
         for (role in listOf("USER", "ORGANIZER")) {
             assertThat(mockMvcTester.get().uri(PATH).header("Authorization", bearer(role)))
@@ -138,6 +157,8 @@ class AdminBookingIntegrationTests(
         val saved = dsl.selectFrom(BOOKING).where(BOOKING.ID.eq(id)).fetchSingle()
         assertThat(saved.status).isEqualTo("CANCELLED")
         assertThat(saved.cancelReason).isEqualTo("ADMIN_CANCELLED")
+        assertThat(mockMvcTester.get().uri("$PATH/$id").header("Authorization", bearer("ADMIN")))
+            .hasStatus(HttpStatus.OK).bodyJson().extractingPath("$.cancelReason").isEqualTo("ADMIN_CANCELLED")
         assertThat(holds.hold(scheduleId, seat, HoldToken("next-owner"), Booking.HOLD_DURATION, clock.instant())).isEqualTo(HoldResult.Held)
         assertThat(collector.of(CouponReleaseRequested::class.java) { it.orderId == id }).hasSize(1)
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).isEmpty()
@@ -213,12 +234,12 @@ class AdminBookingIntegrationTests(
     private fun cancellation(id: Long, role: String, body: String) = mockMvcTester.post().uri("$PATH/$id/cancellation")
         .header("Authorization", bearer(role)).contentType("application/json").content(body)
 
-    private fun schedule(): Long {
+    private fun schedule(performanceId: Long = uniqueId()): Long {
         val id = uniqueId()
         register.register(
             RegisterScheduleSeatsCommand(
                 id,
-                uniqueId(),
+                performanceId,
                 "공연",
                 uniqueId(),
                 Instant.parse("2040-02-01T00:00:00Z"),

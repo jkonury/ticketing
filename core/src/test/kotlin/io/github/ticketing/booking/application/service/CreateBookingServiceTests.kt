@@ -62,6 +62,7 @@ class CreateBookingServiceTests {
         override fun findById(id: BookingId) = stored.firstOrNull { it.id == id }
         override fun findByMemberAndIdempotencyKey(memberId: MemberId, key: String) =
             stored.firstOrNull { it.memberId == memberId && it.idempotencyKey == key }
+        override fun findActiveIds(performanceId: Long, afterId: Long, limit: Int) = error("이 테스트는 공연 취소 대상을 조회하지 않는다")
         override fun insertSoldSeats(bookingId: BookingId, scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant) = 0
         override fun deleteSoldSeats(bookingId: BookingId) = Unit
     }
