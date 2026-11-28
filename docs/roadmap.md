@@ -74,3 +74,4 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 | Gatling hot-seats 1,000명 p95 300ms | 장기 과제. 15회 예열 독립 5회 중앙값 386ms로 모두 미달. [후속 계획](./plans/hot-seats-gatling-p95-300ms.md), [외부 예열 최종 보고](./performance/m5/12-gatling-hot-seats-p95-300ms-report.md) |
 | 콜드 p95 300ms (잠정 900ms 기준은 충족) | 장기 과제. 내부 예열 후 3회 측정 모두 300ms 미달. [계획](./plans/hot-seats-internal-warmup-cold-900ms.md), [문서 18](./performance/m5/18-warmup-traffic-mix.md). 최신 코드의 JFR 재집계와 [TCP 진단(19)](./performance/m5/19-warmup-tcp-diagnosis.md)은 미완료 |
 | B 예매 생성 p95 300ms (잠정 기준 미달) | 장기 과제. 최종 콜드 1,385ms, 워밍업 383ms. 원인 미확정. [최종 보고서](./performance/m5/11-step8-final-report.md) |
+| 관리자 기능 강화 (공연 판매 중지, 회원 이용 정지, 관리자 예매·결제 조회) | M6와 별개로 진행 가능. [ADR 0052](./adr/0052-admin-intervention-states.md). 예매 강제 취소·공연 취소 Saga, 정산 전체 조회, 운영 도구, 대시보드는 후속 |
