@@ -37,7 +37,7 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T2. 공연 취소 상태와 API (catalog·audit)
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: Flyway `V22`로 `catalog.performance_status_check`에 `CANCELLED`를 추가하고 `PerformanceStatus.CANCELLED`를 추가한다. `PUT /api/v1/admin/performances/{id}/cancellation`(본문 `reason` 필수, 최대 200자)을 `AdminPerformanceController`에 추가한다. `ACTIVE`·`SUSPENDED`에서만 전이하고 이미 `CANCELLED`면 409를 반환한다. 취소된 공연의 판매 중지·재개도 409로 거부한다. 상태 번호(`suspensionVersion`)는 다른 상태 변경과 같은 순번을 이어 쓴다. 공개 목록 제외·상세 404·공개 캐시 무효화와 주최자의 수정·회차 추가 거부는 `SUSPENDED`와 같게 적용한다. 주최자 전용 상세와 정산 조회는 유지한다. 관리자 공연 목록의 상태 필터와 응답에 `CANCELLED`를 노출한다. catalog 패키지 루트에 core 내부 이벤트 `PerformanceCancelled(eventId, actorId, performanceId, version, reason, cancelledAt)`를 두고 발행한다. `PerformanceAuditListener`가 이를 `PERFORMANCE_CANCELLED` 동작으로 멱등 기록한다. 이 task에서는 booking 리스너를 만들지 않는다.
 - 테스트 경계와 선례: `AdminPerformanceIntegrationTests`와 `CatalogQueryApiTests`·`CatalogRegisterApiTests`의 패턴을 따른다. 다음을 확인한다.

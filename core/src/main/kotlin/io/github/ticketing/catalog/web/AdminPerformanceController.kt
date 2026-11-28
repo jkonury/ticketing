@@ -49,8 +49,20 @@ class AdminPerformanceController(private val queries: AdminPerformanceQueryRepos
     @DeleteMapping("/{id}/suspension")
     fun resumePerformance(@PathVariable id: Long, authentication: Authentication): PerformanceSuspensionResponse =
         PerformanceSuspensionResponse(id, admin.resume(authentication.name.toLong(), id))
+
+    @PutMapping("/{id}/cancellation")
+    fun cancelPerformance(
+        @PathVariable id: Long,
+        @RequestBody @Valid request: CancelPerformanceRequest,
+        authentication: Authentication,
+    ): PerformanceCancellationResponse = PerformanceCancellationResponse(
+        id,
+        admin.cancel(authentication.name.toLong(), id, request.reason),
+    )
 }
 
 data class SuspendPerformanceRequest(@field:NotBlank @field:Size(max = 200) val reason: String)
+data class CancelPerformanceRequest(@field:NotBlank @field:Size(max = 200) val reason: String)
 
 data class PerformanceSuspensionResponse(val id: Long, val status: PerformanceStatus)
+data class PerformanceCancellationResponse(val id: Long, val status: PerformanceStatus)

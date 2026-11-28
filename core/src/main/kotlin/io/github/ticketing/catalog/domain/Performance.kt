@@ -62,6 +62,7 @@ class Performance(
         protected set
 
     fun changeStatus(newStatus: PerformanceStatus) {
+        check(status != PerformanceStatus.CANCELLED)
         status = newStatus
         suspensionVersion += 1
     }
