@@ -8,6 +8,7 @@ import io.github.ticketing.booking.domain.ScheduleSeatCopy
 import io.github.ticketing.booking.domain.SeatId
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
+import ticketing.jooq.booking.tables.records.PerformanceSaleRecord
 import ticketing.jooq.booking.tables.references.PERFORMANCE_SALE
 import ticketing.jooq.booking.tables.references.SCHEDULE
 import ticketing.jooq.booking.tables.references.SCHEDULE_SEAT
@@ -22,7 +23,7 @@ internal class ScheduleSeatPersistenceAdapter(
     override fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>): Boolean {
         // 동시에 같은 이벤트가 와도 한쪽만 삽입되도록 회차 행을 먼저 ON CONFLICT로 선점한다.
         // jOOQ 쓰기는 JPA flush를 일으키지 않으므로 좌석 saveAll보다 앞에 둔다
-        val saleEnabled = lockSaleStatus(schedule.performanceId)
+        val sale = lockSaleStatus(schedule.performanceId)
         val inserted = dsl.insertInto(SCHEDULE)
             .set(SCHEDULE.SCHEDULE_ID, schedule.scheduleId.value)
             .set(SCHEDULE.PERFORMANCE_ID, schedule.performanceId)
@@ -30,7 +31,8 @@ internal class ScheduleSeatPersistenceAdapter(
             .set(SCHEDULE.ORGANIZER_ID, schedule.organizerId)
             .set(SCHEDULE.STARTS_AT, schedule.startsAt.atOffset(ZoneOffset.UTC))
             .set(SCHEDULE.RECEIVED_AT, schedule.receivedAt.atOffset(ZoneOffset.UTC))
-            .set(SCHEDULE.SALE_ENABLED, saleEnabled)
+            .set(SCHEDULE.SALE_ENABLED, sale.saleEnabled)
+            .set(SCHEDULE.CANCELLED, sale.cancelled)
             .onConflict(SCHEDULE.SCHEDULE_ID)
             .doNothing()
             .execute()
@@ -40,8 +42,10 @@ internal class ScheduleSeatPersistenceAdapter(
         return true
     }
 
-    override fun findSchedule(scheduleId: ScheduleId): ScheduleCopy? =
-        dsl.selectFrom(SCHEDULE).where(SCHEDULE.SCHEDULE_ID.eq(scheduleId.value)).fetchOne()?.let {
+    override fun findSchedule(scheduleId: ScheduleId, forShare: Boolean): ScheduleCopy? {
+        val query = dsl.selectFrom(SCHEDULE).where(SCHEDULE.SCHEDULE_ID.eq(scheduleId.value))
+        val row = if (forShare) query.forShare().fetchOne() else query.fetchOne()
+        return row?.let {
             ScheduleCopy(
                 scheduleId,
                 requireNotNull(it.performanceId),
@@ -49,44 +53,45 @@ internal class ScheduleSeatPersistenceAdapter(
                 requireNotNull(it.organizerId),
                 requireNotNull(it.startsAt).toInstant(),
                 requireNotNull(it.receivedAt).toInstant(),
+                requireNotNull(it.saleEnabled),
+                requireNotNull(it.cancelled),
             )
         }
+    }
 
-    override fun isSaleEnabled(scheduleId: ScheduleId): Boolean = dsl.select(SCHEDULE.SALE_ENABLED).from(SCHEDULE)
-        .where(SCHEDULE.SCHEDULE_ID.eq(scheduleId.value)).fetchOne(SCHEDULE.SALE_ENABLED) == true
-
-    override fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long) {
+    override fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long, cancelled: Boolean) {
         val changed = dsl.insertInto(PERFORMANCE_SALE)
             .set(PERFORMANCE_SALE.PERFORMANCE_ID, performanceId)
             .set(PERFORMANCE_SALE.SALE_ENABLED, saleEnabled)
+            .set(PERFORMANCE_SALE.CANCELLED, cancelled)
             .set(PERFORMANCE_SALE.STATUS_VERSION, version)
             .onConflict(PERFORMANCE_SALE.PERFORMANCE_ID)
             .doUpdate()
             .set(PERFORMANCE_SALE.SALE_ENABLED, saleEnabled)
+            .set(PERFORMANCE_SALE.CANCELLED, cancelled)
             .set(PERFORMANCE_SALE.STATUS_VERSION, version)
-            .where(PERFORMANCE_SALE.STATUS_VERSION.lt(version))
+            .where(PERFORMANCE_SALE.STATUS_VERSION.lt(version).and(PERFORMANCE_SALE.CANCELLED.isFalse))
             .execute()
         if (changed > 0) {
             dsl.update(SCHEDULE)
                 .set(SCHEDULE.SALE_ENABLED, saleEnabled)
+                .set(SCHEDULE.CANCELLED, cancelled)
                 .where(SCHEDULE.PERFORMANCE_ID.eq(performanceId))
                 .execute()
         }
     }
 
     // 상태 변경이 회차 등록보다 먼저 도착하거나 둘이 겹쳐도 같은 상태 행을 기준으로 반영한다
-    private fun lockSaleStatus(performanceId: Long): Boolean {
+    private fun lockSaleStatus(performanceId: Long): PerformanceSaleRecord {
         dsl.insertInto(PERFORMANCE_SALE)
             .set(PERFORMANCE_SALE.PERFORMANCE_ID, performanceId)
             .onConflict(PERFORMANCE_SALE.PERFORMANCE_ID)
             .doNothing()
             .execute()
-        return requireNotNull(
-            dsl.select(PERFORMANCE_SALE.SALE_ENABLED).from(PERFORMANCE_SALE)
-                .where(PERFORMANCE_SALE.PERFORMANCE_ID.eq(performanceId))
-                .forUpdate()
-                .fetchOne(PERFORMANCE_SALE.SALE_ENABLED),
-        )
+        return dsl.selectFrom(PERFORMANCE_SALE)
+            .where(PERFORMANCE_SALE.PERFORMANCE_ID.eq(performanceId))
+            .forUpdate()
+            .fetchSingle()
     }
 
     override fun existsSchedule(scheduleId: ScheduleId): Boolean = dsl.fetchExists(SCHEDULE, SCHEDULE.SCHEDULE_ID.eq(scheduleId.value))

@@ -55,7 +55,7 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T3. booking 사본의 공연 취소 반영과 최종 방어선
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2
 - 변경 범위와 제약: Flyway `V23`로 `booking.performance_sale`과 `booking.schedule`에 `cancelled boolean NOT NULL DEFAULT false`를 추가한다. `ScheduleSeatPersistenceAdapter`의 상태 반영은 기존 `status_version` 비교 규칙으로 판매 가능 여부와 취소 여부를 함께 갱신한다. 취소를 반영할 때는 `sale_enabled=false`로 둔다. 회차 등록이 취소보다 늦게 와도 `lockSaleStatus` 경로에서 취소 여부를 사본에 복사한다. `ScheduleRegisteredListener`(또는 같은 패키지의 새 리스너)가 `PerformanceCancelled`를 받아 반영한다. 이 task의 리스너는 사본 반영까지만 하고 예매 정리는 T4가 맡는다. 최종 방어선은 두 곳이다. `RequestPaymentService`는 취소된 공연 회차의 결제 요청을 거부한다(판매 중지는 허용). `PaymentResultService`의 확정 경로는 `sold_seat` 삽입 전에 취소 여부를 확인한다. 취소됐으면 예매를 `CANCELLED(PERFORMANCE_CANCELLED)`로 바꾸고 `RefundRequested`·쿠폰 복원·`BookingCancelled(refundRequired=true)`를 발행한 뒤 커밋 후 선점을 해제한다. 이 처리는 기존 `cancelWithRefund` 경로를 쓴다. 판매 중지된 공연의 PENDING 결제는 지금처럼 확정한다(ADR 0052 결정 1).
 - 테스트 경계와 선례: `ScheduleSuspensionIntegrationTests`, `ScheduleSeatPersistenceAdapterTests`, `BookingPaymentFlowTests`의 패턴을 따른다. 다음을 확인한다.

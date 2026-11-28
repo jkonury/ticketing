@@ -3,6 +3,7 @@ package io.github.ticketing.booking.adapter.provided.event
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.booking.application.port.provided.UpdateScheduleSaleStatusUseCase
+import io.github.ticketing.catalog.PerformanceCancelled
 import io.github.ticketing.catalog.PerformanceSuspensionChanged
 import io.github.ticketing.catalog.ScheduleRegistered
 import org.springframework.modulith.events.ApplicationModuleListener
@@ -14,6 +15,11 @@ class ScheduleRegisteredListener(
     private val registerScheduleSeats: RegisterScheduleSeatsUseCase,
     private val updateScheduleSaleStatus: UpdateScheduleSaleStatusUseCase,
 ) {
+    @ApplicationModuleListener
+    fun on(event: PerformanceCancelled) {
+        updateScheduleSaleStatus.update(event.performanceId, saleEnabled = false, version = event.version, cancelled = true)
+    }
+
     @ApplicationModuleListener
     fun on(event: PerformanceSuspensionChanged) {
         updateScheduleSaleStatus.update(event.performanceId, event.saleEnabled, event.version)

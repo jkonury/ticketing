@@ -69,9 +69,10 @@ class CreateBookingServiceTests {
     private class FakeScheduleSeats(private val schedules: Set<ScheduleId>, private val seats: List<ScheduleSeatCopy>) :
         ScheduleSeatCommandPort {
         override fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>) = false
-        override fun findSchedule(scheduleId: ScheduleId): ScheduleCopy? = null
-        override fun isSaleEnabled(scheduleId: ScheduleId) = true
-        override fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long) = Unit
+        override fun findSchedule(scheduleId: ScheduleId, forShare: Boolean): ScheduleCopy? =
+            if (scheduleId in schedules) ScheduleCopy(scheduleId, 2, "공연", 3, Instant.EPOCH, Instant.EPOCH) else null
+
+        override fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long, cancelled: Boolean) = Unit
         override fun existsSchedule(scheduleId: ScheduleId) = scheduleId in schedules
         override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>) =
             seats.filter { it.scheduleId == scheduleId && it.seatId in seatIds }
@@ -180,6 +181,23 @@ class CreateBookingServiceTests {
 
         assertThat(hold.held).hasSize(1)
         assertThat(hold.released).isEqualTo(hold.held)
+    }
+
+    @Test
+    fun `선점과 저장 사이 공연 취소가 반영되면 선점을 풀고 새 예매를 저장하지 않는다`() {
+        val bookings = FakeBookings()
+        val hold = FakeSeatHold()
+        val cancelledDuringHold = object : ScheduleSeatCommandPort by scheduleSeats {
+            override fun findSchedule(scheduleId: ScheduleId, forShare: Boolean): ScheduleCopy? =
+                scheduleSeats.findSchedule(scheduleId, forShare)?.copy(saleEnabled = !forShare, cancelled = forShare)
+        }
+
+        assertThatThrownBy { service(bookings, hold, cancelledDuringHold).create(command(1)) }
+            .isInstanceOf(ScheduleSaleCancelledException::class.java)
+
+        assertThat(hold.held).hasSize(1)
+        assertThat(hold.released).isEqualTo(hold.held)
+        assertThat(bookings.stored).isEmpty()
     }
 
     @Test

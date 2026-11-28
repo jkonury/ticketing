@@ -23,8 +23,8 @@ class RegisterScheduleSeatsService(
 ) : RegisterScheduleSeatsUseCase,
     UpdateScheduleSaleStatusUseCase {
     @Transactional
-    override fun update(performanceId: Long, saleEnabled: Boolean, version: Long) =
-        scheduleSeats.updateSaleStatus(performanceId, saleEnabled, version)
+    override fun update(performanceId: Long, saleEnabled: Boolean, version: Long, cancelled: Boolean) =
+        scheduleSeats.updateSaleStatus(performanceId, saleEnabled, version, cancelled)
 
     @Transactional
     override fun register(command: RegisterScheduleSeatsCommand): Boolean {

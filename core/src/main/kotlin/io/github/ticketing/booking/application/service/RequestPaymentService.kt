@@ -59,9 +59,12 @@ class RequestPaymentService(
         if (booking.status == BookingStatus.EXPIRED) throw BookingExpiredException()
         val alreadyRequested = booking.paymentRequestedAt != null
         val expirable = booking.status == BookingStatus.PENDING && !alreadyRequested && booking.isExpired(now)
-        if (booking.status == BookingStatus.PENDING && !alreadyRequested && !expirable) {
-            val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
-            requireSalesOpen(schedule.startsAt, now)
+        if (booking.status == BookingStatus.PENDING) {
+            val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId, forShare = true)) {
+                "회차 사본이 없다: ${booking.scheduleId.value}"
+            }
+            if (schedule.cancelled) throw ScheduleSaleCancelledException()
+            if (!alreadyRequested && !expirable) requireSalesOpen(schedule.startsAt, now)
         }
         return if (expirable) expire(booking, now) else requestPayment(booking, alreadyRequested, now)
     }
