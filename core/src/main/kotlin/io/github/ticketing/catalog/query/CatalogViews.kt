@@ -1,6 +1,7 @@
 package io.github.ticketing.catalog.query
 
 import io.github.ticketing.catalog.domain.PerformanceGenre
+import io.github.ticketing.catalog.domain.PerformanceStatus
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -34,6 +35,8 @@ data class PerformanceDetail(
     val genre: PerformanceGenre? = null,
     val posterKey: String? = null,
 )
+
+data class OwnedPerformanceDetail(val performance: PerformanceDetail, val status: PerformanceStatus)
 
 /** 좌석 상태(선점·판매)는 담지 않는다. 상태는 booking과 realtime 소관이다. */
 data class SeatView(val seatId: Long, val section: String, val row: String, val number: Int, val grade: String, val price: BigDecimal)

@@ -3,6 +3,7 @@ package io.github.ticketing.catalog.web
 import io.github.ticketing.catalog.config.PosterStorageProperties
 import io.github.ticketing.catalog.domain.PerformanceGenre
 import io.github.ticketing.catalog.query.GradePrice
+import io.github.ticketing.catalog.query.PerformanceDetail
 import io.github.ticketing.catalog.query.ScheduleDetail
 import io.github.ticketing.catalog.query.ScheduleSummary
 import io.github.ticketing.catalog.query.SeatView
@@ -34,20 +35,7 @@ class CatalogQueryController(private val service: CatalogQueryService, private v
     }
 
     @GetMapping("/performances/{id}")
-    fun performance(@PathVariable id: Long): PerformanceDetailResponse {
-        val detail = service.performance(id)
-        return PerformanceDetailResponse(
-            detail.id,
-            detail.title,
-            detail.description,
-            detail.venueId,
-            detail.venueName,
-            detail.prices,
-            detail.schedules,
-            detail.genre,
-            posters.publicUrl(detail.posterKey),
-        )
-    }
+    fun performance(@PathVariable id: Long): PerformanceDetailResponse = service.performance(id).toResponse(posters)
 
     @GetMapping("/schedules/{id}")
     fun schedule(@PathVariable id: Long): ScheduleDetail = service.schedule(id)
@@ -77,4 +65,8 @@ data class PerformanceDetailResponse(
     val schedules: List<ScheduleSummary>,
     val genre: PerformanceGenre?,
     val posterUrl: String?,
+)
+
+internal fun PerformanceDetail.toResponse(posters: PosterStorageProperties) = PerformanceDetailResponse(
+    id, title, description, venueId, venueName, prices, schedules, genre, posters.publicUrl(posterKey),
 )

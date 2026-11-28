@@ -52,6 +52,20 @@ class Performance(
     var posterKey: String? = null
         protected set
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var status: PerformanceStatus = PerformanceStatus.ACTIVE
+        protected set
+
+    @Column(name = "suspension_version", nullable = false)
+    var suspensionVersion: Long = 0
+        protected set
+
+    fun changeStatus(newStatus: PerformanceStatus) {
+        status = newStatus
+        suspensionVersion += 1
+    }
+
     fun attachPoster(key: String) {
         check(posterKey == null || posterKey == key)
         posterKey = key

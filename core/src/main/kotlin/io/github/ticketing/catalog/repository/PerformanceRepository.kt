@@ -9,5 +9,5 @@ import org.springframework.data.jpa.repository.Query
 interface PerformanceRepository : JpaRepository<Performance, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select performance from Performance performance where performance.id = :id")
-    fun findForPosterUpdate(id: Long): Performance?
+    fun findForUpdate(id: Long): Performance?
 }
