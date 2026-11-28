@@ -57,8 +57,7 @@ class CreateBookingService(
         }
     }
 
-    // 멱등 재호출은 조회 없이 진행한다. 자기 좌석이 선점·판매 상태면 holdOrExisting이,
-    // 좌석이 풀린 뒤면 persist의 (member_id, idempotency_key) 유니크 위반이 기존 예매를 돌려준다
+    // 판매 가능 상태의 멱등 재호출은 별도로 기존 예매를 조회하지 않는다. holdOrExisting이나 persist가 돌려준다
     override fun create(command: CreateBookingCommand): CreateBookingResult {
         val memberId = MemberId(command.memberId)
         val scheduleId = ScheduleId(command.scheduleId)
@@ -88,12 +87,13 @@ class CreateBookingService(
         now: Instant,
     ): CreateBookingResult? {
         val startsAt = checkNotNull(copies.values.first().startsAt) { "회차 시작 시각이 없다: ${scheduleId.value}" }
-        if (now.isBefore(startsAt)) return null
-        return stage("existing") { existing(memberId, key) }
-            ?: translatingRuleViolations {
-                requireSalesOpen(startsAt, now)
-                null
-            }
+        val saleEnabled = scheduleSeats.isSaleEnabled(scheduleId)
+        if (saleEnabled && now.isBefore(startsAt)) return null
+        return stage("existing") { existing(memberId, key) } ?: translatingRuleViolations {
+            if (!saleEnabled) throw ScheduleSaleSuspendedException()
+            requireSalesOpen(startsAt, now)
+            null
+        }
     }
 
     private fun findCopies(scheduleId: ScheduleId, requested: List<SeatId>): Map<SeatId, ScheduleSeatCopy> {

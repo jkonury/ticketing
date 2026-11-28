@@ -19,6 +19,8 @@ class InvalidBookingPeriodException : DomainException("INVALID_REQUEST", HttpSta
 
 class ScheduleNotFoundException : DomainException("SCHEDULE_NOT_FOUND", HttpStatus.NOT_FOUND, "회차를 찾을 수 없습니다.")
 
+class ScheduleSaleSuspendedException : DomainException("PERFORMANCE_SUSPENDED", HttpStatus.CONFLICT, "판매가 중지된 공연입니다.")
+
 class SeatNotFoundException : DomainException("SEAT_NOT_FOUND", HttpStatus.NOT_FOUND, "회차에 없는 좌석입니다.")
 
 class SeatAlreadyHeldException(private val seatIds: List<Long>) :
