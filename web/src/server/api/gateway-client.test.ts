@@ -165,11 +165,14 @@ describe('Gateway 클라이언트', () => {
     ).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
-  it('갱신 401이면 세션을 파기한다', async () => {
+  it.each([
+    [401, 'INVALID_REFRESH_TOKEN'],
+    [403, 'MEMBER_SUSPENDED'],
+  ])('갱신 %s %s이면 세션을 파기한다', async (status, code) => {
     const t = setup();
     const id = await t.sessions.create(t.data);
     const client = createGatewayClient({
-      fetch: vi.fn(async () => t.json({ status: 401 }, 401)),
+      fetch: vi.fn(async () => t.json({ status, code }, status)),
       sessions: t.sessions,
       sessionId: async () => id,
       clock: () => 100000,

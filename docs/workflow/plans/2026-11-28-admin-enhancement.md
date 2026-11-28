@@ -101,7 +101,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T7. web 관리자 화면
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T6
 - 변경 범위와 제약: [프런트엔드 지침](../../rules/frontend.md)과 U 트랙 토큰·프리미티브 규칙을 따른다. `/admin/performances`(목록·필터·중지/재개 서버 액션, 사유 입력), `/admin/bookings`(목록·필터)와 상세(좌석·금액·쿠폰·상태, 결제 상태는 BFF가 payment를 호출해 합침, 결제 조회 실패 시 예매 정보는 그대로 보여 주고 결제 영역만 오류 표시), `/admin/members`에 상태 표시와 정지·해제 액션을 추가한다. 서버 액션마다 `requireAdmin`을 재검사한다. 관리자 메뉴 `layout.tsx`에 공연·예매 링크를 추가한다. JWT는 브라우저에 노출하지 않는다(규칙 5).
 - 테스트 경계와 선례: 선례는 `features/admin/actions.test.ts`, `coupon-actions.test.ts`, `require-admin.test.ts`. 서버 액션의 권한 재검사·입력 검증·오류 매핑을 단위 테스트로 확인한다. 화면은 `ui-builder` 지시서 방식의 headless 캡처로 확인한다.

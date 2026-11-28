@@ -2,6 +2,8 @@ export function bookingError(code: string): string {
   switch (code) {
     case 'SEAT_ALREADY_HELD':
       return '이미 선점된 좌석입니다. 다시 선택해 주세요.';
+    case 'PERFORMANCE_SUSPENDED':
+      return '판매가 중지된 공연입니다.';
     case 'BOOKING_EXPIRED':
       return '선점이 만료되었습니다.';
     case 'ADMISSION_TOKEN_REQUIRED':
