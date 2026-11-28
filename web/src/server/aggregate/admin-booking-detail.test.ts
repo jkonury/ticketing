@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/problem';
 import { getAdminBooking, getAdminPayment } from '@/server/api/admin';
+import { SessionExpiredError } from '@/server/api/gateway-client';
 import { getAdminBookingDetail } from './admin-booking-detail';
 
 vi.mock('@/server/api/admin', () => ({
@@ -65,12 +66,22 @@ describe('관리자 예매 상세 조합', () => {
   });
 
   it.each([401, 403])(
-    '결제 권한 오류 %s를 호출부에 전파한다',
+    '결제 API 응답이 %s여도 예매 정보를 반환한다',
     async (status) => {
       vi.mocked(getAdminPayment).mockRejectedValue(new ApiError(status));
-      await expect(getAdminBookingDetail(8)).rejects.toMatchObject({ status });
+      await expect(getAdminBookingDetail(8)).resolves.toEqual({
+        booking,
+        payment: { status: 'unavailable' },
+      });
     },
   );
+
+  it('세션 만료는 호출부에 전파한다', async () => {
+    vi.mocked(getAdminPayment).mockRejectedValue(new SessionExpiredError());
+    await expect(getAdminBookingDetail(8)).rejects.toBeInstanceOf(
+      SessionExpiredError,
+    );
+  });
 
   it('예매가 없으면 그 예외를 전파하고 결제는 조회하지 않는다', async () => {
     vi.mocked(getAdminBooking).mockRejectedValue(
