@@ -29,7 +29,10 @@ class AdminMemberService(
         val member = findForUpdate(memberId)
         val oldRole = member.role
         if (oldRole == newRole) return member
-        if (oldRole == Role.ADMIN && admins.size <= 1) throw LastAdminException()
+        if (oldRole == Role.ADMIN && member.status == MemberStatus.ACTIVE) {
+            val activeAdminCount = admins.count { it.status == MemberStatus.ACTIVE }
+            if (activeAdminCount <= 1) throw LastAdminException()
+        }
 
         val now = clock.instant()
         member.changeRole(newRole)

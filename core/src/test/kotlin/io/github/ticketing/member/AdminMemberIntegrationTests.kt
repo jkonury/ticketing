@@ -184,6 +184,26 @@ class AdminMemberIntegrationTests(
     }
 
     @Test
+    fun `정지된 관리자는 마지막 활성 관리자 강등을 허용하지 않는다`() {
+        val (adminId, adminToken) = admin()
+        members.findAll().filter {
+            it.role == Role.ADMIN
+        }.mapNotNull { it.id }.filter { it != adminId }.forEach { adminMembers.changeRole(null, it, Role.USER) }
+        val email = email()
+        signUp(email).expectStatus(HttpStatus.CREATED)
+        val candidateId = memberId(email)
+        assertThat(suspendMember(adminToken, candidateId, "운영 규정 위반")).hasStatus(HttpStatus.OK)
+        assertThat(changeRole(adminToken, candidateId, "ADMIN")).hasStatus(HttpStatus.OK)
+
+        assertThat(changeRole(adminToken, adminId, "USER"))
+            .hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("LAST_ADMIN")
+
+        assertThat(reinstate(adminToken, candidateId)).hasStatus(HttpStatus.OK)
+        assertThat(changeRole(adminToken, adminId, "USER")).hasStatus(HttpStatus.OK)
+    }
+
+    @Test
     fun `관리자가 둘이면 한 명을 강등할 수 있다`() {
         val (adminId, adminToken) = admin()
         val (otherId, _) = admin()
