@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics
+import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.TestPropertySource
 import java.time.Duration
@@ -20,6 +21,8 @@ import javax.sql.DataSource
 @ActiveProfiles(inheritProfiles = false)
 @TestPropertySource(properties = ["ticketing.batch.metrics.refresh-interval=100ms"])
 @AutoConfigureMetrics
+// 이 클래스 전용 스케줄러를 테스트가 끝날 때 닫는다.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class BatchJobMetricsTests(private val dataSource: DataSource, private val registry: MeterRegistry, private val clock: MutableClock) :
     IntegrationTestSupport() {
 
