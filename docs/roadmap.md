@@ -44,6 +44,7 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 - [x] `settlement` 분리: 전용 DB·Kafka 소비·일별 배치, Gateway 정산 조회, 이전 리허설 및 P2 기준선 검증 ([실행 계획](./workflow/plans/2026-11-27-m6-settlement-split.md), [이전 런북](./runbook.md#10-정산-db-이전-core-db-settlement-스키마--settlement_db))
 - [x] 예매–결제 Saga 정리 (보상 흐름 재검증, 쿠폰 보상(예약 해제·사용 확정) 포함) ([검증 결과](./workflow/plans/2026-11-27-m6-booking-payment-saga.md#검증-결과))
 - [x] 인증 구조 재검토 (Spring Authorization Server 도입 여부): M6에서는 유지, SAS는 후속 (ADR 0041)
+- [ ] 운영 알림과 비동기 흐름 관측: settlement 수집, kafka-exporter, Batch 상태 지표, 알림 규칙·Alertmanager, 운영 Overview·Load Test 대시보드 분리 ([ADR 0055](./adr/0055-operational-alerting-and-async-flow-observability.md))
 - [ ] 컨테이너 이미지 빌드
 - [ ] k8s 매니페스트: Deployment, Service, Ingress, Batch는 CronJob
 - [ ] 실시간 앱 수평 확장(HPA) 검증
