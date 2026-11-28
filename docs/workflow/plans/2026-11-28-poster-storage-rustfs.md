@@ -36,7 +36,7 @@ approved_at: 2026-11-28T16:28:04+09:00
 
 ### T2. Compose·초기화·실행 스크립트를 RustFS와 중립 이름으로 교체
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약:
   - `compose.yaml`: `minio`·`minio-init`을 `object-storage`·`object-storage-init`으로, 볼륨 `minio-data`를 `object-storage-data`로 바꾼다. 저장소 이미지는 T1과 같은 다이제스트를 쓴다. `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, CORS 허용 출처 변수(검토 문서 기준 `RUSTFS_CORS_ALLOWED_ORIGINS`, 구현 시 1.0.6 문서로 이름 확인)를 설정한다. 바인딩은 `127.0.0.1:${TICKETING_OBJECT_STORAGE_PORT:-19010}:9000`, 헬스체크는 `curl -fsS http://localhost:9000/health/ready`로 한다. 이미지에 `curl`이 있는 것은 확인했다. 이미지는 uid 10001로 실행되므로 새 볼륨에 쓰기 권한이 있는지도 확인한다.

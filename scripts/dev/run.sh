@@ -10,7 +10,7 @@ usage() {
 사용법: ./scripts/dev/run.sh [--all] [--infra] [--fake-pg] [--observability] [--core] [--payment] [--settlement] [--realtime] [--gateway] [--web] [--slow-queue] [--reuse-jar]
         ./scripts/dev/run.sh --stop
 옵션 없이 실행하면 전체 개발 스택을 기동합니다.
---infra: PostgreSQL, Redis, Kafka, MinIO(기동 뒤 결제·정산 DB와 포스터 버킷 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
+--infra: PostgreSQL, Redis, Kafka, RustFS 오브젝트 저장소(기동 뒤 결제·정산 DB와 포스터 버킷 준비)  --fake-pg: 가짜 PG(호스트 jar)  --observability: Prometheus, Tempo, Grafana
 --payment: 결제 앱(18085, 웹훅은 fake-pg가 직접 호출). 결제 흐름에는 --core와 --payment를 함께 띄운다
 --settlement: 정산 앱(18086). 기존 데이터가 있는 환경은 런북의 정산 DB 이전 절차를 먼저 진행한다
 --slow-queue: 대기열 입장을 5초에 1명으로 늦춘다(대기 순번 화면 확인용, realtime에 적용. 예: --all --slow-queue)
@@ -150,8 +150,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 if ! $reuse_jar && ((${#tasks[@]})); then ./gradlew "${tasks[@]}"; fi
 if $infra; then
-  docker compose up -d --wait postgres redis kafka minio
-  docker compose run --rm --no-deps minio-init
+  docker compose up -d --wait postgres redis kafka object-storage
+  docker compose run --rm --no-deps object-storage-init
   # 기존 볼륨에도 전용 DB를 준비한다
   ./scripts/db/ensure-payment-db.sh
 fi
