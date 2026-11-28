@@ -43,6 +43,7 @@ async function Bookings({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const memberId = parsePositiveId(params.memberId);
   const scheduleId = parsePositiveId(params.scheduleId);
+  const performanceId = parsePositiveId(params.performanceId);
   const status = parseBookingStatus(readSearchParam(params.status));
   const from = readSearchParam(params.createdFrom);
   const to = readSearchParam(params.createdTo);
@@ -59,6 +60,7 @@ async function Bookings({ searchParams }: { searchParams: SearchParams }) {
         listAdminBookings({
           memberId,
           scheduleId,
+          performanceId,
           status,
           createdFrom,
           createdTo,
@@ -68,6 +70,8 @@ async function Bookings({ searchParams }: { searchParams: SearchParams }) {
   const next = new URLSearchParams();
   if (memberId !== undefined) next.set('memberId', String(memberId));
   if (scheduleId !== undefined) next.set('scheduleId', String(scheduleId));
+  if (performanceId !== undefined)
+    next.set('performanceId', String(performanceId));
   if (status) next.set('status', status);
   if (from) next.set('createdFrom', from);
   if (to) next.set('createdTo', to);
@@ -97,6 +101,17 @@ async function Bookings({ searchParams }: { searchParams: SearchParams }) {
               type="number"
               min={1}
               defaultValue={scheduleId}
+            />
+          )}
+        </Field>
+        <Field label="공연 ID" className="w-32">
+          {(control) => (
+            <Input
+              {...control}
+              name="performanceId"
+              type="number"
+              min={1}
+              defaultValue={performanceId}
             />
           )}
         </Field>

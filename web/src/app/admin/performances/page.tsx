@@ -2,8 +2,9 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { RouteLoading } from '@/components/route-loading';
 import { Page, PageHeader } from '@/components/layout/page';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button, buttonClassName } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input, Select } from '@/components/ui/input';
 import {
@@ -17,11 +18,54 @@ import {
   readSearchParam,
 } from '@/features/admin/admin-filters';
 import { SuspensionForm } from '@/features/admin/suspension-form';
+import { CancellationForm } from '@/features/admin/cancellation-form';
 import { formatSeoul } from '@/lib/datetime';
 import { listAdminPerformances } from '@/server/api/admin';
 import { withSessionRedirect } from '@/server/auth/require-user';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+type Performance = Awaited<
+  ReturnType<typeof listAdminPerformances>
+>['items'][number];
+
+const statuses = {
+  ACTIVE: { label: '판매 중', tone: 'success' },
+  SUSPENDED: { label: '판매 중지', tone: 'danger' },
+  CANCELLED: { label: '공연 취소', tone: 'neutral' },
+} satisfies Record<Performance['status'], { label: string; tone: BadgeTone }>;
+
+function PerformanceStatus({ status }: { status: Performance['status'] }) {
+  return <Badge tone={statuses[status].tone}>{statuses[status].label}</Badge>;
+}
+
+function PerformanceActions({ performance }: { performance: Performance }) {
+  if (performance.status === 'CANCELLED') {
+    return (
+      <Link
+        href={`/admin/bookings?performanceId=${performance.id}`}
+        className={buttonClassName({ variant: 'secondary' })}
+      >
+        예매 현황
+      </Link>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      <SuspensionForm
+        key={performance.status}
+        id={performance.id}
+        target="performance"
+        name={performance.title}
+        suspended={performance.status === 'SUSPENDED'}
+      />
+      <CancellationForm
+        id={performance.id}
+        target="performance"
+        name={performance.title}
+      />
+    </div>
+  );
+}
 
 export default function Route({
   searchParams,
@@ -41,7 +85,9 @@ async function Performances({ searchParams }: { searchParams: SearchParams }) {
   const organizerId = parsePositiveId(params.organizerId);
   const cursor = parsePositiveId(params.cursor);
   const status =
-    params.status === 'ACTIVE' || params.status === 'SUSPENDED'
+    params.status === 'ACTIVE' ||
+    params.status === 'SUSPENDED' ||
+    params.status === 'CANCELLED'
       ? params.status
       : undefined;
   const page = await withSessionRedirect(() =>
@@ -77,8 +123,11 @@ async function Performances({ searchParams }: { searchParams: SearchParams }) {
           {(control) => (
             <Select {...control} name="status" defaultValue={status ?? ''}>
               <option value="">전체</option>
-              <option value="ACTIVE">판매 중</option>
-              <option value="SUSPENDED">판매 중지</option>
+              {Object.entries(statuses).map(([value, { label }]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </Select>
           )}
         </Field>
@@ -90,33 +139,35 @@ async function Performances({ searchParams }: { searchParams: SearchParams }) {
           조건에 맞는 공연이 없어요.
         </p>
       ) : (
-        <table className={`${tableClass} lg:table`} aria-label="공연 목록">
-          <thead>
-            <tr>
-              <th scope="col" className={thClass}>
-                공연
-              </th>
-              <th scope="col" className={`${thClass} ${secondaryCol}`}>
-                공연장
-              </th>
-              <th scope="col" className={`${thClass} ${secondaryCol}`}>
-                주최자 ID
-              </th>
-              <th scope="col" className={`${thClass} ${secondaryCol}`}>
-                등록일
-              </th>
-              <th scope="col" className={thClass}>
-                판매 상태
-              </th>
-              <th scope="col" className={thClass}>
-                판매 관리
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {page.items.map((performance) => {
-              const suspended = performance.status === 'SUSPENDED';
-              return (
+        <>
+          <table
+            className={`${tableClass} hidden lg:table`}
+            aria-label="공연 목록"
+          >
+            <thead>
+              <tr>
+                <th scope="col" className={thClass}>
+                  공연
+                </th>
+                <th scope="col" className={`${thClass} ${secondaryCol}`}>
+                  공연장
+                </th>
+                <th scope="col" className={`${thClass} ${secondaryCol}`}>
+                  주최자 ID
+                </th>
+                <th scope="col" className={`${thClass} ${secondaryCol}`}>
+                  등록일
+                </th>
+                <th scope="col" className={thClass}>
+                  판매 상태
+                </th>
+                <th scope="col" className={thClass}>
+                  판매 관리
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {page.items.map((performance) => (
                 <tr key={performance.id}>
                   <th scope="row" className={tdClass}>
                     <span className="block font-semibold">
@@ -136,24 +187,40 @@ async function Performances({ searchParams }: { searchParams: SearchParams }) {
                     {formatSeoul(performance.createdAt)}
                   </td>
                   <td className={tdClass}>
-                    <Badge tone={suspended ? 'danger' : 'success'}>
-                      {suspended ? '판매 중지' : '판매 중'}
-                    </Badge>
+                    <PerformanceStatus status={performance.status} />
                   </td>
                   <td className={tdClass}>
-                    <SuspensionForm
-                      key={performance.status}
-                      id={performance.id}
-                      target="performance"
-                      name={performance.title}
-                      suspended={suspended}
-                    />
+                    <PerformanceActions performance={performance} />
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+          <ul className="my-5 grid gap-3 lg:hidden" aria-label="공연 목록">
+            {page.items.map((performance) => (
+              <li key={performance.id}>
+                <Card className="grid gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-body font-semibold wrap-break-word">
+                      {performance.title}
+                    </h2>
+                    <PerformanceStatus status={performance.status} />
+                  </div>
+                  <div className="text-caption text-fg-muted">
+                    <p>
+                      #{performance.id} · {performance.venueName}
+                    </p>
+                    <p>
+                      주최자 #{performance.organizerId} ·{' '}
+                      {formatSeoul(performance.createdAt)}
+                    </p>
+                  </div>
+                  <PerformanceActions performance={performance} />
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       {page.nextCursor != null && (
         <Link

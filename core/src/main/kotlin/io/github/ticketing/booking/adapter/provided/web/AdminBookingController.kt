@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.adapter.provided.web
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import io.github.ticketing.booking.application.port.provided.AdminBookingFilter
 import io.github.ticketing.booking.application.port.provided.AdminBookingQueryUseCase
 import io.github.ticketing.booking.application.port.provided.AdminBookingSummary
@@ -100,7 +101,7 @@ data class AdminBookingDetailResponse(
     val memberId: Long,
     val scheduleId: Long,
     val status: BookingStatus,
-    val cancelReason: CancelReason?,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val cancelReason: CancelReason?,
     val performanceTitle: String,
     val startsAt: Instant,
     val listAmount: BigDecimal,
