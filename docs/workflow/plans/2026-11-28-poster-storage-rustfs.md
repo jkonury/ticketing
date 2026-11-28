@@ -24,7 +24,7 @@ approved_at: 2026-11-28T16:28:04+09:00
 
 ### T1. core 통합 테스트의 저장소를 RustFS로 교체
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: `core/src/test/kotlin/io/github/ticketing/catalog/PosterUploadApiTests.kt`의 컨테이너를 `ghcr.io/rustfs/rustfs:1.0.6@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a`로 바꾼다. 환경 변수는 `RUSTFS_ACCESS_KEY`·`RUSTFS_SECRET_KEY`로, 대기 조건은 `/health/ready`로 바꾼다. 이미지 기본 명령이 `/data`를 쓰는지 확인하고 필요할 때만 명령을 지정한다. 필드 이름 `minio`는 `objectStorage`로 바꾼다. 테스트 본문과 검증 항목은 바꾸지 않는다.
 - 테스트 경계와 선례: HTTP 공개 경계와 실제 S3 저장소를 쓰는 기존 `PosterUploadApiTests`를 그대로 쓴다. 기대 결과는 기존 테스트가 모두 통과하는 것이다(발급 권한, 키 위조 거부, 콘텐츠 유형 거부, 크기 초과 삭제, 재사용 URL 거부).
