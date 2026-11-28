@@ -111,7 +111,7 @@ approved_at: 2026-11-29T00:58:42+09:00
 
 ### T5. 대시보드 재편
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T4
 - 변경 범위와 제약:
   - `observability/grafana/dashboards/ticketing-overview.json`의 내용을 `ticketing-loadtest.json`으로 옮기고 uid를 `ticketing-loadtest`로, 제목을 `Ticketing Load Test`로 바꾼다. 패널과 쿼리는 바꾸지 않는다.

@@ -1,0 +1,1164 @@
+{
+  "uid": "ticketing-loadtest",
+  "title": "Ticketing Load Test",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "tags": [
+    "ticketing"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "application",
+        "label": "application",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(http_server_requests_seconds_count, application)",
+          "refId": "app"
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP RPS (앱·URI)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application, uri) (rate(http_server_requests_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP p95 (앱·URI)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, application, uri) (rate(http_server_requests_seconds_bucket{application=~\"$application\"}[1m])))",
+          "legendFormat": "{{application}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "HTTP p99 (앱·URI)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le, application, uri) (rate(http_server_requests_seconds_bucket{application=~\"$application\"}[1m])))",
+          "legendFormat": "{{application}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HTTP 5xx 비율",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\"$application\", status=~\"5..\"}[1m])) / sum by (application) (rate(http_server_requests_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP 4xx 비율",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\"$application\", status=~\"4..\"}[1m])) / sum by (application) (rate(http_server_requests_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Hikari 연결 (active·idle·pending)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "hikaricp_connections_active{application=~\"$application\"}",
+          "legendFormat": "{{application}} active"
+        },
+        {
+          "refId": "B",
+          "expr": "hikaricp_connections_idle{application=~\"$application\"}",
+          "legendFormat": "{{application}} idle"
+        },
+        {
+          "refId": "C",
+          "expr": "hikaricp_connections_pending{application=~\"$application\"}",
+          "legendFormat": "{{application}} pending"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Hikari 연결 획득 시간 (평균)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(hikaricp_connections_acquire_seconds_sum{application=~\"$application\"}[1m]) / rate(hikaricp_connections_acquire_seconds_count{application=~\"$application\"}[1m])",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "PostgreSQL 연결 수",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(pg_stat_database_numbackends{datname!~\"template.*|postgres\"})",
+          "legendFormat": "connections"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "PostgreSQL TPS",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(pg_stat_database_xact_commit[1m]) + rate(pg_stat_database_xact_rollback[1m]))",
+          "legendFormat": "tps"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "JVM 힙 사용량",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (jvm_memory_used_bytes{application=~\"$application\", area=\"heap\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "GC 일시 정지 (초/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(jvm_gc_pause_seconds_sum{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "플랫폼 스레드 수",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jvm_threads_live_threads{application=~\"$application\"}",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Virtual Thread pinning (건/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(jvm_threads_virtual_pinned_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} pinned"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (application) (rate(jvm_threads_virtual_submit_failed_total{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} submit failed"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "CPU 사용률",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_cpu_usage{application=~\"$application\"}",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Redis 명령 처리량",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(redis_commands_processed_total[1m])",
+          "legendFormat": "commands/s"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Redis 연결 수",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Redis 메모리",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "k6 VU 수",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "k6_vus",
+          "legendFormat": "VU"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "k6 요청 수 (초당)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(k6_http_reqs_total[1m]))",
+          "legendFormat": "reqs/s"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "k6 http_req_duration p95",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "k6_http_req_duration_p95",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "SSE 연결 수 근사 (realtime·gateway의 진행 중 GET)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (http_server_requests_active_seconds_gcount{application=~\"$application\", application=~\"realtime|gateway\", method=\"GET\"})",
+          "legendFormat": "{{application}} GET 진행 중"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "JVM 힙 사용률 (used/max)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (jvm_memory_used_bytes{application=~\"$application\", area=\"heap\"}) / sum by (application) (jvm_memory_max_bytes{application=~\"$application\", area=\"heap\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "GC 후 살아있는 데이터 (누수 추세)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jvm_gc_live_data_size_bytes{application=~\"$application\"}",
+          "legendFormat": "{{application}} live"
+        },
+        {
+          "refId": "B",
+          "expr": "jvm_gc_max_data_size_bytes{application=~\"$application\"}",
+          "legendFormat": "{{application}} max"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "힙 할당률 · 승격률",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(jvm_gc_memory_allocated_bytes_total{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} allocated"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (application) (rate(jvm_gc_memory_promoted_bytes_total{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} promoted"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "힙 메모리 풀별 사용량",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application, id) (jvm_memory_used_bytes{application=~\"$application\", area=\"heap\"})",
+          "legendFormat": "{{application}} {{id}}"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Direct·Mapped 버퍼 사용량",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jvm_buffer_memory_used_bytes{application=~\"$application\"}",
+          "legendFormat": "{{application}} {{id}}"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "GC 횟수 (회/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application, action) (rate(jvm_gc_pause_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} {{action}}"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "HTTP 진행 중 요청 수 (앱·URI)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application, uri) (http_server_requests_active_seconds_gcount{application=~\"$application\"})",
+          "legendFormat": "{{application}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "대기열 입장 처리량 (명/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (rate(queue_admission_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "{{result}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(queue_registration_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "등록"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "입장 배치 소요 (평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(queue_admission_batch_seconds_sum{application=\"realtime\"}[1m]) / rate(queue_admission_batch_seconds_count{application=\"realtime\"}[1m])",
+          "legendFormat": "평균"
+        },
+        {
+          "refId": "B",
+          "expr": "queue_admission_batch_seconds_max{application=\"realtime\"}",
+          "legendFormat": "최대"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "입장 스케줄러 실행 간격 (평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(queue_admission_scheduler_interval_seconds_sum{application=\"realtime\"}[1m]) / rate(queue_admission_scheduler_interval_seconds_count{application=\"realtime\"}[1m])",
+          "legendFormat": "평균"
+        },
+        {
+          "refId": "B",
+          "expr": "queue_admission_scheduler_interval_seconds_max{application=\"realtime\"}",
+          "legendFormat": "최대"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "대기열 이탈 (명/초, 사유별)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 80
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (rate(queue_departure_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "입장 후보 검사 (건/초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(queue_admission_candidates_total{application=\"realtime\"}[1m]))",
+          "legendFormat": "검사한 후보"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "생존 신호(seen) 갱신 지연 (평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(queue_presence_update_seconds_sum{application=\"realtime\"}[1m]) / rate(queue_presence_update_seconds_count{application=\"realtime\"}[1m])",
+          "legendFormat": "평균"
+        },
+        {
+          "refId": "B",
+          "expr": "queue_presence_update_seconds_max{application=\"realtime\"}",
+          "legendFormat": "최대"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "Redis 명령 지연 (Lettuce, 앱별 평균·최대)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(lettuce_seconds_sum{application=~\"$application\"}[1m])) / sum by (application) (rate(lettuce_seconds_count{application=~\"$application\"}[1m]))",
+          "legendFormat": "{{application}} 평균"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (application) (lettuce_seconds_max{application=~\"$application\"})",
+          "legendFormat": "{{application}} 최대"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "미완료 이벤트 발행 건수 (event_publication)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 96
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (application) (ticketing_event_publication_incomplete{application=~\"$application\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "timeseries",
+      "title": "최고령 미완료 이벤트 경과 (초)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 96
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (application) (ticketing_event_publication_oldest_incomplete_age_seconds{application=~\"$application\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "type": "timeseries",
+      "title": "결제 확정 지연 (PG 승인 → 예매 확정, p50·p95·p99)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 104
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(ticketing_booking_payment_confirmation_lag_seconds_bucket[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ticketing_booking_payment_confirmation_lag_seconds_bucket[1m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ticketing_booking_payment_confirmation_lag_seconds_bucket[1m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from pathlib import Path
 
 
@@ -17,9 +18,48 @@ def load_dashboards(directory: Path) -> dict[str, dict]:
     return dashboards
 
 
+def iter_panels(panels: list[dict]):
+    for panel in panels:
+        yield panel
+        yield from iter_panels(panel.get("panels", []))
+
+
+def iter_alerts():
+    for path in sorted(Path("observability/prometheus/rules").glob("*.rules.json")):
+        for group in json.loads(path.read_text(encoding="utf-8"))["groups"]:
+            for rule in group["rules"]:
+                if "alert" in rule:
+                    yield rule
+
+
+def check_dashboards(dashboards: dict[str, dict], alerts: list[dict]):
+    for uid in ("ticketing-overview", "ticketing-loadtest", "ticketing-hot-seats-gatling"):
+        if uid not in dashboards:
+            raise ValueError(f"{uid} 대시보드가 없다.")
+
+    overview_titles = {
+        panel["title"] for panel in iter_panels(dashboards["ticketing-overview"]["panels"])
+    }
+    for rule in alerts:
+        panel = rule.get("annotations", {}).get("panel")
+        if panel not in overview_titles:
+            raise ValueError(f'{rule["alert"]} 알림에 대응하는 운영 패널이 없다. ({panel})')
+
+    loadtest_queries = [
+        [panel["title"], [target["expr"] for target in panel.get("targets", []) if "expr" in target]]
+        for panel in iter_panels(dashboards["ticketing-loadtest"]["panels"])
+    ]
+    queries_json = json.dumps(loadtest_queries, ensure_ascii=False, separators=(",", ":"))
+    # 운영 개편 전 Overview 파일(27b04b0)의 패널 제목과 PromQL 목록을 기준으로 삼는다.
+    original_digest = "6d9c3fdb46ca742251f6a9367ea0ed2f57f0066bc27deca32f43ed984b435218"
+    if sha256(queries_json.encode("utf-8")).hexdigest() != original_digest:
+        raise ValueError("Load Test 대시보드의 패널 제목 또는 PromQL 목록이 달라졌다.")
+
+
 if __name__ == "__main__":
     try:
-        load_dashboards(Path("observability/grafana/dashboards"))
-    except (OSError, ValueError) as error:
+        dashboards = load_dashboards(Path("observability/grafana/dashboards"))
+        check_dashboards(dashboards, list(iter_alerts()))
+    except (OSError, ValueError, KeyError) as error:
         raise SystemExit(str(error)) from error
     print("관측 대시보드 검사를 통과했다.")
