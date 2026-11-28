@@ -74,7 +74,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T5. booking의 판매 중지 반영과 신규 예매 차단
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T4
 - 변경 범위와 제약: booking이 `PerformanceSuspensionChanged`를 구독해 `booking.schedule` 사본에 판매 가능 여부를 반영한다(`@ApplicationModuleListener`, 재전달 멱등, 상태 번호나 시각으로 순서 역전을 막는다). 신규 좌석 선점·예매 생성의 진입점에서 중지된 공연의 회차를 거부한다(`CreateBookingService`와 선점 경로를 확인하고 한 곳에서 판정한다). 기존 PENDING 예매의 결제·만료, CONFIRMED 예매 조회·취소는 막지 않는다. Redis 좌석 스냅샷·좌석 변경 스트림의 소비자(`realtime`)는 바꾸지 않는다.
 - 테스트 경계와 선례: 선례는 `ScheduleRegisteredListener`와 `CreateBookingService` 테스트. 중지 후 신규 선점·예매 거부(코드 포함), 중지 전 만든 PENDING 예매의 결제 성공, CONFIRMED 취소 가능, 재개 후 신규 예매 성공, 이벤트 재전달·순서 역전에서 최종 상태 유지를 확인한다. `ModularityTests`를 같은 실행에 포함한다.

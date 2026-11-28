@@ -70,6 +70,8 @@ class CreateBookingServiceTests {
         ScheduleSeatCommandPort {
         override fun saveIfAbsent(schedule: ScheduleCopy, seats: List<ScheduleSeatCopy>) = false
         override fun findSchedule(scheduleId: ScheduleId): ScheduleCopy? = null
+        override fun isSaleEnabled(scheduleId: ScheduleId) = true
+        override fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long) = Unit
         override fun existsSchedule(scheduleId: ScheduleId) = scheduleId in schedules
         override fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>) =
             seats.filter { it.scheduleId == scheduleId && it.seatId in seatIds }

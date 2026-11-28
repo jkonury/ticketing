@@ -11,6 +11,10 @@ interface ScheduleSeatCommandPort {
 
     fun findSchedule(scheduleId: ScheduleId): ScheduleCopy?
 
+    fun isSaleEnabled(scheduleId: ScheduleId): Boolean
+
+    fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long)
+
     fun existsSchedule(scheduleId: ScheduleId): Boolean
 
     fun findSeats(scheduleId: ScheduleId, seatIds: Collection<SeatId>): List<ScheduleSeatCopy>

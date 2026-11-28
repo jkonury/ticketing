@@ -2,6 +2,7 @@ package io.github.ticketing.booking.application.service
 
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
+import io.github.ticketing.booking.application.port.provided.UpdateScheduleSaleStatusUseCase
 import io.github.ticketing.booking.application.port.required.ScheduleSeatCommandPort
 import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.domain.ScheduleCopy
@@ -19,7 +20,12 @@ class RegisterScheduleSeatsService(
     private val scheduleSeats: ScheduleSeatCommandPort,
     private val seatHold: SeatHoldPort,
     private val clock: Clock,
-) : RegisterScheduleSeatsUseCase {
+) : RegisterScheduleSeatsUseCase,
+    UpdateScheduleSaleStatusUseCase {
+    @Transactional
+    override fun update(performanceId: Long, saleEnabled: Boolean, version: Long) =
+        scheduleSeats.updateSaleStatus(performanceId, saleEnabled, version)
+
     @Transactional
     override fun register(command: RegisterScheduleSeatsCommand): Boolean {
         val scheduleId = ScheduleId(command.scheduleId)
