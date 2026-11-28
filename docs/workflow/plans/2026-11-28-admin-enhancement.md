@@ -18,7 +18,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ## 범위
 
-- 포함: core(member·catalog·booking·audit), payment 앱의 관리자 조회, Gateway 라우트, OpenAPI 스펙과 BFF 경계 스키마 재생성, `web/admin` 화면, 아키텍처·API·이벤트·ERD 문서 갱신.
+- 포함: core(member·catalog·booking·audit), payment 앱의 관리자 조회, Gateway 라우트, OpenAPI 스펙과 BFF 경계 스키마 재생성, `web/src/app/admin` 화면, 아키텍처·API·이벤트·ERD 문서 갱신.
 - 범위 밖: 예매 강제 취소·환불, 공연 취소 Saga, PENDING 예매 정리, 정산 전체 조회, 운영 도구(이벤트 재처리·배치 실행), 대시보드, 관리자 역할 세분화, 정지 사유의 회원 노출, access 토큰 즉시 무효화.
 
 ## task
@@ -86,17 +86,18 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T6. OpenAPI 스펙과 BFF 경계 스키마 재생성
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2, T3, T4
 - 변경 범위와 제약: [ADR 0047](../../adr/0047-openapi-codegen-for-bff-boundary.md)의 절차대로 core·payment 스펙(`docs/api/openapi/*.json`)과 `web`의 Zod 스키마를 재생성하고 drift 검사를 통과시킨다. 손으로 생성 파일을 고치지 않는다. `web/src/server/api/admin.ts` 계열에 예매·결제·공연·정지 호출 함수를 추가한다.
 - 테스트 경계와 선례: 선례는 `web/src/server/api/admin.test.ts`. 요청 경로·본문·응답 파싱을 단위 테스트로 확인한다.
 - AC:
 
   ```bash
+  ./scripts/agent/test/run-tests.sh :core:test :payment:test --tests '*OpenApiContractTests'
+  pnpm --dir web run api:check
+  pnpm --dir web exec vitest run src/server/api/admin.test.ts
   ./scripts/agent/test/verify-changed.sh
   ```
-
-  (재생성 절차와 drift 검사 명령은 [ADR 0047](../../adr/0047-openapi-codegen-for-bff-boundary.md)·[프런트엔드 지침](../../rules/frontend.md)에서 확인해 AC에 구체 명령으로 바꿔 적는다.)
 
 ### T7. web 관리자 화면
 

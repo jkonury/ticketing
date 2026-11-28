@@ -1,6 +1,113 @@
 {
   "components" : {
     "schemas" : {
+      "AdminBookingDetailResponse" : {
+        "properties" : {
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "coupon" : {
+            "oneOf" : [ {
+              "$ref" : "#/components/schemas/BookingCouponView"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "discountAmount" : {
+            "type" : "number"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "listAmount" : {
+            "type" : "number"
+          },
+          "memberId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "payableAmount" : {
+            "type" : "number"
+          },
+          "performanceTitle" : {
+            "type" : "string"
+          },
+          "scheduleId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "seats" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BookingSeatResponse"
+            },
+            "type" : "array"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "CONFIRMED", "EXPIRED", "CANCELLED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "bookingId", "createdAt", "discountAmount", "expiresAt", "listAmount", "memberId", "payableAmount", "performanceTitle", "scheduleId", "seats", "startsAt", "status" ],
+        "type" : "object"
+      },
+      "AdminBookingPageResponse" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminBookingSummaryResponse"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "AdminBookingSummaryResponse" : {
+        "properties" : {
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "memberId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "performanceTitle" : {
+            "type" : "string"
+          },
+          "scheduleId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "CONFIRMED", "EXPIRED", "CANCELLED" ],
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "bookingId", "createdAt", "memberId", "performanceTitle", "scheduleId", "status", "totalAmount" ],
+        "type" : "object"
+      },
       "AdminCouponPageResponse" : {
         "properties" : {
           "items" : {
@@ -78,6 +185,50 @@
           }
         },
         "required" : [ "discountType", "discountValue", "id", "issueMode", "minOrderAmount", "name", "stats", "status", "validFrom", "validUntil" ],
+        "type" : "object"
+      },
+      "AdminPerformancePage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminPerformanceSummary"
+            },
+            "type" : "array"
+          },
+          "nextCursor" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "items" ],
+        "type" : "object"
+      },
+      "AdminPerformanceSummary" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "organizerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "venueName" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "createdAt", "id", "organizerId", "status", "title", "venueName" ],
         "type" : "object"
       },
       "ApplyCouponRequest" : {
@@ -734,9 +885,27 @@
           "role" : {
             "enum" : [ "USER", "ORGANIZER", "ADMIN" ],
             "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
           }
         },
-        "required" : [ "createdAt", "email", "id", "name", "role" ],
+        "required" : [ "createdAt", "email", "id", "name", "role", "status" ],
+        "type" : "object"
+      },
+      "MemberSuspensionResponse" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "status" ],
         "type" : "object"
       },
       "MyCouponResponse" : {
@@ -778,6 +947,19 @@
           }
         },
         "required" : [ "definition", "definitionId", "id", "issuedAt", "memberId", "status" ],
+        "type" : "object"
+      },
+      "OrganizerPerformanceResponse" : {
+        "properties" : {
+          "performance" : {
+            "$ref" : "#/components/schemas/PerformanceDetailResponse"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "performance", "status" ],
         "type" : "object"
       },
       "PaymentRequestResponse" : {
@@ -876,6 +1058,20 @@
           }
         },
         "required" : [ "id", "title", "venueName" ],
+        "type" : "object"
+      },
+      "PerformanceSuspensionResponse" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "status" ],
         "type" : "object"
       },
       "PosterUploadRequest" : {
@@ -1113,6 +1309,28 @@
         "required" : [ "expiresAt", "ticket" ],
         "type" : "object"
       },
+      "SuspendMemberRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
+        "type" : "object"
+      },
+      "SuspendPerformanceRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
+        "type" : "object"
+      },
       "TokenResponse" : {
         "properties" : {
           "accessExpiresIn" : {
@@ -1257,7 +1475,7 @@
   "paths" : {
     "/api/v1/admin/audit-logs" : {
       "get" : {
-        "operationId" : "list_2",
+        "operationId" : "list_3",
         "parameters" : [ {
           "in" : "query",
           "name" : "cursor",
@@ -1322,6 +1540,118 @@
           }
         },
         "tags" : [ "admin-audit-log-controller" ]
+      }
+    },
+    "/api/v1/admin/bookings" : {
+      "get" : {
+        "operationId" : "list_2",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "memberId",
+          "required" : false,
+          "schema" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "scheduleId",
+          "required" : false,
+          "schema" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "PENDING", "CONFIRMED", "EXPIRED", "CANCELLED" ],
+            "type" : "string"
+          }
+        }, {
+          "description" : "예매 생성 시각 하한(포함)",
+          "in" : "query",
+          "name" : "createdFrom",
+          "required" : false,
+          "schema" : {
+            "description" : "예매 생성 시각 하한(포함)",
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "description" : "예매 생성 시각 상한(포함)",
+          "in" : "query",
+          "name" : "createdTo",
+          "required" : false,
+          "schema" : {
+            "description" : "예매 생성 시각 상한(포함)",
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 50,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminBookingPageResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-booking-controller" ]
+      }
+    },
+    "/api/v1/admin/bookings/{id}" : {
+      "get" : {
+        "operationId" : "detail_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminBookingDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-booking-controller" ]
       }
     },
     "/api/v1/admin/coupons" : {
@@ -1675,6 +2005,191 @@
           }
         },
         "tags" : [ "admin-member-controller" ]
+      }
+    },
+    "/api/v1/admin/members/{id}/suspension" : {
+      "delete" : {
+        "operationId" : "reinstate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberSuspensionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-member-controller" ]
+      },
+      "put" : {
+        "operationId" : "suspendMember",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SuspendMemberRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberSuspensionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-member-controller" ]
+      }
+    },
+    "/api/v1/admin/performances" : {
+      "get" : {
+        "operationId" : "adminPerformances",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "organizerId",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "title",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "cursor",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminPerformancePage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-performance-controller" ]
+      }
+    },
+    "/api/v1/admin/performances/{id}/suspension" : {
+      "delete" : {
+        "operationId" : "resumePerformance",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerformanceSuspensionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-performance-controller" ]
+      },
+      "put" : {
+        "operationId" : "suspendPerformance",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SuspendPerformanceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerformanceSuspensionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-performance-controller" ]
       }
     },
     "/api/v1/auth/tokens" : {
@@ -2111,6 +2626,33 @@
           }
         },
         "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/organizer/performances/{id}" : {
+      "get" : {
+        "operationId" : "ownedPerformance",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrganizerPerformanceResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "organizer-performance-controller" ]
       }
     },
     "/api/v1/organizer/sales" : {

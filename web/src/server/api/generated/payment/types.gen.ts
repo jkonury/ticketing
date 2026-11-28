@@ -6,6 +6,17 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AdminPaymentResponse = {
+  amount: number;
+  approvedAt?: string | null;
+  bookingId: number;
+  failureReason?: string | null;
+  refundRequestedAt?: string | null;
+  refundedAt?: string | null;
+  requestedAt: string;
+  status: string;
+};
+
 export type PaymentStatusResponse = {
   approvedAt?: string | null;
   bookingId: number;
@@ -13,6 +24,25 @@ export type PaymentStatusResponse = {
   refundedAt?: string | null;
   status: string;
 };
+
+export type AdminByBookingIdData = {
+  body?: never;
+  path?: never;
+  query: {
+    bookingId: number;
+  };
+  url: '/api/v1/admin/payments';
+};
+
+export type AdminByBookingIdResponses = {
+  /**
+   * OK
+   */
+  200: Array<AdminPaymentResponse>;
+};
+
+export type AdminByBookingIdResponse =
+  AdminByBookingIdResponses[keyof AdminByBookingIdResponses];
 
 export type MineData = {
   body?: never;

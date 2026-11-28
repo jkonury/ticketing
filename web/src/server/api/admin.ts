@@ -1,12 +1,24 @@
 import 'server-only';
 import { gateway } from './gateway-client';
 import {
+  zAdminBookingDetailResponse,
+  zAdminBookingPageResponse,
+  zAdminPerformancePage,
   zAuditLogPage,
   zChangeRoleRequest,
   zMemberPage,
   zMemberResponse,
+  zMemberSuspensionResponse,
+  zPerformanceSuspensionResponse,
+  zSuspendMemberRequest,
+  zSuspendPerformanceRequest,
 } from './generated/core/zod.gen';
-import type { ChangeRoleRequest } from './generated/core/types.gen';
+import type {
+  AdminBookingSummaryResponse,
+  AdminPerformanceSummary,
+  ChangeRoleRequest,
+} from './generated/core/types.gen';
+import { zAdminByBookingIdResponse } from './generated/payment/zod.gen';
 
 export const roleSchema = zChangeRoleRequest.shape.role;
 export {
@@ -57,6 +69,93 @@ export function listAuditLogs(params: {
   return gateway.call({
     path: `/api/v1/admin/audit-logs${toQuery(params)}`,
     schema: zAuditLogPage,
+    auth: 'required',
+  });
+}
+
+export function listAdminBookings(params: {
+  memberId?: number;
+  scheduleId?: number;
+  status?: AdminBookingSummaryResponse['status'];
+  createdFrom?: string;
+  createdTo?: string;
+  cursor?: number;
+  size?: number;
+}) {
+  return gateway.call({
+    path: `/api/v1/admin/bookings${toQuery(params)}`,
+    schema: zAdminBookingPageResponse,
+    auth: 'required',
+  });
+}
+
+export function getAdminBooking(id: number) {
+  return gateway.call({
+    path: `/api/v1/admin/bookings/${id}`,
+    schema: zAdminBookingDetailResponse,
+    auth: 'required',
+  });
+}
+
+export function getAdminPayment(bookingId: number) {
+  return gateway.call({
+    path: `/api/v1/admin/payments${toQuery({ bookingId })}`,
+    schema: zAdminByBookingIdResponse,
+    auth: 'required',
+    timeoutMs: 2000,
+  });
+}
+
+export function listAdminPerformances(params: {
+  organizerId?: number;
+  title?: string;
+  status?: AdminPerformanceSummary['status'];
+  cursor?: number;
+  size?: number;
+}) {
+  return gateway.call({
+    path: `/api/v1/admin/performances${toQuery(params)}`,
+    schema: zAdminPerformancePage,
+    auth: 'required',
+  });
+}
+
+export function suspendMember(id: number, reason: string) {
+  return gateway.call({
+    method: 'PUT',
+    path: `/api/v1/admin/members/${id}/suspension`,
+    body: { reason },
+    bodySchema: zSuspendMemberRequest,
+    schema: zMemberSuspensionResponse,
+    auth: 'required',
+  });
+}
+
+export function reinstateMember(id: number) {
+  return gateway.call({
+    method: 'DELETE',
+    path: `/api/v1/admin/members/${id}/suspension`,
+    schema: zMemberSuspensionResponse,
+    auth: 'required',
+  });
+}
+
+export function suspendPerformance(id: number, reason: string) {
+  return gateway.call({
+    method: 'PUT',
+    path: `/api/v1/admin/performances/${id}/suspension`,
+    body: { reason },
+    bodySchema: zSuspendPerformanceRequest,
+    schema: zPerformanceSuspensionResponse,
+    auth: 'required',
+  });
+}
+
+export function resumePerformance(id: number) {
+  return gateway.call({
+    method: 'DELETE',
+    path: `/api/v1/admin/performances/${id}/suspension`,
+    schema: zPerformanceSuspensionResponse,
     auth: 'required',
   });
 }
