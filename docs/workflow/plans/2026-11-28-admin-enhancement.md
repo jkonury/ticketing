@@ -37,7 +37,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T2. 관리자 결제 조회 API (payment)
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: payment 앱에 `bookingId`(= `orderId`)로 결제 상태·금액·환불을 조회하는 관리자 전용 API를 추가한다. 단독 목록 화면용 필터 API는 만들지 않는다. JWT는 payment 앱이 검증하며 ADMIN 역할만 허용한다. Gateway `payment-api` 라우트가 `/api/v1/admin/payments`를 payment로 보내는지 확인하고 필요하면 라우트와 문서를 고친다. `payment_db` 스키마 변경은 하지 않는다.
 - 테스트 경계와 선례: payment 앱의 HTTP 통합 테스트. 선례는 `PaymentQueryController`의 테스트. ADMIN 200, 그 외 403, 결제 없는 `bookingId`는 빈 결과 또는 404(기존 `payments/me` 규칙과 같게)를 확인한다. Gateway 라우팅 테스트가 있으면 같은 선례로 추가한다.

@@ -96,6 +96,20 @@ class GatewayRoutingTests(
     }
 
     @Test
+    fun `관리자 결제 조회는 payment 앱에 그대로 전달한다`() {
+        val jwt = token(subject = System.nanoTime().toString())
+
+        client.get().uri("/api/v1/admin/payments?bookingId=12").headers { it.setBearerAuth(jwt) }.exchange().expectStatus().isOk
+
+        assertThat(payment.requests).hasSize(1)
+        val forwarded = payment.requests.single()
+        assertThat(forwarded.path).isEqualTo("api/v1/admin/payments")
+        assertThat(forwarded.query).isEqualTo("bookingId=12")
+        assertThat(forwarded.headers.getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer $jwt")
+        assertThat(core.requests).isEmpty()
+    }
+
+    @Test
     fun `정산 조회는 쿼리와 인증 헤더를 포함해 settlement 앱에 전달한다`() {
         val jwt = token()
         val query = "from=2026-11-01&to=2026-11-30"

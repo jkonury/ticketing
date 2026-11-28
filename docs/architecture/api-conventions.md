@@ -7,7 +7,7 @@
 
 ```
 브라우저 ─▶ Next.js BFF ─▶ Gateway(18000) ─▶ 코어(18080)
-                                          └─▶ payment(18085)   (/api/v1/payments/**)
+                                          └─▶ payment(18085)   (/api/v1/payments/**, /api/v1/admin/payments)
                                           └─▶ settlement(18086) (/api/v1/settlements)
 브라우저 ─(SSE, 단기 티켓)─▶ Gateway(18000) ─▶ realtime(18081)
 ```
@@ -22,6 +22,7 @@
 | `/api/v1/queues/**` | realtime | JWT 필수, 회원 ID를 `X-Member-Id`로 전달, rate limit |
 | `/api/v1/streams/**` | realtime | SSE 티켓 소비, rate limit |
 | `/api/v1/payments/**` | payment | rate limit. `/api/v1/payments/webhooks` 하위는 라우팅 전에 404로 막는다(웹훅은 fake-pg가 payment 앱을 직접 호출) |
+| `/api/v1/admin/payments` | payment | rate limit. payment 앱에서 JWT 검증 후 ADMIN만 조회할 수 있다 |
 | `/api/v1/settlements` | settlement | 기본 rate limit, `Authorization`을 정산 앱에 전달 |
 | `POST /api/v1/bookings` | 코어 | JWT 필수, 입장 토큰 검증, rate limit |
 | `POST /api/v1/coupons/*/claims` | 코어 | 전용 rate limit 버킷(`coupon-claim`, 보충 1·버스트 3. 회원당 1회 시나리오라 429는 검증하지 못한 임시값 확정, [coupon-drop.md](../performance/m5.5/coupon-drop.md)) |
