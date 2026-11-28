@@ -115,7 +115,7 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T7. 문서 갱신
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2, T3, T4
 - 변경 범위와 제약: 아래 문서를 구현된 상태로 맞춘다.
   - [architecture.md](../../architecture.md): audit 이벤트 목록과 모듈 설명

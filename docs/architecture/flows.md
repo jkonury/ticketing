@@ -61,7 +61,9 @@ sequenceDiagram
     B-->>U: 201 (같은 멱등 키 재요청은 200)
 
     U->>B: POST /api/v1/bookings/{id}/payments
-    alt 이미 만료
+    alt 공연 취소가 반영된 결제 대기 예매
+        B-->>U: 409 PERFORMANCE_CANCELLED
+    else 이미 만료
         B->>B: EXPIRED 전환
         B-->>U: 409 BOOKING_EXPIRED
     else 이미 요청함
@@ -87,6 +89,11 @@ sequenceDiagram
             B-)P: RefundRequested
             P->>PG: 환불 요청 (자동 환불)
             B->>R: 좌석 반환 (커밋 후)
+        else 확정 가능한 결제에서 공연 취소 감지
+            B->>B: CANCELLED(PERFORMANCE_CANCELLED)
+            B-)P: RefundRequested
+            P->>PG: 환불 요청
+            B->>R: 좌석 반환 (커밋 후)
         else 확정 시 유니크 위반
             B->>B: sold_seat 충돌 → CANCELLED(SEAT_ALREADY_SOLD)
             B-)P: RefundRequested
@@ -105,22 +112,30 @@ sequenceDiagram
 ## 6.3 예매 상태 전이
 
 ```
-PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요청)──▶ CANCELLED(USER_REQUESTED)
+PENDING ──결제 성공──▶ CONFIRMED ──예매·공연 취소──▶ CANCELLED + 환불 요청
    │
    ├──시간 초과──▶ EXPIRED
-   ├──사용자 취소──▶ CANCELLED(USER_REQUESTED)
+   ├──예매·공연 취소──▶ CANCELLED(USER_REQUESTED / ADMIN_CANCELLED / PERFORMANCE_CANCELLED)
    ├──결제 실패──▶ CANCELLED(PAYMENT_FAILED)
    ├──결제 금액 불일치──▶ CANCELLED(AMOUNT_MISMATCH) + 환불 요청
-   └──확정 시 이미 판매된 좌석──▶ CANCELLED(SEAT_ALREADY_SOLD) + 환불 요청
+   ├──확정 시 이미 판매된 좌석──▶ CANCELLED(SEAT_ALREADY_SOLD) + 환불 요청
+   └──확정 시 취소된 공연──▶ CANCELLED(PERFORMANCE_CANCELLED) + 환불 요청
 ```
 
 - **만료는 지연 판정**: 예매는 `expiresAt = 생성 시각 + 5분`을 갖는다. 결제 요청이나 결제 결과가 도착했을 때 `Clock`과 비교해 `EXPIRED`로 전환한다. 일괄 정리는 M2 Batch가 한다.
 - **결제 실패**: `PENDING → CANCELLED`(사유 `PAYMENT_FAILED`)로 바꾸고 좌석을 반환한다. 재결제는 없다.
-- **확정 예매 취소**: 즉시 `CANCELLED`(`USER_REQUESTED`)로 바꾸고 `RefundRequested`를 발행한다. 환불은 비동기다.
+- **예매 취소**: 사용자 요청은 `USER_REQUESTED`, 관리자 강제 취소는 `ADMIN_CANCELLED`, 공연 취소 Saga는 `PERFORMANCE_CANCELLED`로 바꾼다. 결제 대기 예매는 쿠폰 복원을 요청하고 커밋 후 좌석 선점을 풀며, 확정 예매는 판매 좌석을 삭제하고 비동기 환불을 요청한다. 확정 예매에 사용한 쿠폰은 소멸한다. 관리자 강제 취소는 관리자가 입력한 사유를 내부 `BookingForceCancelled`로 전달해 감사 로그에 기록한다.
 - **결제 금액 불일치**는 PG 승인 금액과 쿠폰 할인을 반영한 `payableAmount`를 `compareTo`로 비교해 판단한다. 불일치하면 `PENDING → CANCELLED`(`AMOUNT_MISMATCH`)로 바꾸고 `RefundRequested`(사유 `AMOUNT_MISMATCH`)와 `BookingCancelled`(`refundRequired=true`)를 발행하며 커밋 후 선점을 해제한다. `sold_seat`는 넣지 않는다. 만료 판정이 먼저라서 만료됐으면 `EXPIRED` 환불 경로로 처리한다.
-- **결제 재호출**(`POST /api/v1/bookings/{id}/payments`)에서 접수 이력이 있는 `PENDING`·`CONFIRMED` 예매는 만료 시각이나 회차 시작 시각이 지나도 현재 상태를 `202`로 반환한다. 이벤트 재발행은 없다. 최초 요청은 예매 만료와 회차 시작을 검사한다. `CANCELLED`와 접수 이력이 없는 `CONFIRMED`는 `409 INVALID_BOOKING_STATE`, `EXPIRED`는 `409 BOOKING_EXPIRED`를 반환한다. [ADR 0044](../adr/0044-sales-close-and-payment-retry.md)
+- **결제 재호출**(`POST /api/v1/bookings/{id}/payments`)에서 접수 이력이 있는 `PENDING`·`CONFIRMED` 예매는 만료 시각이나 회차 시작 시각이 지나도 현재 상태를 `202`로 반환한다. 공연 취소가 반영된 회차의 `PENDING` 예매는 `409 PERFORMANCE_CANCELLED`로 거부한다. 재호출에서 이벤트 재발행은 없다. 최초 요청은 예매 만료와 회차 시작을 검사한다. `CANCELLED`와 접수 이력이 없는 `CONFIRMED`는 `409 INVALID_BOOKING_STATE`, `EXPIRED`는 `409 BOOKING_EXPIRED`를 반환한다. [ADR 0044](../adr/0044-sales-close-and-payment-retry.md), [ADR 0054](../adr/0054-admin-force-cancel-and-performance-cancel.md)
 - **동시 수정 충돌**: HTTP 요청 경로에서 `Booking`의 낙관적 락(`@Version`) 충돌이 나면 `ApiExceptionHandler`가 `409 CONCURRENT_MODIFICATION`으로 변환하며 클라이언트가 다시 시도한다. 이벤트 리스너 경로는 예외를 그대로 던져 이벤트 발행 레지스트리가 재시도한다.
 - 같은 결제 결과 이벤트가 다시 와도 상태는 다시 바뀌지 않는다(멱등).
+
+### 공연 취소 Saga
+
+1. catalog가 공연을 `CANCELLED`로 저장하고 같은 트랜잭션에서 `PerformanceCancelled`를 발행한다. 공개 조회에서는 즉시 제외되며 판매 재개는 거부된다.
+2. booking 리스너가 공연·회차 사본에 취소 상태를 먼저 커밋한다. 신규 예매 저장, 결제 요청, 좌석 확정은 트랜잭션에서 회차 사본의 공유 잠금(`FOR SHARE`)을 사용한다. 사본 갱신 전에 커밋한 예매는 Saga가 찾고, 갱신 뒤에는 취소 상태를 읽어 신규 예매·결제를 거부한다. 판매 중지 상태에서는 기존 예매의 결제와 확정이 계속 가능하다.
+3. 리스너는 트랜잭션 없이 실행되며, 해당 공연의 `PENDING`·`CONFIRMED` 예매를 예매 ID 순서로 조회해 청크마다 별도 트랜잭션에서 공용 경로로 취소한다. `ticketing.booking.performance-cancellation.chunk-size`의 기본값은 100이다. 실패한 청크를 롤백하고 이벤트를 미완료로 남긴다. 재발행하면 아직 취소되지 않은 예매부터 다시 조회한다.
+4. audit는 같은 공연 취소 이벤트를 구독해 관리자와 사유를 기록한다. 운영자는 [런북의 예매 현황 확인 절차](../runbook.md#11-관리자-기능-운영)로 남은 예매를 확인할 수 있다.
 
 ## 6.4 결제 (이벤트 기반)
 
@@ -135,6 +150,7 @@ PENDING ──결제 성공──▶ CONFIRMED ──사용자 취소(환불 요
 - 만료 시각이 지났거나 이미 `EXPIRED`인 예매는 `EXPIRED` 상태와 사유 `BOOKING_EXPIRED`로 처리한다.
 - 이미 취소된 예매는 `CANCELLED`를 유지하고 환불 요청 사유로 `BOOKING_CANCELLED`를 사용한다.
 - 만료되지 않은 `PENDING` 예매의 승인 금액이 결제 예정 금액과 다르면 `CANCELLED`와 사유 `AMOUNT_MISMATCH`로 처리한다.
+- 주문이 확정 가능한 시점에 공연 취소가 사본에 반영돼 있으면 `sold_seat` 삽입 전에 `CANCELLED`로 바꾼다. `PERFORMANCE_CANCELLED`로 환불과 쿠폰 복원을 요청하고, 커밋 후 좌석 선점을 푼다.
 - 확정 중 `booking.sold_seat` 유니크 제약에 걸리면 `CANCELLED`와 사유 `SEAT_ALREADY_SOLD`로 처리한다.
 
 **결제 결과 처리의 트랜잭션 구조**

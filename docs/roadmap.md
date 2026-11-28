@@ -55,6 +55,7 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 ## 별도 구현 항목
 
 - [x] 관리자 기능 강화. 공연 판매 중지·재개, 회원 이용 정지·해제, 관리자 예매·결제 조회 ([실행 계획](./workflow/plans/2026-11-28-admin-enhancement.md), [ADR 0052](./adr/0052-admin-intervention-states.md))
+- [x] 관리자 예매 강제 취소와 공연 취소 Saga ([실행 계획](./workflow/plans/2026-11-28-admin-cancel-saga.md), [ADR 0054](./adr/0054-admin-force-cancel-and-performance-cancel.md))
 - [x] 개발·CI 포스터 저장소 RustFS 전환 ([실행 계획](./workflow/plans/2026-11-28-poster-storage-rustfs.md), [ADR 0053](./adr/0053-poster-storage-rustfs.md))
 
 ## 단계와 무관한 후속 항목
@@ -67,7 +68,7 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 
 | 순서 | 항목 | 도입 시점 |
 |---|---|---|
-| 1 | 관리자 기능 후속 | 예매 강제 취소·공연 취소 Saga 먼저, 정산 전체 조회·운영 도구·대시보드는 그다음. [ADR 0052](./adr/0052-admin-intervention-states.md) |
+| 1 | 관리자 기능 후속 | 정산 전체 조회·운영 도구·대시보드. [ADR 0052](./adr/0052-admin-intervention-states.md) |
 | 2 | 실제 PG 연동 (테스트 모드) | 가짜 PG 보상 흐름 검증 완료(M6 Saga 재검증). k8s Secret 구성 이후 |
 | 3 | 판매 통계 집계 Batch | 핵심 Batch 3종(M2) 완료. settlement의 Kafka 소비 구조에 붙인다 |
 | - | `coupon-claim` rate limit 수치 검증 테스트 | M5.5-3 측정 후속. 현재 값은 임시. 범위가 작아 다른 작업 사이에 처리 |
@@ -92,4 +93,4 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 | Gatling hot-seats 1,000명 p95 300ms | 장기 과제. 15회 예열 독립 5회 중앙값 386ms로 모두 미달. [후속 계획](./plans/hot-seats-gatling-p95-300ms.md), [외부 예열 최종 보고](./performance/m5/12-gatling-hot-seats-p95-300ms-report.md) |
 | 콜드 p95 300ms (잠정 900ms 기준은 충족) | 장기 과제. 내부 예열 후 3회 측정 모두 300ms 미달. [계획](./plans/hot-seats-internal-warmup-cold-900ms.md), [문서 18](./performance/m5/18-warmup-traffic-mix.md). 최신 코드의 JFR 재집계와 [TCP 진단(19)](./performance/m5/19-warmup-tcp-diagnosis.md)은 미완료 |
 | B 예매 생성 p95 300ms (잠정 기준 미달) | 장기 과제. 최종 콜드 1,385ms, 워밍업 383ms. 원인 미확정. [최종 보고서](./performance/m5/11-step8-final-report.md) |
-| 관리자 기능 후속 | 예매 강제 취소·공연 취소 Saga, 정산 전체 조회, 운영 도구, 대시보드. [ADR 0052](./adr/0052-admin-intervention-states.md) |
+| 관리자 기능 후속 | 정산 전체 조회, 운영 도구, 대시보드. [ADR 0052](./adr/0052-admin-intervention-states.md) |
