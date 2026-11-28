@@ -23,7 +23,7 @@ export const zAdminPerformanceSummary = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   id: z.int(),
   organizerId: z.int(),
-  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED']),
   title: z.string(),
   venueName: z.string(),
 });
@@ -87,6 +87,16 @@ export const zBookingSeatResponse = z.object({
 
 export const zAdminBookingDetailResponse = z.object({
   bookingId: z.int(),
+  cancelReason: z
+    .enum([
+      'USER_REQUESTED',
+      'PAYMENT_FAILED',
+      'SEAT_ALREADY_SOLD',
+      'AMOUNT_MISMATCH',
+      'ADMIN_CANCELLED',
+      'PERFORMANCE_CANCELLED',
+    ])
+    .optional(),
   coupon: zBookingCouponView.nullish(),
   createdAt: z.iso.datetime({ offset: true }),
   discountAmount: z.number(),
@@ -145,6 +155,10 @@ export const zBookingSummaryResponse = z.object({
 export const zBookingPageResponse = z.object({
   items: z.array(zBookingSummaryResponse),
   nextCursor: z.int().nullish(),
+});
+
+export const zCancelPerformanceRequest = z.object({
+  reason: z.string().min(0).max(200),
 });
 
 export const zChangeRoleRequest = z.object({
@@ -265,6 +279,10 @@ export const zCreateCouponRequest = z.object({
   validUntil: z.iso.datetime({ offset: true }).nullable(),
 });
 
+export const zForceCancelBookingRequest = z.object({
+  reason: z.string().min(0).max(200),
+});
+
 export const zGradePrice = z.object({
   grade: z.string(),
   price: z.number(),
@@ -347,6 +365,11 @@ export const zPaymentRequestResponse = z.object({
   status: z.string(),
 });
 
+export const zPerformanceCancellationResponse = z.object({
+  id: z.int(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED']),
+});
+
 export const zPerformanceSummaryResponse = z.object({
   firstStartsAt: z.iso.datetime({ offset: true }).nullish(),
   genre: z
@@ -365,7 +388,7 @@ export const zPerformancePageResponse = z.object({
 
 export const zPerformanceSuspensionResponse = z.object({
   id: z.int(),
-  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED']),
 });
 
 export const zPosterUploadRequest = z.object({
@@ -451,7 +474,7 @@ export const zPerformanceDetailResponse = z.object({
 
 export const zOrganizerPerformanceResponse = z.object({
   performance: zPerformanceDetailResponse,
-  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED']),
 });
 
 export const zSeatView = z.object({
@@ -566,6 +589,7 @@ export const zList3Response = zAuditLogPage;
 export const zList2Query = z.object({
   memberId: z.int().gt(0).optional(),
   scheduleId: z.int().gt(0).optional(),
+  performanceId: z.int().gt(0).optional(),
   status: z.enum(['PENDING', 'CONFIRMED', 'EXPIRED', 'CANCELLED']).optional(),
   createdFrom: z.iso.datetime({ offset: true }).optional(),
   createdTo: z.iso.datetime({ offset: true }).optional(),
@@ -586,6 +610,17 @@ export const zDetail1Path = z.object({
  * OK
  */
 export const zDetail1Response = zAdminBookingDetailResponse;
+
+export const zForceCancelBody = zForceCancelBookingRequest;
+
+export const zForceCancelPath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zForceCancelResponse = zBookingResponse;
 
 export const zListQuery = z.object({
   cursor: z.int().optional(),
@@ -713,7 +748,7 @@ export const zSuspendMemberPath = z.object({
 export const zSuspendMemberResponse = zMemberSuspensionResponse;
 
 export const zAdminPerformancesQuery = z.object({
-  status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED']).optional(),
   organizerId: z.int().optional(),
   title: z.string().optional(),
   cursor: z.int().optional(),
@@ -724,6 +759,17 @@ export const zAdminPerformancesQuery = z.object({
  * OK
  */
 export const zAdminPerformancesResponse = zAdminPerformancePage;
+
+export const zCancelPerformanceBody = zCancelPerformanceRequest;
+
+export const zCancelPerformancePath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zCancelPerformanceResponse = zPerformanceCancellationResponse;
 
 export const zResumePerformancePath = z.object({
   id: z.int(),

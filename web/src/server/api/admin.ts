@@ -5,10 +5,14 @@ import {
   zAdminBookingPageResponse,
   zAdminPerformancePage,
   zAuditLogPage,
+  zBookingResponse,
+  zCancelPerformanceRequest,
   zChangeRoleRequest,
+  zForceCancelBookingRequest,
   zMemberPage,
   zMemberResponse,
   zMemberSuspensionResponse,
+  zPerformanceCancellationResponse,
   zPerformanceSuspensionResponse,
   zSuspendMemberRequest,
   zSuspendPerformanceRequest,
@@ -76,6 +80,7 @@ export function listAuditLogs(params: {
 export function listAdminBookings(params: {
   memberId?: number;
   scheduleId?: number;
+  performanceId?: number;
   status?: AdminBookingSummaryResponse['status'];
   createdFrom?: string;
   createdTo?: string;
@@ -93,6 +98,17 @@ export function getAdminBooking(id: number) {
   return gateway.call({
     path: `/api/v1/admin/bookings/${id}`,
     schema: zAdminBookingDetailResponse,
+    auth: 'required',
+  });
+}
+
+export function forceCancelBooking(id: number, reason: string) {
+  return gateway.call({
+    method: 'POST',
+    path: `/api/v1/admin/bookings/${id}/cancellation`,
+    body: { reason },
+    bodySchema: zForceCancelBookingRequest,
+    schema: zBookingResponse,
     auth: 'required',
   });
 }
@@ -156,6 +172,17 @@ export function resumePerformance(id: number) {
     method: 'DELETE',
     path: `/api/v1/admin/performances/${id}/suspension`,
     schema: zPerformanceSuspensionResponse,
+    auth: 'required',
+  });
+}
+
+export function cancelPerformance(id: number, reason: string) {
+  return gateway.call({
+    method: 'PUT',
+    path: `/api/v1/admin/performances/${id}/cancellation`,
+    body: { reason },
+    bodySchema: zCancelPerformanceRequest,
+    schema: zPerformanceCancellationResponse,
     auth: 'required',
   });
 }

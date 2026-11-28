@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adminMemberPageSchema,
   auditLogPageSchema,
+  cancelPerformance,
+  forceCancelBooking,
   roleChangeSchema,
   getAdminBooking,
   getAdminPayment,
@@ -160,7 +162,7 @@ describe('관리자 API 호출', () => {
           organizerId: 3,
           title: '공연',
           venueName: '공연장',
-          status: 'SUSPENDED',
+          status: 'CANCELLED',
           createdAt: date,
         },
       ],
@@ -185,7 +187,7 @@ describe('관리자 API 호출', () => {
       .mockResolvedValueOnce(Response.json(bookings));
     await expect(
       listAdminPerformances({
-        status: 'SUSPENDED',
+        status: 'CANCELLED',
         title: '공연 A',
         organizerId: 3,
         cursor: 9,
@@ -196,12 +198,13 @@ describe('관리자 API 호출', () => {
         status: 'PENDING',
         memberId: 3,
         scheduleId: 4,
+        performanceId: 1,
         createdFrom: date,
       }),
     ).resolves.toEqual(bookings);
     expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
-      'http://gateway.test/api/v1/admin/performances?status=SUSPENDED&title=%EA%B3%B5%EC%97%B0+A&organizerId=3&cursor=9',
-      'http://gateway.test/api/v1/admin/bookings?status=PENDING&memberId=3&scheduleId=4&createdFrom=2026-01-01T00%3A00%3A00Z',
+      'http://gateway.test/api/v1/admin/performances?status=CANCELLED&title=%EA%B3%B5%EC%97%B0+A&organizerId=3&cursor=9',
+      'http://gateway.test/api/v1/admin/bookings?status=PENDING&memberId=3&scheduleId=4&performanceId=1&createdFrom=2026-01-01T00%3A00%3A00Z',
     ]);
     expect(
       new Headers(fetch.mock.calls[0][1]?.headers).get('Authorization'),
@@ -214,7 +217,8 @@ describe('관리자 API 호출', () => {
       bookingId: 8,
       memberId: 3,
       scheduleId: 4,
-      status: 'CONFIRMED',
+      status: 'CANCELLED',
+      cancelReason: 'PERFORMANCE_CANCELLED',
       performanceTitle: '공연',
       startsAt: date,
       listAmount: 1000,
@@ -280,5 +284,74 @@ describe('관리자 API 호출', () => {
       ],
       ['/api/v1/admin/performances/1/suspension', 'DELETE', undefined],
     ]);
+  });
+
+  it('관리자 취소 경로에 사유를 보내고 응답을 검증한다', async () => {
+    const fetch = stubGateway();
+    const booking = {
+      bookingId: 8,
+      status: 'CANCELLED',
+      totalAmount: 1000,
+      expiresAt: date,
+      seats: [{ seatId: 1, label: 'A1', price: 1000 }],
+    };
+    const performance = { id: 1, status: 'CANCELLED' };
+    fetch.mockResolvedValueOnce(Response.json(booking));
+    fetch.mockResolvedValueOnce(Response.json(performance));
+    fetch.mockResolvedValueOnce(Response.json({ id: 1, status: 'UNKNOWN' }));
+
+    await expect(forceCancelBooking(8, '중복 예매')).resolves.toEqual(booking);
+    await expect(cancelPerformance(1, '공연장 사정')).resolves.toEqual(
+      performance,
+    );
+    await expect(cancelPerformance(1, '공연장 사정')).rejects.toMatchObject({
+      code: 'BAD_UPSTREAM_RESPONSE',
+    });
+    expect(
+      fetch.mock.calls
+        .slice(0, 2)
+        .map(([url, init]) => [
+          new URL(String(url)).pathname,
+          init?.method,
+          init?.body,
+        ]),
+    ).toEqual([
+      [
+        '/api/v1/admin/bookings/8/cancellation',
+        'POST',
+        '{"reason":"중복 예매"}',
+      ],
+      [
+        '/api/v1/admin/performances/1/cancellation',
+        'PUT',
+        '{"reason":"공연장 사정"}',
+      ],
+    ]);
+  });
+
+  it('취소 요청의 409와 400 ProblemDetail 코드를 전달한다', async () => {
+    const fetch = stubGateway();
+    fetch
+      .mockResolvedValueOnce(
+        Response.json(
+          { status: 409, code: 'INVALID_BOOKING_STATE' },
+          { status: 409 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          { status: 400, code: 'INVALID_REQUEST' },
+          { status: 400 },
+        ),
+      );
+
+    await expect(forceCancelBooking(8, '중복 예매')).rejects.toMatchObject({
+      status: 409,
+      code: 'INVALID_BOOKING_STATE',
+    });
+    await expect(cancelPerformance(1, '공연장 사정')).rejects.toMatchObject({
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
   });
 });

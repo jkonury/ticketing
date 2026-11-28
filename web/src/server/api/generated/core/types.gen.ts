@@ -8,6 +8,13 @@ export type ClientOptions = {
 
 export type AdminBookingDetailResponse = {
   bookingId: number;
+  cancelReason?:
+    | 'USER_REQUESTED'
+    | 'PAYMENT_FAILED'
+    | 'SEAT_ALREADY_SOLD'
+    | 'AMOUNT_MISMATCH'
+    | 'ADMIN_CANCELLED'
+    | 'PERFORMANCE_CANCELLED';
   coupon?: BookingCouponView | null;
   createdAt: string;
   discountAmount: number;
@@ -69,7 +76,7 @@ export type AdminPerformanceSummary = {
   createdAt: string;
   id: number;
   organizerId: number;
-  status: 'ACTIVE' | 'SUSPENDED';
+  status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
   title: string;
   venueName: string;
 };
@@ -153,6 +160,10 @@ export type BookingSummaryResponse = {
   totalAmount: number;
 };
 
+export type CancelPerformanceRequest = {
+  reason: string;
+};
+
 export type ChangeRoleRequest = {
   role: 'USER' | 'ORGANIZER' | 'ADMIN';
 };
@@ -221,6 +232,10 @@ export type CreateCouponRequest = {
 export type CursorPageIssuedCouponView = {
   items: Array<IssuedCouponView>;
   nextCursor?: number | null;
+};
+
+export type ForceCancelBookingRequest = {
+  reason: string;
 };
 
 export type GradePrice = {
@@ -297,12 +312,17 @@ export type MyCouponResponse = {
 
 export type OrganizerPerformanceResponse = {
   performance: PerformanceDetailResponse;
-  status: 'ACTIVE' | 'SUSPENDED';
+  status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
 };
 
 export type PaymentRequestResponse = {
   bookingId: number;
   status: string;
+};
+
+export type PerformanceCancellationResponse = {
+  id: number;
+  status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
 };
 
 export type PerformanceDetailResponse = {
@@ -335,7 +355,7 @@ export type PerformanceSummaryResponse = {
 
 export type PerformanceSuspensionResponse = {
   id: number;
-  status: 'ACTIVE' | 'SUSPENDED';
+  status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
 };
 
 export type PosterUploadRequest = {
@@ -494,6 +514,7 @@ export type List2Data = {
   query?: {
     memberId?: number;
     scheduleId?: number;
+    performanceId?: number;
     status?: 'PENDING' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED';
     /**
      * 예매 생성 시각 하한(포함)
@@ -535,6 +556,25 @@ export type Detail1Responses = {
 };
 
 export type Detail1Response = Detail1Responses[keyof Detail1Responses];
+
+export type ForceCancelData = {
+  body: ForceCancelBookingRequest;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/bookings/{id}/cancellation';
+};
+
+export type ForceCancelResponses = {
+  /**
+   * OK
+   */
+  200: BookingResponse;
+};
+
+export type ForceCancelResponse =
+  ForceCancelResponses[keyof ForceCancelResponses];
 
 export type ListData = {
   body?: never;
@@ -762,7 +802,7 @@ export type AdminPerformancesData = {
   body?: never;
   path?: never;
   query?: {
-    status?: 'ACTIVE' | 'SUSPENDED';
+    status?: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
     organizerId?: number;
     title?: string;
     cursor?: number;
@@ -780,6 +820,25 @@ export type AdminPerformancesResponses = {
 
 export type AdminPerformancesResponse =
   AdminPerformancesResponses[keyof AdminPerformancesResponses];
+
+export type CancelPerformanceData = {
+  body: CancelPerformanceRequest;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/performances/{id}/cancellation';
+};
+
+export type CancelPerformanceResponses = {
+  /**
+   * OK
+   */
+  200: PerformanceCancellationResponse;
+};
+
+export type CancelPerformanceResponse =
+  CancelPerformanceResponses[keyof CancelPerformanceResponses];
 
 export type ResumePerformanceData = {
   body?: never;
