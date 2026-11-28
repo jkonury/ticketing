@@ -81,6 +81,22 @@ class ScheduleSuspensionIntegrationTests(
     }
 
     @Test
+    fun `공개 잔여 좌석 조회는 판매 중지 회차를 제외하고 재개 후 다시 반환한다`() {
+        val scheduleId = schedule()
+
+        assertThat(availability(scheduleId)).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$[0].scheduleId").convertTo(Long::class.java).isEqualTo(scheduleId)
+
+        deliver(state(false, 1))
+        assertThat(availability(scheduleId)).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.length()").isEqualTo(0)
+
+        deliver(state(true, 2))
+        assertThat(availability(scheduleId)).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$[0].scheduleId").convertTo(Long::class.java).isEqualTo(scheduleId)
+    }
+
+    @Test
     fun `중지 이벤트가 먼저 도착해도 이후 등록된 회차의 판매를 막는다`() {
         val suspended = state(false, 1)
         deliver(suspended)
@@ -94,6 +110,9 @@ class ScheduleSuspensionIntegrationTests(
         val laterScheduleId = schedule()
         assertThat(book(laterScheduleId, 1)).hasStatus(HttpStatus.CREATED)
     }
+
+    private fun availability(scheduleId: Long) = mvc.get().uri("/api/v1/schedules/availability")
+        .param("scheduleIds", scheduleId.toString())
 
     private fun schedule(): Long {
         val id = System.nanoTime()

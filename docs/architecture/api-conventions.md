@@ -203,7 +203,7 @@
 | `POST /api/v1/admin/coupons/{id}/grants` | ADMIN | 직접 지급 |
 | `POST /api/v1/admin/issued-coupons/{issuedCouponId}/revoke` | ADMIN | 발급 쿠폰 회수 |
 
-정지·중지에는 앞뒤 공백을 제거한 사유 1~200자가 필요하다. 해제·재개의 요청 본문은 비운다. 성공 시 200과 `{id, status}`를 반환한다. 판매 중지된 공연은 공개 공연 목록에서, 해당 회차는 잔여 좌석 결과에서 제외한다. 공개 공연·회차·좌석 상세는 404로 응답하고, 주최자 전용 상세에는 중지 상태도 반환한다.
+정지·중지에는 공백만으로 이루어지지 않은 사유 1~200자가 필요하다. 저장 전에 앞뒤 공백을 제거한다. 해제·재개의 요청 본문은 비운다. 성공 시 200과 `{id, status}`를 반환한다. 판매 중지된 공연은 공개 공연 목록에서 제외하며 공개 공연·회차·좌석 상세는 404로 응답한다. booking이 판매 상태 변경을 반영하면 잔여 좌석 조회에서도 해당 회차가 제외된다. 주최자 전용 상세에는 중지 상태도 반환한다.
 
 공연 목록과 상세는 `genre`와 `posterUrl`을 반환한다. 장르는 `CONCERT`, `MUSICAL`, `PLAY`, `CLASSICAL`, `SPORTS`, `EXHIBITION`이며 값이 없는 공연은 전체 목록에 포함된다. URL 발급 후에는 응답의 헤더를 포함해 저장소에 직접 PUT을 보낸다. 포스터는 JPEG·PNG·WebP를 지원하며 최대 크기는 5MiB다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 

@@ -108,17 +108,20 @@ internal class BookingWarmupWork(
     }
 
     /**
-     * 음수 회차 격리 환경에서 실제 예매 생성 유스케이스를 호출한다. 승자는 항상 DB 롤백하고, 패자는
+     * 음수 회차 격리 환경에서 실제 예매 생성 유스케이스를 호출한다. DB에 쓴 데이터는 롤백하고, 패자는
      * [SeatAlreadyHeldException]을 그대로 던진다. 컨트롤러 아래(HTTP 경유 예열)에서도 같은 격리를 쓴다.
      * 실제 요청의 좌석 수(1~4)를 따라 [seatCount]장을 잡는다.
      */
     fun create(conflict: Boolean, seatCount: Int = 1): CreateBookingResult = isolated(seatCount) { schedule, seats ->
-        if (conflict) {
-            holds.hold(schedule, seats, HoldToken("startup-holder"), Duration.ofSeconds(WARMUP_TTL_SECONDS), clock.instant())
-            createBooking.create(command(schedule, seats))
-            error("예열 경합 요청이 성공했습니다.")
-        } else {
-            rolledBack { createBooking.create(command(schedule, seats)).also { check(it.created) } }
+        rolledBack {
+            insertSchedule(schedule, seats)
+            if (conflict) {
+                holds.hold(schedule, seats, HoldToken("startup-holder"), Duration.ofSeconds(WARMUP_TTL_SECONDS), clock.instant())
+            }
+            createBooking.create(command(schedule, seats)).also {
+                check(!conflict) { "예열 경합 요청이 성공했습니다." }
+                check(it.created)
+            }
         }
     }
 

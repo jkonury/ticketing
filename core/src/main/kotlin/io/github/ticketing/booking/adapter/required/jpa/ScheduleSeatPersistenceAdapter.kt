@@ -52,7 +52,7 @@ internal class ScheduleSeatPersistenceAdapter(
             )
         }
 
-    override fun isSaleEnabled(scheduleId: ScheduleId): Boolean = scheduleId.value < 0 || dsl.select(SCHEDULE.SALE_ENABLED).from(SCHEDULE)
+    override fun isSaleEnabled(scheduleId: ScheduleId): Boolean = dsl.select(SCHEDULE.SALE_ENABLED).from(SCHEDULE)
         .where(SCHEDULE.SCHEDULE_ID.eq(scheduleId.value)).fetchOne(SCHEDULE.SALE_ENABLED) == true
 
     override fun updateSaleStatus(performanceId: Long, saleEnabled: Boolean, version: Long) {

@@ -34,7 +34,8 @@ internal class ScheduleReadJooqAdapter(private val dsl: DSLContext) : ScheduleRe
                 ),
         )
         return dsl.select(SCHEDULE.SCHEDULE_ID, totalSeats, soldSeats, pendingSeats).from(SCHEDULE)
-            .where(SCHEDULE.SCHEDULE_ID.`in`(scheduleIds)).orderBy(SCHEDULE.SCHEDULE_ID.asc())
+            .where(SCHEDULE.SCHEDULE_ID.`in`(scheduleIds), SCHEDULE.SALE_ENABLED.eq(true))
+            .orderBy(SCHEDULE.SCHEDULE_ID.asc())
             .fetch {
                 val total = requireNotNull(it[totalSeats])
                 ScheduleAvailability(
