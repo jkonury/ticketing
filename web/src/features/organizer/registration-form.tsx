@@ -1,6 +1,7 @@
 'use client';
 import { useActionState, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -26,6 +27,7 @@ type FormState = {
 };
 
 export function RegistrationForm() {
+  const router = useRouter();
   const [poster, setPoster] = useState<File | null>(null);
   const [posterError, setPosterError] = useState<string>();
   const [state, action, pending] = useActionState(
@@ -53,7 +55,7 @@ export function RegistrationForm() {
           uploadId: lostUpload ? undefined : uploadId,
         };
       }
-      window.location.assign(`/performances/${performanceId}`);
+      router.push(`/performances/${performanceId}`);
       return { message: '', performanceId };
     },
     { message: '' },

@@ -4,7 +4,6 @@ import { RouteLoading } from '@/components/route-loading';
 import { notFound } from 'next/navigation';
 import { Page, PageHeader } from '@/components/layout/page';
 import { Button, buttonClassName } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Select } from '@/components/ui/input';
 import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';

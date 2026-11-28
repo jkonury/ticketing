@@ -17,7 +17,18 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   prettier,
-  { rules: { '@typescript-eslint/no-explicit-any': 'error' } },
+  {
+    linterOptions: { reportUnusedDisableDirectives: 'error' },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { args: 'all', argsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/no-unused-expressions': 'error',
+      'no-duplicate-imports': ['error', { allowSeparateTypeImports: true }],
+    },
+  },
   {
     files: ['**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}'],
     rules: {
