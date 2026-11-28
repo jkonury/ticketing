@@ -60,21 +60,35 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 
 의도적으로 미룬 항목이다. 요청 없이 앞당겨 구현하지 않는다.
 
+### 우선 처리 순서 (성능 항목 제외, 2026-11-28 정리)
+
+도입 조건을 충족한 항목을 처리 순서대로 적는다. M6 잔여 작업(컨테이너 이미지, k8s 매니페스트, HPA)과 함께 진행한다.
+
+| 순서 | 항목 | 도입 시점 |
+|---|---|---|
+| 1 | 포스터 저장소 RustFS 전환 | k8s 매니페스트 작성 전. 오브젝트 스토리지 구성이 매니페스트에 들어간다. [영향 범위와 검증 결과](reviews/2026-11-27-poster-storage-rustfs.md) |
+| 2 | 관리자 기능 후속 | 예매 강제 취소·공연 취소 Saga 먼저, 정산 전체 조회·운영 도구·대시보드는 그다음. [ADR 0052](./adr/0052-admin-intervention-states.md) |
+| 3 | 실제 PG 연동 (테스트 모드) | 가짜 PG 보상 흐름 검증 완료(M6 Saga 재검증). k8s Secret 구성 이후 |
+| 4 | 판매 통계 집계 Batch | 핵심 Batch 3종(M2) 완료. settlement의 Kafka 소비 구조에 붙인다 |
+| - | `coupon-claim` rate limit 수치 검증 테스트 | M5.5-3 측정 후속. 현재 값은 임시. 범위가 작아 다른 작업 사이에 처리 |
+
+### 보류 항목
+
 | 항목 | 도입 시점 |
 |---|---|
-| 소셜 로그인 (카카오/구글) | BFF 화면 완성 이후 |
+| 소셜 로그인 (카카오/구글) | BFF 화면은 완성(U0~U5). 인증 구조가 겹치므로 SAS 결정 이후 |
 | Spring Authorization Server (OAuth2/OIDC) | M6 완료 후 새 ADR로 검토. [ADR 0041](./adr/0041-auth-stays-in-core-sas-deferred.md) |
-| 실제 PG 연동 (테스트 모드) | 가짜 PG로 보상 흐름 검증 이후 |
-| 실제 이메일/SMS 알림 | 미정 |
-| 포스터 저장소 RustFS 전환 | 검토 후 도입 여부 결정. [영향 범위와 검증 결과](reviews/2026-11-27-poster-storage-rustfs.md) |
-| 판매 통계 집계 Batch | 핵심 Batch 3종 이후 |
-| 플랫폼 실수익 리포트 (할인 부담 반영) | 미정 |
 | coupon MSA 분리 | M6에서는 분리하지 않음. 이후 검토 |
+| 실제 이메일/SMS 알림 | 미정 |
+| 플랫폼 실수익 리포트 (할인 부담 반영) | 미정 |
 | 등급별 수량제 좌석 | 미정 |
-| k8s 배포 | MSA 전환과 함께 |
+
+### 성능 후속 항목
+
+| 항목 | 도입 시점 |
+|---|---|
 | coupon_claim p95 1초 (Gateway의 core 풀 대기 감소) | M5.5-3 측정 후속. [결과](performance/m5.5/coupon-drop.md) |
 | 쿠폰 소진 경로의 DB 미접근 (정의 캐시) | M5.5-3 측정 후속 |
-| `coupon-claim` rate limit 수치 검증 테스트 | M5.5-3 측정 후속. 현재 값은 임시 |
 | Gatling hot-seats 1,000명 p95 300ms | 장기 과제. 15회 예열 독립 5회 중앙값 386ms로 모두 미달. [후속 계획](./plans/hot-seats-gatling-p95-300ms.md), [외부 예열 최종 보고](./performance/m5/12-gatling-hot-seats-p95-300ms-report.md) |
 | 콜드 p95 300ms (잠정 900ms 기준은 충족) | 장기 과제. 내부 예열 후 3회 측정 모두 300ms 미달. [계획](./plans/hot-seats-internal-warmup-cold-900ms.md), [문서 18](./performance/m5/18-warmup-traffic-mix.md). 최신 코드의 JFR 재집계와 [TCP 진단(19)](./performance/m5/19-warmup-tcp-diagnosis.md)은 미완료 |
 | B 예매 생성 p95 300ms (잠정 기준 미달) | 장기 과제. 최종 콜드 1,385ms, 워밍업 383ms. 원인 미확정. [최종 보고서](./performance/m5/11-step8-final-report.md) |
