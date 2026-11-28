@@ -66,3 +66,4 @@
 | [0050](0050-poster-storage-minio-presigned.md) | 공연 포스터 저장소와 presigned URL 업로드 | 합의 |
 | [0051](0051-settlement-database-cutover.md) | 정산 전용 DB의 점검 창 전환과 기존 배치 실행 이력 보존 | 합의 |
 | [0052](0052-admin-intervention-states.md) | 관리자 개입 상태: 공연 판매 중지와 회원 이용 정지 | 합의 |
+| [0053](0053-poster-storage-rustfs.md) | 개발·CI 포스터 저장소의 RustFS 전환과 벤더 중립 설정 이름 | 합의 |
