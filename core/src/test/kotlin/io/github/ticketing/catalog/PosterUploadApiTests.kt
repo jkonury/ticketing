@@ -136,22 +136,23 @@ class PosterUploadApiTests(
     companion object {
         private const val ACCESS_KEY = "poster-test"
         private const val SECRET_KEY = "poster-test-secret"
-        private val minio by lazy {
-            GenericContainer("ghcr.io/projekt-manager-org/minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2")
-                .withEnv("MINIO_ROOT_USER", ACCESS_KEY)
-                .withEnv("MINIO_ROOT_PASSWORD", SECRET_KEY)
+        private val objectStorage by lazy {
+            GenericContainer(
+                "ghcr.io/rustfs/rustfs:1.0.6@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a",
+            )
+                .withEnv("RUSTFS_ACCESS_KEY", ACCESS_KEY)
+                .withEnv("RUSTFS_SECRET_KEY", SECRET_KEY)
                 .withExposedPorts(9000)
-                .withCommand("server", "/data")
-                .waitingFor(Wait.forHttp("/minio/health/ready"))
+                .waitingFor(Wait.forHttp("/health/ready"))
                 .apply { start() }
         }
 
         @JvmStatic
         @DynamicPropertySource
         fun posterProperties(registry: DynamicPropertyRegistry) {
-            registry.add("ticketing.poster.endpoint") { "http://${minio.host}:${minio.firstMappedPort}" }
-            registry.add("ticketing.poster.upload-endpoint") { "http://${minio.host}:${minio.firstMappedPort}" }
-            registry.add("ticketing.poster.public-base-url") { "http://${minio.host}:${minio.firstMappedPort}/poster-test" }
+            registry.add("ticketing.poster.endpoint") { "http://${objectStorage.host}:${objectStorage.firstMappedPort}" }
+            registry.add("ticketing.poster.upload-endpoint") { "http://${objectStorage.host}:${objectStorage.firstMappedPort}" }
+            registry.add("ticketing.poster.public-base-url") { "http://${objectStorage.host}:${objectStorage.firstMappedPort}/poster-test" }
             registry.add("ticketing.poster.bucket") { "poster-test" }
             registry.add("ticketing.poster.access-key") { ACCESS_KEY }
             registry.add("ticketing.poster.secret-key") { SECRET_KEY }
