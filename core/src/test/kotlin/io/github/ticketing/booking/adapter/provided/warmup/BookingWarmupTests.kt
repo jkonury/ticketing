@@ -21,6 +21,7 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
 import ticketing.jooq.booking.tables.references.BOOKING_
+import ticketing.jooq.booking.tables.references.SCHEDULE
 import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
@@ -51,6 +52,7 @@ internal class BookingWarmupTests(
         assertThat(counts.dbStatements.get()).isGreaterThanOrEqualTo(3)
         assertThat(counts.redisCommands.get()).isEqualTo(9)
         assertThat(dsl.fetchCount(BOOKING_, BOOKING_.SCHEDULE_ID.lt(0))).isZero()
+        assertThat(dsl.fetchCount(SCHEDULE, SCHEDULE.SCHEDULE_ID.lt(0))).isZero()
         assertThat(redis.keys("booking:warmup:*")).isEmpty()
         assertThat(events.stream(BookingConfirmed::class.java).count()).isZero()
         assertThat(events.stream(PaymentRequested::class.java).count()).isZero()
