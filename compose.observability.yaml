@@ -1,6 +1,7 @@
-# 부하 테스트용 관측 스택. 기존 인프라와 함께 띄운다:
+# 운영 알림과 부하 측정용 관측 스택. 기존 인프라와 함께 띄운다.
 #   docker compose -f compose.yaml -f compose.observability.yaml up -d
 # 앱은 호스트에서 실행되므로 Prometheus가 host.docker.internal로 수집한다.
+# ALERTMANAGER_WEBHOOK_URL을 설정하면 Alertmanager가 알림을 웹훅으로도 보낸다.
 services:
   prometheus:
     image: prom/prometheus:v3.5.0

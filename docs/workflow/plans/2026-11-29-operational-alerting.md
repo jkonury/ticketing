@@ -132,7 +132,7 @@ approved_at: 2026-11-29T00:58:42+09:00
 
 ### T6. 런북과 설계 문서
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T5
 - 변경 범위와 제약:
   - `docs/runbook.md` 3.7을 고친다. 미완료 이벤트 지표는 core와 payment가 수집하고 settlement는 해당 테이블이 없다. 패널 위치는 운영 Overview다.

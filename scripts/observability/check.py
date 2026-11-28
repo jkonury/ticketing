@@ -1,6 +1,8 @@
 import json
+import re
 from hashlib import sha256
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 
 def load_dashboards(directory: Path) -> dict[str, dict]:
@@ -56,10 +58,23 @@ def check_dashboards(dashboards: dict[str, dict], alerts: list[dict]):
         raise ValueError("Load Test 대시보드의 패널 제목 또는 PromQL 목록이 달라졌다.")
 
 
+def check_runbook(alerts: list[dict]):
+    runbook_path = Path("docs/runbook.md")
+    headings = re.findall(r"^#{1,6} +(.+)$", runbook_path.read_text(encoding="utf-8"), re.MULTILINE)
+    anchors = {re.sub(r"[^\w -]", "", heading.lower()).replace(" ", "-") for heading in headings}
+    for rule in alerts:
+        link = rule.get("annotations", {}).get("runbook", "")
+        url = urlsplit(link)
+        if not url.path.endswith(f"/{runbook_path}") or unquote(url.fragment) not in anchors:
+            raise ValueError(f'{rule["alert"]} 알림에 대응하는 런북 절이 없다. ({link})')
+
+
 if __name__ == "__main__":
     try:
+        alerts = list(iter_alerts())
         dashboards = load_dashboards(Path("observability/grafana/dashboards"))
-        check_dashboards(dashboards, list(iter_alerts()))
+        check_dashboards(dashboards, alerts)
+        check_runbook(alerts)
     except (OSError, ValueError, KeyError) as error:
         raise SystemExit(str(error)) from error
-    print("관측 대시보드 검사를 통과했다.")
+    print("관측 대시보드와 알림 런북 앵커 검사를 통과했다.")
