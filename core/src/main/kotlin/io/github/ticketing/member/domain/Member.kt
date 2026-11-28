@@ -29,6 +29,15 @@ class Member(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var status: MemberStatus = MemberStatus.ACTIVE
+        protected set
+
+    fun changeStatus(newStatus: MemberStatus) {
+        status = newStatus
+    }
+
     fun changeRole(newRole: Role) {
         role = newRole
     }

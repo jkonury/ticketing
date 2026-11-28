@@ -50,7 +50,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T3. 회원 이용 정지·해제
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: core Flyway에 `member.member`의 상태 컬럼(`ACTIVE`/`SUSPENDED`, 기본 `ACTIVE`, NOT NULL)을 추가한다. `PUT /api/v1/admin/members/{id}/suspension`(사유 필수 최대 200자)과 해제 API를 `AdminMemberService` 흐름에 맞춰 추가한다. 정지하면 refresh 토큰을 전부 폐기한다. `AuthService.login`·`refresh`는 정지 회원을 거부한다. 이때 이메일 존재 여부가 응답 시간·코드로 드러나지 않게 기존 해시 비교를 먼저 하고 자격 증명이 맞을 때만 정지 오류(`MEMBER_SUSPENDED`)로 응답하는 방식을 따른다. 자기 자신·ADMIN 정지는 거부하고, 같은 상태 재요청은 409로 응답한다. 회원 목록 응답에 상태를 추가한다. `MemberSuspensionChanged` 이벤트를 member가 발행하고 audit가 `MemberAuditListener` 방식으로 `admin_action`에 멱등 기록한다. 이벤트가 Kafka로 외부화되는 대상인지 [event-contract-change 스킬](../../../.claude/skills/event-contract-change/SKILL.md) 기준으로 확인하고, 아니면 core 내부 이벤트로 둔다.
 - 테스트 경계와 선례: 선례는 `AdminMemberIntegrationTests`와 `AuthService` 테스트. 정지 후 로그인·갱신 거부, 해제 후 복구, 기존 access 토큰은 만료까지 유효함, 자기·ADMIN 정지 거부, 중복 요청 409, 감사 로그 1건과 재전달 멱등을 확인한다. 가입 직후 상태가 `ACTIVE`임을 확인한다.

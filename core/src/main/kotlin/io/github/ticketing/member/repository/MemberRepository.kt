@@ -5,9 +5,21 @@ import io.github.ticketing.member.domain.Role
 import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
 
 interface MemberRepository : JpaRepository<Member, Long> {
     fun findByEmail(email: String): Member?
+
+    fun findCredentialsByEmail(email: String): LoginCredentials?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select member from Member member where member.id = :id")
+    fun findForUpdate(id: Long): Member?
+
+    interface LoginCredentials {
+        val id: Long
+        val passwordHash: String
+    }
 
     fun existsByEmail(email: String): Boolean
 

@@ -1,6 +1,7 @@
 package io.github.ticketing.member.service
 
 import io.github.ticketing.member.domain.Member
+import io.github.ticketing.member.domain.MemberStatus
 import io.github.ticketing.member.domain.RefreshToken
 import io.github.ticketing.member.repository.MemberRepository
 import io.github.ticketing.member.repository.RefreshTokenRepository
@@ -36,11 +37,13 @@ class AuthService(
 
     @Transactional
     fun login(email: String, password: String): IssuedTokens {
-        val member = members.findByEmail(email.trim().lowercase())
+        val credentials = members.findCredentialsByEmail(email.trim().lowercase())
         // 없는 이메일도 같은 비용으로 해시 비교를 해 응답 시간으로 존재 여부가 드러나지 않게 한다
-        val hash = member?.passwordHash ?: dummyHash
+        val hash = credentials?.passwordHash ?: dummyHash
         val matches = passwordEncoder.matches(password, hash)
-        if (member == null || !matches) throw InvalidCredentialsException()
+        if (credentials == null || !matches) throw InvalidCredentialsException()
+        val member = members.findForUpdate(credentials.id) ?: throw InvalidCredentialsException()
+        ensureActive(member)
         return issue(member)
     }
 
@@ -49,10 +52,12 @@ class AuthService(
     @Transactional(noRollbackFor = [InvalidRefreshTokenException::class])
     fun refresh(rawRefreshToken: String): IssuedTokens {
         val now = clock.instant()
-        val stored = refreshTokens.findByTokenHash(hash(rawRefreshToken)) ?: throw InvalidRefreshTokenException()
+        val tokenHash = hash(rawRefreshToken)
+        val member = lockRefreshMember(tokenHash)
+        val stored = refreshTokens.findByTokenHash(tokenHash) ?: throw InvalidRefreshTokenException()
+        if (!stored.isExpired(now)) ensureActive(member)
         if (stored.isRevoked()) rejectReuse(stored, now)
-        val member = members.findById(stored.memberId).orElse(null)
-        if (stored.isExpired(now) || member == null) throw InvalidRefreshTokenException()
+        if (stored.isExpired(now)) throw InvalidRefreshTokenException()
         stored.revoke(now)
         return issue(member)
     }
@@ -60,6 +65,16 @@ class AuthService(
     @Transactional
     fun revoke(rawRefreshToken: String) {
         refreshTokens.findByTokenHash(hash(rawRefreshToken))?.revoke(clock.instant())
+    }
+
+    // 정지와 토큰 발급이 엇갈리지 않도록 회원 행을 토큰 행보다 먼저 잠근다
+    private fun lockRefreshMember(tokenHash: String): Member {
+        val memberId = refreshTokens.findMemberIdByTokenHash(tokenHash) ?: throw InvalidRefreshTokenException()
+        return members.findForUpdate(memberId) ?: throw InvalidRefreshTokenException()
+    }
+
+    private fun ensureActive(member: Member) {
+        if (member.status == MemberStatus.SUSPENDED) throw MemberSuspendedException()
     }
 
     private fun rejectReuse(stored: RefreshToken, now: Instant): Nothing {

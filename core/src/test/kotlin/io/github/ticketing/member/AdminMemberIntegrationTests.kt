@@ -6,16 +6,23 @@ import io.github.ticketing.member.domain.Role
 import io.github.ticketing.member.repository.MemberRepository
 import io.github.ticketing.member.service.AdminBootstrapRunner
 import io.github.ticketing.member.service.AdminMemberService
+import io.github.ticketing.publicationCompleted
+import io.github.ticketing.publicationIds
 import org.assertj.core.api.Assertions.assertThat
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
 import org.springframework.boot.DefaultApplicationArguments
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
 import org.springframework.test.web.servlet.assertj.MockMvcTester
 import org.springframework.test.web.servlet.assertj.MvcTestResult
+import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.json.JsonMapper
+import java.time.Duration
 import java.util.UUID
 
 @RecordApplicationEvents
@@ -23,6 +30,9 @@ class AdminMemberIntegrationTests(
     private val mockMvcTester: MockMvcTester,
     private val members: MemberRepository,
     private val adminMembers: AdminMemberService,
+    private val publisher: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
+    private val jdbc: JdbcTemplate,
 ) : IntegrationTestSupport() {
 
     private val json = JsonMapper.builder().build()
@@ -36,11 +46,13 @@ class AdminMemberIntegrationTests(
             .content(body("email" to email, "password" to "password123", "name" to "홍길동", "role" to role))
             .exchange()
 
-    private fun login(email: String): Map<*, *> {
-        val result = mockMvcTester.post().uri("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
-            .content(body("email" to email, "password" to "password123"))
+    private fun loginRequest(email: String, password: String): MvcTestResult =
+        mockMvcTester.post().uri("/api/v1/auth/tokens").contentType(MediaType.APPLICATION_JSON)
+            .content(body("email" to email, "password" to password))
             .exchange()
-            .expectStatus(HttpStatus.OK)
+
+    private fun login(email: String): Map<*, *> {
+        val result = loginRequest(email, "password123").expectStatus(HttpStatus.OK)
         return json.readValue(result.response.contentAsString, Map::class.java)
     }
 
@@ -106,6 +118,8 @@ class AdminMemberIntegrationTests(
         assertThat(mockMvcTester.get().uri("/api/v1/admin/members").header("Authorization", "Bearer $token"))
             .hasStatus(HttpStatus.FORBIDDEN)
         assertThat(changeRole(token, memberId(email), "ORGANIZER")).hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(suspendMember(token, memberId(email), "점검")).hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(reinstate(token, memberId(email))).hasStatus(HttpStatus.FORBIDDEN)
     }
 
     @Test
@@ -214,4 +228,90 @@ class AdminMemberIntegrationTests(
         assertThat(mockMvcTester.get().uri("/api/v1/admin/members").param("size", "101").header("Authorization", "Bearer $adminToken"))
             .hasStatus(HttpStatus.BAD_REQUEST)
     }
+
+    @Test
+    fun `정지된 회원은 새 토큰을 받을 수 없고 해제 후 다시 로그인할 수 있다`() {
+        val (_, adminToken) = admin()
+        val email = email()
+        signUp(email).expectStatus(HttpStatus.CREATED)
+        val memberId = memberId(email)
+        val tokens = login(email)
+        val oldRefresh = tokens["refreshToken"].toString()
+        val secondRefresh = login(email)["refreshToken"].toString()
+
+        assertThat(memberList(adminToken, email)).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.items[0].status").isEqualTo("ACTIVE")
+        assertThat(suspendMember(adminToken, memberId, "서비스 이용 규정 위반")).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.status").isEqualTo("SUSPENDED")
+        assertThat(memberList(adminToken, email)).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.items[0].status").isEqualTo("SUSPENDED")
+        assertThat(loginRequest(email, "wrong-password")).hasStatus(HttpStatus.UNAUTHORIZED)
+            .bodyJson().extractingPath("$.code").isEqualTo("INVALID_CREDENTIALS")
+        assertThat(loginRequest(email, "password123")).hasStatus(HttpStatus.FORBIDDEN)
+            .bodyJson().extractingPath("$.code").isEqualTo("MEMBER_SUSPENDED")
+        assertThat(refresh(oldRefresh)).hasStatus(HttpStatus.FORBIDDEN)
+            .bodyJson().extractingPath("$.code").isEqualTo("MEMBER_SUSPENDED")
+        assertThat(mockMvcTester.get().uri("/api/v1/members/me").header("Authorization", "Bearer ${tokens["accessToken"]}"))
+            .hasStatus(HttpStatus.OK)
+
+        assertThat(reinstate(adminToken, memberId)).hasStatus(HttpStatus.OK)
+            .bodyJson().extractingPath("$.status").isEqualTo("ACTIVE")
+        assertThat(refresh(oldRefresh)).hasStatus(HttpStatus.UNAUTHORIZED)
+        assertThat(refresh(secondRefresh)).hasStatus(HttpStatus.UNAUTHORIZED)
+        assertThat(refresh(login(email)["refreshToken"].toString())).hasStatus(HttpStatus.OK)
+    }
+
+    @Test
+    fun `정지 사유를 검증하고 자기 자신이나 다른 관리자는 정지할 수 없다`() {
+        val (adminId, adminToken) = admin()
+        val (otherAdminId, _) = admin()
+        val email = email()
+        signUp(email).expectStatus(HttpStatus.CREATED)
+        val memberId = memberId(email)
+
+        for (invalid in listOf("", " ", "가".repeat(201))) {
+            assertThat(suspendMember(adminToken, memberId, invalid)).hasStatus(HttpStatus.BAD_REQUEST)
+        }
+        assertThat(suspendMember(adminToken, adminId, "점검")).hasStatus(HttpStatus.FORBIDDEN)
+        assertThat(suspendMember(adminToken, otherAdminId, "점검")).hasStatus(HttpStatus.FORBIDDEN)
+    }
+
+    @Test
+    fun `현재 상태로 다시 바꾸면 409를 반환하고 감사 로그에는 전환이 한 번씩 기록된다`(events: ApplicationEvents) {
+        val (adminId, adminToken) = admin()
+        val email = email()
+        signUp(email).expectStatus(HttpStatus.CREATED)
+        val memberId = memberId(email)
+
+        assertThat(suspendMember(adminToken, memberId, "규정 위반")).hasStatus(HttpStatus.OK)
+        assertThat(suspendMember(adminToken, memberId, "중복")).hasStatus(HttpStatus.CONFLICT)
+        assertThat(reinstate(adminToken, memberId)).hasStatus(HttpStatus.OK)
+        assertThat(reinstate(adminToken, memberId)).hasStatus(HttpStatus.CONFLICT)
+
+        val changes = events.stream(MemberSuspensionChanged::class.java).filter { it.memberId == memberId }.toList()
+        assertThat(changes.map { it.to }).containsExactly("SUSPENDED", "ACTIVE")
+        tx.executeWithoutResult { publisher.publishEvent(changes.first()) }
+        await().atMost(Duration.ofSeconds(10)).untilAsserted {
+            val deliveries = publicationIds(jdbc, MemberSuspensionChanged::class.java, "memberId", memberId, "MemberAuditListener")
+            assertThat(deliveries).hasSize(3).allMatch { publicationCompleted(jdbc, it) }
+            val uri = "/api/v1/admin/audit-logs?action=MEMBER_SUSPENSION_CHANGED&actorId=$adminId"
+            assertThat(mockMvcTester.get().uri(uri).header("Authorization", "Bearer $adminToken"))
+                .hasStatus(HttpStatus.OK)
+                .bodyJson().apply {
+                    extractingPath("$.items.length()").isEqualTo(2)
+                    extractingPath("$.items[*].detail.to").asArray().containsExactlyInAnyOrder("ACTIVE", "SUSPENDED")
+                    extractingPath("$.items[?(@.detail.to == 'SUSPENDED')].detail.reason").asArray().containsExactly("규정 위반")
+                }
+        }
+    }
+
+    private fun memberList(token: String, email: String) = mockMvcTester.get().uri("/api/v1/admin/members")
+        .param("email", email).header("Authorization", "Bearer $token")
+
+    private fun suspendMember(token: String, id: Long, reason: String) = mockMvcTester.put()
+        .uri("/api/v1/admin/members/$id/suspension").header("Authorization", "Bearer $token")
+        .contentType(MediaType.APPLICATION_JSON).content(body("reason" to reason)).exchange()
+
+    private fun reinstate(token: String, id: Long) = mockMvcTester.delete()
+        .uri("/api/v1/admin/members/$id/suspension").header("Authorization", "Bearer $token").exchange()
 }
