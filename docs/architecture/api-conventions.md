@@ -54,7 +54,7 @@
 |---|---|
 | 토큰 | `Authorization: Bearer <access JWT>`. HS256, 수명 15분, `sub`=회원 ID, `role` 클레임 |
 | 공개 API | 공연·회차 조회(`GET /api/v1/performances/**`, `GET /api/v1/schedules/**`), 회원 가입, 로그인, 토큰 갱신·폐기, `/actuator/health`. 결제 웹훅은 Gateway를 거치지 않고 payment 앱이 서명으로만 받는다 |
-| 역할 | `USER`(예매·결제·내 정보), `ORGANIZER`(공연·회차 등록, 정산·판매 현황) |
+| 역할 | `USER`(예매·결제·내 정보), `ORGANIZER`(공연·회차 등록, 정산·판매 현황), `ADMIN`(운영 조회·상태 변경) |
 | 인가 방식 | 각 웹 앱의 `@PreAuthorize("hasRole(...)")` 또는 Security 설정. 코어·payment·settlement는 같은 비밀(HS256)로 JWT를 검증하고 `role` 클레임을 확인한다 |
 
 - Gateway는 `Authorization`이 있으면 모든 경로에서 JWT 서명을 검증하고 실패하면 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지운다.
@@ -117,10 +117,14 @@
 | 401 | `INVALID_WEBHOOK_SIGNATURE` | 웹훅 서명 불일치 |
 | 401 | `SSE_TICKET_INVALID` | SSE 티켓 만료·재사용(Gateway) |
 | 403 | `ADMISSION_TOKEN_REQUIRED`, `ADMISSION_TOKEN_INVALID` | 입장 토큰 없음·무효. 클라이언트는 대기열로 돌려보낸다 |
+| 403 | `MEMBER_SUSPENDED` | 자격 증명이 유효한 정지 회원의 로그인·토큰 갱신 거부 |
+| 403 | `MEMBER_SUSPENSION_FORBIDDEN` | 관리자와 자기 자신은 이용 정지 대상이 될 수 없음 |
 | 403 | `NOT_BOOKING_OWNER`, `NOT_PERFORMANCE_OWNER` | 소유자가 아님 |
 | 404 | `BOOKING_NOT_FOUND`, `SCHEDULE_NOT_FOUND`, `SEAT_NOT_FOUND`, `PERFORMANCE_NOT_FOUND`, `VENUE_NOT_FOUND`, `MEMBER_NOT_FOUND` | 대상 없음 |
 | 409 | `SEAT_ALREADY_HELD` | 좌석이 이미 선점·판매됨 |
 | 409 | `BOOKING_IN_PROGRESS` | 동일 예매 요청 처리 중. 같은 멱등 키로 재시도 |
+| 409 | `PERFORMANCE_SUSPENDED` | 공연 판매 중지 상태에서 신규 예매, 회차 추가, 포스터 변경 불가 |
+| 409 | `MEMBER_SUSPENSION_UNCHANGED`, `PERFORMANCE_SUSPENSION_UNCHANGED` | 이미 요청한 상태 |
 | 409 | `SALES_CLOSED` | 회차가 시작되어 신규 예매 또는 첫 결제 요청 불가 |
 | 409 | `INVALID_BOOKING_STATE`, `BOOKING_EXPIRED` | 현재 예매 상태에서 불가능한 동작 |
 | 409 | `EMAIL_ALREADY_EXISTS`, `DUPLICATE_SCHEDULE` | 중복 |
@@ -174,12 +178,21 @@
 | `POST /api/v1/bookings/{id}/payments` | USER | 결제 요청(202) |
 | `GET /api/v1/payments/me?bookingIds=` | USER | 내 결제 상태(payment 앱이 처리. Gateway 경유) |
 | `POST /api/v1/payments/webhooks/fake-pg` | 서명 | PG 웹훅(payment 앱이 처리. fake-pg가 직접 호출하며 Gateway는 404로 막는다) |
+| `GET /api/v1/organizer/performances/{id}` | 공연 소유 ORGANIZER | 자기 공연 상세와 판매 상태. 다른 주최자의 공연은 404 |
 | `GET /api/v1/organizer/sales` | ORGANIZER | 판매 현황 |
 | `GET /api/v1/settlements` | ORGANIZER | 정산 조회 |
 | `GET /api/v1/coupons` | 로그인 | 받을 수 있는 쿠폰 목록 |
 | `POST /api/v1/coupons/{definitionId}/claims` | 로그인 | 쿠폰 받기(선착순 포함, ADR 0037) |
 | `GET /api/v1/me/coupons` | 로그인 | 내 쿠폰 |
-| `GET /api/v1/admin/members` | ADMIN | 회원 목록 |
+| `GET /api/v1/admin/members` | ADMIN | 회원 목록과 이용 상태 |
+| `PUT /api/v1/admin/members/{id}/suspension` | ADMIN | 회원 이용 정지 |
+| `DELETE /api/v1/admin/members/{id}/suspension` | ADMIN | 회원 이용 정지 해제 |
+| `GET /api/v1/admin/performances` | ADMIN | 공연 목록. 커서와 `organizerId`, `title`, `status` 필터 |
+| `PUT /api/v1/admin/performances/{id}/suspension` | ADMIN | 공연 판매 중지 |
+| `DELETE /api/v1/admin/performances/{id}/suspension` | ADMIN | 공연 판매 재개 |
+| `GET /api/v1/admin/bookings` | ADMIN | 예매 목록. 커서와 `memberId`, `scheduleId`, `status`, `createdFrom`, `createdTo` 필터. 두 시각 경계 포함 |
+| `GET /api/v1/admin/bookings/{id}` | ADMIN | 예매 상태·좌석·쿠폰·금액 상세 |
+| `GET /api/v1/admin/payments?bookingId=` | ADMIN | 해당 예매에 연결된 결제 0건 또는 1건을 배열로 반환(payment 앱, Gateway 경유) |
 | `PUT /api/v1/admin/members/{id}/role` | ADMIN | 역할 변경(ADR 0034) |
 | `GET /api/v1/admin/audit-logs` | ADMIN | 감사 로그 조회 |
 | `POST /api/v1/admin/coupons` | ADMIN | 쿠폰 정의 생성 |
@@ -189,6 +202,8 @@
 | `GET /api/v1/admin/coupons/{id}/issued` | ADMIN | 발급 내역 |
 | `POST /api/v1/admin/coupons/{id}/grants` | ADMIN | 직접 지급 |
 | `POST /api/v1/admin/issued-coupons/{issuedCouponId}/revoke` | ADMIN | 발급 쿠폰 회수 |
+
+정지·중지에는 앞뒤 공백을 제거한 사유 1~200자가 필요하다. 해제·재개의 요청 본문은 비운다. 성공 시 200과 `{id, status}`를 반환한다. 판매 중지된 공연은 공개 공연 목록에서, 해당 회차는 잔여 좌석 결과에서 제외한다. 공개 공연·회차·좌석 상세는 404로 응답하고, 주최자 전용 상세에는 중지 상태도 반환한다.
 
 공연 목록과 상세는 `genre`와 `posterUrl`을 반환한다. 장르는 `CONCERT`, `MUSICAL`, `PLAY`, `CLASSICAL`, `SPORTS`, `EXHIBITION`이며 값이 없는 공연은 전체 목록에 포함된다. URL 발급 후에는 응답의 헤더를 포함해 저장소에 직접 PUT을 보낸다. 포스터는 JPEG·PNG·WebP를 지원하며 최대 크기는 5MiB다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 

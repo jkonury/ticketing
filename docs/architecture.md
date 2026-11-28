@@ -172,7 +172,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 - [전체 모듈 의존](./modulith/components.puml)
 - 모듈별 다이어그램은 [audit](./modulith/module-audit.puml), [booking](./modulith/module-booking.puml), [catalog](./modulith/module-catalog.puml), [payment](./modulith/module-payment.puml), [coupon](./modulith/module-coupon.puml), [member](./modulith/module-member.puml), [notification](./modulith/module-notification.puml)에 있다.
 
-의존 방향은 `booking → catalog`(회차 사본), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림), `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → coupon`(관리자 행위 이벤트)이다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다. [ADR 0017](./adr/0017-payment-owns-payment-events.md), [ADR 0035](./adr/0035-coupon-module-reservation-saga.md)
+의존 방향은 `booking → catalog`(회차·판매 상태 사본), `booking → payment`(결제 계약 이벤트), `notification → booking`(예매 알림), `booking → coupon`(쿠폰 계약 이벤트), `audit → member`, `audit → catalog`, `audit → coupon`(관리자 행위 이벤트)이다. 쿠폰 계약 이벤트(예약 요청·예약됨·거부·해제 요청·사용 확정 5종)는 순환을 막으려고 `coupon` 루트에 두고, 요청·해제·사용 확정은 booking이 발행한다. [ADR 0017](./adr/0017-payment-owns-payment-events.md), [ADR 0035](./adr/0035-coupon-module-reservation-saga.md)
 
 ### 이벤트 목록
 
@@ -186,6 +186,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `PaymentSucceeded` | payment(앱) | booking(core) | `paymentId`, `orderId`, `amount`, `paidAt` |
 | `PaymentFailed` | payment(앱) | booking(core) | `paymentId`, `orderId`, `reason`, `failedAt` |
 | `PaymentRefunded` | payment(앱) | booking(core) | `paymentId`, `orderId`, `refundedAt` |
+| `PerformanceSuspensionChanged` | catalog | booking, audit | `eventId`, `actorId`, `performanceId`, `saleEnabled`, `version`, `reason`, `changedAt` |
 | `BookingConfirmed` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `seatIds`, `amount`(결제 금액 = `listAmount` − `discountAmount`), `listAmount`(정가), `discountAmount`(쿠폰 할인액), `confirmedAt` |
 | `BookingCancelled` | booking | notification, settlement | `bookingId`, `memberId`, `scheduleId`, `performanceId`, `organizerId`, `reason`, `refundRequired`, `cancelledAt` |
 | `CouponReservationRequested` | booking | coupon | `orderId`, `memberId`, `issuedCouponId`, `performanceId`, `listAmount`, `requestedAt`, `reservationAttemptId` |
@@ -194,6 +195,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `CouponReleaseRequested` | booking | coupon | `orderId`, `issuedCouponId`, `reason`, `reservationAttemptId` |
 | `CouponUseConfirmed` | booking | coupon | `orderId`, `issuedCouponId`, `confirmedAt`, `reservationAttemptId` |
 | `MemberRoleChanged` | member | audit | `actorId`, `memberId`, `from`, `to`, `changedAt` |
+| `MemberSuspensionChanged` | member | audit | `eventId`, `actorId`, `memberId`, `from`, `to`, `reason`, `changedAt` |
 | `CouponDefinitionCreated` | coupon | audit | `eventId`, `actorId`, `definitionId`, `name`, `occurredAt` |
 | `CouponDefinitionUpdated` | coupon | audit | `eventId`, `actorId`, `definitionId`, `changedFields`, `occurredAt` |
 | `CouponDefinitionStopped` | coupon | audit | `eventId`, `actorId`, `definitionId`, `occurredAt` |
@@ -202,7 +204,7 @@ Modulith `Documenter`가 생성한다(`DocumentationTests`, 출력 `docs/modulit
 | `BookingExpired` | booking | 없음(notification) | `bookingId`, `memberId`, `scheduleId`, `expiredAt` |
 
 - 쿠폰 Saga의 시도 ID는 예매별로 증가한다. 쿠폰은 발급 쿠폰·주문별 마지막 시도를 보존한다. 기존 행과 ID가 없는 이벤트는 시도 `0`으로 처리한다. [ADR 0045](./adr/0045-coupon-reservation-attempts.md)
-- 쿠폰 관리자 행위 이벤트 5종(정의 생성·수정·중지, 직접 지급, 회수)과 `MemberRoleChanged`는 audit가 구독해 `audit.admin_action`에 `eventId`(`source_event_id` 유니크)로 멱등하게 기록한다. 설계 근거는 [계획서](./backup/plans/m5-5-coupon.md)와 ADR 0034·0035를 본다.
+- 쿠폰 관리자 행위 이벤트 5종(정의 생성·수정·중지, 직접 지급, 회수), `MemberRoleChanged`, `MemberSuspensionChanged`, `PerformanceSuspensionChanged`는 audit가 구독해 `audit.admin_action`에 `eventId`(`source_event_id` 유니크)로 멱등하게 기록한다. 상태 변경 기록에는 이전·이후 상태와 정지·중지 사유가 들어간다. [쿠폰 계획서](./backup/plans/m5-5-coupon.md), [ADR 0052](./adr/0052-admin-intervention-states.md)
 - 결제 계약 이벤트 5종(`PaymentRequested`, `RefundRequested`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`)은 `payment` 패키지에 있다. 발행자는 위 표와 같고 프로세스 사이는 Kafka로 전달한다([events.md](./architecture/events.md#kafka-외부화-대상-m6)).
 - 로컬 이벤트 구독자는 `adapter.provided.event`의 `@ApplicationModuleListener`다. booking의 `ScheduleRegisteredListener`가 그 예다. 결제 계약 이벤트는 `@KafkaListener`로 받는다. booking은 `PaymentResultListener`, payment 앱은 `PaymentRequestListener`, `RefundRequestListener`다. `PaymentRefunded`는 booking이 로그만 남긴다. notification은 `BookingNotificationListener`로 확정·취소를 로그에 남긴다. 로그는 재전달 시 중복될 수 있으며 실제 알림 발송 시 영속적인 중복 방지가 필요하다.
 

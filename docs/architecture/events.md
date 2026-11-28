@@ -31,6 +31,7 @@
 | 이벤트 | 클래스 위치 | 발행 | 구독 | 발행 시점 |
 |---|---|---|---|---|
 | `ScheduleRegistered` | `catalog` | catalog | booking | 회차 등록 |
+| `PerformanceSuspensionChanged` | `catalog` | catalog | booking, audit | 공연 판매 중지·재개 |
 | `PaymentRequested` | `payment` | booking(core) | payment(앱) | 예매의 결제 요청 |
 | `RefundRequested` | `payment` | booking(core) | payment(앱) | 사용자 취소, 만료·취소된 예매나 좌석 충돌 등으로 환불이 필요한 결제 성공 |
 | `PaymentSucceeded` | `payment` | payment(앱) | booking(core) | PG 승인 웹훅(`PAYMENT_APPROVED`) 처리 |
@@ -45,6 +46,7 @@
 | `CouponReleaseRequested` | `coupon` | booking | coupon | 쿠폰 제거·교체 또는 예매 보상 시 해당 예약 시도 해제 |
 | `CouponUseConfirmed` | `coupon` | booking | coupon | 예매 확정 시 쿠폰 사용 확정 |
 | `MemberRoleChanged` | `member` | member | audit | 관리자 역할 변경 |
+| `MemberSuspensionChanged` | `member` | member | audit | 회원 이용 정지·해제 |
 | `CouponDefinitionCreated`, `CouponDefinitionUpdated`, `CouponDefinitionStopped`, `CouponsGranted`, `CouponRevoked` | `coupon` | coupon | audit | 쿠폰 관리자 행위 |
 
 페이로드는 [architecture.md §4 이벤트 목록](../architecture.md#이벤트-목록)이 기준이다. 쿠폰 Saga 이벤트 5종은 `reservationAttemptId`를 전달한다. 구형 JSON에서 누락 시 `0`으로 읽는다. [ADR 0045](../adr/0045-coupon-reservation-attempts.md)
@@ -54,13 +56,14 @@
 | 구독 클래스 | 이벤트 | 처리 | 멱등 근거 |
 |---|---|---|---|
 | booking `ScheduleRegisteredListener` | `ScheduleRegistered` | `booking.schedule`, `booking.schedule_seat`에 사본 적재, 커밋 후 Redis 스냅샷 초기화 | `saveIfAbsent`로 이미 있으면 건너뜀. 스냅샷은 `HSETNX` |
+| booking `ScheduleRegisteredListener` | `PerformanceSuspensionChanged` | 공연과 회차 판매 상태 사본 갱신 | 현재 상태 번호보다 큰 이벤트만 반영. 늦게 등록된 회차는 공연 상태 사본에서 초기값을 읽음 |
 | payment 앱 `PaymentRequestListener` | `PaymentRequested` | 결제 기록 생성 후 PG에 결제 요청(트랜잭션 밖) | `orderId`·멱등 키로 기존 결제를 찾아 재사용. `REQUESTED`이고 PG 거래 ID가 없을 때만 재요청 |
 | payment 앱 `RefundRequestListener` | `RefundRequested` | 환불 전이 후 PG에 환불 요청(트랜잭션 밖) | 이미 `REFUNDED`면 건너뜀 |
 | booking `PaymentResultListener` | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` | 예매 확정·실패 처리. `PaymentRefunded`는 로그만 | 예매 상태 전이 검사. 이미 `CONFIRMED`면 `AlreadyConfirmed`로 무시하고, `EXPIRED`·`CANCELLED`면 환불 경로로 보낸다 |
 | settlement `BookingEventListener` | `BookingConfirmed`, `BookingCancelled` | `BookingConfirmed`는 `booking_sale`에 적재. `BookingCancelled`는 `refundRequired=true`일 때만 `booking_refund`에 적재 | `ON CONFLICT (booking_id) DO NOTHING` |
 | coupon `CouponReservationListener` | `CouponReservationRequested`, `CouponReleaseRequested`, `CouponUseConfirmed` | 발급 쿠폰 상태를 조건부 UPDATE로 전이(예약·해제·사용 확정). 예약 결과는 `CouponReserved`·`CouponRejected`로 응답 | 발급 행 잠금과 주문별 최신 시도 기록을 사용한다. 해제·사용 확정은 주문과 시도가 일치해야 하며, 정리 후 복구 가능한 사용 확정은 `coupon.use_mismatch`에 기록한다 |
 | booking `CouponResultListener` | `CouponReserved`, `CouponRejected` | `CouponReserved`는 예매의 `coupon_state`·할인액에 반영한다. 예매가 없거나 교체·해제·종료 뒤 늦게 온 응답, 무효 할인액이면 해당 시도의 해제를 요청한다. `CouponRejected`는 쿠폰 없이 진행하고 사유를 저장한다 | 제거된 시도의 거절은 무시하고 성공은 해당 시도로 해제를 요청한다. 이미 반영한 같은 시도의 성공은 무시한다. 낙관적 락 충돌로 실패한 발행은 미완료로 남아 core 재시작 시 재발행 대상이 된다 |
-| audit `MemberAuditListener`, `CouponAuditListener` | `MemberRoleChanged`, 쿠폰 관리자 행위 5종 | `audit.admin_action`에 기록 | `source_event_id` 유니크 |
+| audit `MemberAuditListener`, `PerformanceAuditListener`, `CouponAuditListener` | `MemberRoleChanged`, `MemberSuspensionChanged`, `PerformanceSuspensionChanged`, 쿠폰 관리자 행위 5종 | `audit.admin_action`에 기록 | `source_event_id` 유니크 |
 | notification `BookingNotificationListener` | `BookingConfirmed`, `BookingCancelled` (`BookingExpired`) | 로그 출력 | 없음. 재전달 시 로그가 중복될 수 있음 |
 
 상태 전이와 환불 조건은 [flows.md §6.3, §6.4](./flows.md#63-예매-상태-전이)를 본다.
@@ -78,7 +81,7 @@
 | `PaymentRefunded` | payment(앱) | booking(core) | 2단계 외부화, 3단계 앱 분리 | `ticketing.payment.payment-refunded` | `orderId` | 3 | 로그만 남김(부작용 없음) | |
 | `BookingConfirmed` | booking(core) | settlement 앱 | 4단계 외부화·앱 분리 | `ticketing.booking.booking-confirmed` | `bookingId` | 3 | `ON CONFLICT (booking_id) DO NOTHING` | notification은 core의 로컬 리스너로 받는다 |
 | `BookingCancelled` | booking(core) | settlement 앱 | 4단계 외부화·앱 분리 | `ticketing.booking.booking-cancelled` | `bookingId` | 3 | `refundRequired=true`일 때만 `ON CONFLICT (booking_id) DO NOTHING` | notification은 core의 로컬 리스너로 받는다 |
-| 외부화 안 함 | | | | | | | | `ScheduleRegistered`(catalog→booking), 쿠폰 계약 이벤트 5종(booking↔coupon), `BookingExpired`, audit 이벤트(`MemberRoleChanged`, 쿠폰 관리자 행위 5종): 분리 후에도 core 한 JVM 안에서 소비한다. Modulith 이벤트 그대로 둔다 |
+| 외부화 안 함 | | | | | | | | `ScheduleRegistered`(catalog→booking), `PerformanceSuspensionChanged`(catalog→booking·audit), 쿠폰 계약 이벤트 5종(booking↔coupon), `BookingExpired`, audit 이벤트(`MemberRoleChanged`, `MemberSuspensionChanged`, 쿠폰 관리자 행위 5종): 분리 후에도 core 한 JVM 안에서 소비한다. Modulith 이벤트 그대로 둔다 |
 
 `orderId`와 `bookingId`는 같은 값(예매 ID)이다. 순서는 같은 토픽의 같은 파티션 안에서 보장된다. 결제 이벤트의 역순 도착은 상태 전이 검사로 처리한다. 정산 앱은 환불 사본도 도착하는 즉시 저장하며, 배치는 집계 시 같은 예매 ID로 판매 사본을 찾는다.
 
@@ -101,7 +104,7 @@
 
 ### 의존 방향
 
-`booking → catalog`, `booking → payment`(core의 `payment` 패키지는 계약 이벤트만 담는다), `booking → coupon`, `notification → booking`, `audit → member`, `audit → coupon`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. payment 앱은 `orderId`로 결제 대상을 식별한다. 정산 앱은 Kafka 계약 이벤트로 예매 사본을 적재한다.
+`booking → catalog`, `booking → payment`(core의 `payment` 패키지는 계약 이벤트만 담는다), `booking → coupon`, `notification → booking`, `audit → member`, `audit → catalog`, `audit → coupon`. 반대 방향 의존을 만들면 `ApplicationModules.verify()`가 실패한다. payment 앱은 `orderId`로 결제 대상을 식별한다. 정산 앱은 Kafka 계약 이벤트로 예매 사본을 적재한다.
 
 ## 3. 좌석 변경 스트림 (Redis Streams)
 
