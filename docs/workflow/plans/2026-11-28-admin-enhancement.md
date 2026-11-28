@@ -113,7 +113,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T8. 문서 갱신
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2, T3, T4, T5
 - 변경 범위와 제약: [architecture.md](../../architecture.md)의 audit 이벤트 목록, [api-conventions.md](../../architecture/api-conventions.md)의 관리자 API 표와 Gateway 설명, [events.md](../../architecture/events.md), [erd.md](../../architecture/erd.md)와 [data-ownership.md](../../architecture/data-ownership.md)의 컬럼, [runbook](../../runbook.md)(정지 회원·중지 공연 운영 시 유의점), [로드맵](../../roadmap.md) 항목 체크를 구현된 상태로 맞춘다. 구현 중 설계와 달라진 점은 사용자와 합의 후 ADR 0052 대신 새 ADR이나 변경 이력으로 남긴다.
 - 테스트 경계와 선례: 문서 링크·표기 검사.

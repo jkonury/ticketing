@@ -14,8 +14,8 @@
   - 비밀번호는 BCrypt. 가입 시 USER·ORGANIZER 중 역할을 고를 수 있다(주최자 승인 절차는 두지 않는다). ADMIN으로는 가입할 수 없다.
 - Gateway는 `Authorization: Bearer`가 있으면 모든 경로에서 같은 HS256 비밀로 JWT 서명을 검증하고, 실패 시 401 `UNAUTHORIZED`로 응답한다. 클라이언트가 보낸 `X-Member-Id`는 지우며 realtime 경로에만 검증된 회원 ID를 전달한다. 코어도 JWT를 자체 검증한다 ([ADR 0020](../adr/0020-gateway-verification-contracts.md)).
 - `POST /api/v1/sse-tickets`는 JWT 인증된 요청에서 코어 `member`가 티켓을 발급한다. 티켓은 Redis `sse:ticket:<ticket>`에 회원 ID로 저장하고 TTL은 30초이며, Gateway가 한 번 소비한다 ([ADR 0020](../adr/0020-gateway-verification-contracts.md)).
-- 역할: **일반 사용자**(예매), **주최자**(공연·회차 등록, 정산 조회), **관리자**(ADMIN: 역할 변경, 쿠폰 관리, 감사 로그 조회). 역할 기반 인가 적용.
-- ADMIN은 가입으로 만들 수 없고 `.env`의 부트스트랩 이메일 회원을 기동 시 승격한다(멱등). 이후 관리자가 역할 변경 API로 승격·강등하며 마지막 관리자는 강등할 수 없다. `/admin`은 BFF(서버 가드)와 코어(`hasRole('ADMIN')`)에서 이중으로 막는다. 역할이 바뀌면 그 회원의 refresh 토큰을 모두 폐기해 새 역할이 갱신 시점에 반영되게 한다(ADR 0034).
+- 역할: **일반 사용자**(예매), **주최자**(공연·회차 등록, 정산 조회), **관리자**(ADMIN, 역할 변경, 쿠폰 관리, 회원 이용 정지, 공연 판매 중지, 예매·결제·감사 로그 조회). 역할 기반 인가를 적용한다.
+- ADMIN은 가입으로 만들 수 없고 `.env`의 부트스트랩 이메일 회원을 기동 시 승격한다(멱등). 이후 관리자가 역할 변경 API로 승격·강등하며 마지막 활성 관리자는 강등할 수 없다. `/admin`의 서버 가드와 core·payment의 관리자 API에서 각각 관리자 권한을 검사한다. 역할이 바뀌면 그 회원의 refresh 토큰을 모두 폐기해 새 역할이 갱신 시점에 반영되게 한다(ADR 0034).
 - SSE는 BFF를 거치지 않는다. BFF가 발급한 **단기 SSE 티켓**으로 브라우저가 Gateway에 직접 연결한다. (Node 프로세스가 장기 연결을 붙드는 것을 피하기 위함)
 - 비회원 요청의 한도는 Gateway의 TCP 연결 주소를 기본으로 한다. nginx가 덮어쓴 주소와 서버 전용 증명을 Gateway가 검증하면 클라이언트 주소별로 집계한다. BFF를 경유할 때는 BFF도 증명과 주소를 검증하고 새 헤더를 구성한다. [ADR 0046](../adr/0046-attested-client-ip.md)
 
@@ -29,6 +29,7 @@
 - 조합(Aggregation) 화면
   - 공연 상세: 공연 정보는 핵심 데이터, 회차별 잔여 좌석과 내 예매 여부는 부가 데이터다.
   - 마이페이지: 예매 목록은 핵심 데이터, 결제 상태는 부가 데이터다.
+  - 관리자 예매 상세는 core의 `GET /api/v1/admin/bookings/{id}`를 읽은 뒤, Gateway가 payment 앱으로 보내는 `GET /api/v1/admin/payments?bookingId=`를 호출한다. 결제 조회가 실패해도 예매 정보는 렌더링한다.
   - 주최자 대시보드는 판매 현황을 core에서, `GET /api/v1/settlements` 결과를 Gateway를 통해 정산 앱에서 읽는다. 두 요청이 모두 실패하면 오류 화면을 표시한다.
 - 조합에 사용하는 API는 `GET /api/v1/schedules/availability?scheduleIds=...`, 확장된 `GET /api/v1/bookings/me?performanceId=...`, `GET /api/v1/payments/me?bookingIds=...`, `GET /api/v1/organizer/sales`다. `payments/me`는 Gateway가 payment 앱으로 보내고 나머지는 코어가 처리한다. 각 API는 소유 모듈(앱)의 스키마만 조회한다.
 - 세션·갱신·조합 API 결정은 [ADR 0022](../adr/0022-bff-session-and-aggregation-apis.md)를 따른다.

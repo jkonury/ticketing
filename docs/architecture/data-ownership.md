@@ -17,9 +17,9 @@ PostgreSQL 인스턴스 하나에 core DB, `payment_db`, `settlement_db`를 둔�
 
 | 스키마 | 소유 모듈 | 주요 테이블 | 비고 |
 |---|---|---|---|
-| `member` | member | `member`, `refresh_token` | refresh 토큰은 SHA-256 해시만 저장 |
-| `catalog` | catalog | `venue`, `venue_seat`, `performance`, `performance_price`, `schedule` | 공연·회차의 원본 |
-| `booking` | booking | `schedule`, `schedule_seat`, `booking`, `booking_seat`, `sold_seat` | `schedule`, `schedule_seat`는 catalog 사본. `sold_seat`가 좌석 확정의 유니크 제약 |
+| `member` | member | `member`, `refresh_token` | 회원 이용 상태 원본. refresh 토큰은 SHA-256 해시만 저장 |
+| `catalog` | catalog | `venue`, `venue_seat`, `performance`, `performance_price`, `schedule` | 공연·회차·공연 판매 상태 원본 |
+| `booking` | booking | `schedule`, `schedule_seat`, `performance_sale`, `booking`, `booking_seat`, `sold_seat` | catalog 이벤트로 회차·좌석 사본과 판매 가능 여부를 적재. `sold_seat`가 좌석 확정의 유니크 제약 |
 | `coupon` | coupon | `coupon_definition`, `issued_coupon`, `reservation_attempt`, `use_mismatch` | `issued_coupon`의 `(definition_id, member_id)` 유니크가 중복 발급의 최종 방어선. `booking`은 발급 쿠폰 ID와 예매별 시도 ID를 값으로 보관 |
 | `audit` | audit | `admin_action` | 관리자 행위 이벤트 사본. `source_event_id` 유니크로 멱등 |
 | `batch` | core-batch | Spring Batch 메타데이터 | 공식 DDL을 Flyway로 생성 |
@@ -70,7 +70,7 @@ PostgreSQL 인스턴스 하나에 core DB, `payment_db`, `settlement_db`를 둔�
 |---|---|---|
 | ID 참조 | 관계를 값으로만 가지면 되는 경우 | `booking.member_id`, `payment.order_id`(=예매 ID) |
 | 이벤트로 받은 사본 | 자기 스키마에서 조회·집계해야 하는 경우 | booking의 회차·좌석 사본, settlement의 판매·환불 사본 |
-| 소유자의 조회 API | 화면 조합처럼 여러 소유자를 읽어야 하는 경우 | BFF의 `GET /api/v1/payments/me`, `GET /api/v1/schedules/availability` |
+| 소유자의 조회 API | 화면 조합처럼 여러 소유자를 읽어야 하는 경우 | BFF의 `GET /api/v1/payments/me`, `GET /api/v1/admin/payments`, `GET /api/v1/schedules/availability` |
 | Gateway 검증 계약 | 요청 경로에서 상태를 확인해야 하는 경우 | 입장 토큰·SSE 티켓은 Gateway가 Redis로 검증 |
 
 ### 사본의 규칙
@@ -78,6 +78,7 @@ PostgreSQL 인스턴스 하나에 core DB, `payment_db`, `settlement_db`를 둔�
 - 사본은 **이벤트로만** 채운다. 소유자 테이블을 직접 읽어 복사하지 않는다.
 - 사본의 쓰기는 사본을 가진 모듈의 이벤트 리스너만 한다. 리스너는 멱등이다.
 - 원본이 바뀌어도 사본이 소급 갱신되지 않을 수 있다. 사본을 쓰는 로직은 이를 감안한다. 회차 변경 기능을 추가한다면 변경 이벤트를 새로 정의하고 사본 갱신 방식을 정한다.
+- booking은 `booking.performance_sale.status_version`보다 큰 공연 판매 상태 변경만 반영한다. 새 회차의 `booking.schedule.sale_enabled`는 같은 공연 상태를 따라 초기화한다.
 - 사본의 컬럼은 소비에 필요한 최소한만 둔다.
 
 ## 5. 분리 대비 규칙
