@@ -135,6 +135,8 @@ PENDING ──결제 성공──▶ CONFIRMED ──예매·공연 취소──
 1. catalog가 공연을 `CANCELLED`로 저장하고 같은 트랜잭션에서 `PerformanceCancelled`를 발행한다. 공개 조회에서는 즉시 제외되며 판매 재개는 거부된다.
 2. booking 리스너가 공연·회차 사본에 취소 상태를 먼저 커밋한다. 신규 예매 저장, 결제 요청, 좌석 확정은 트랜잭션에서 회차 사본의 공유 잠금(`FOR SHARE`)을 사용한다. 사본 갱신 전에 커밋한 예매는 Saga가 찾고, 갱신 뒤에는 취소 상태를 읽어 신규 예매·결제를 거부한다. 판매 중지 상태에서는 기존 예매의 결제와 확정이 계속 가능하다.
 3. 리스너는 트랜잭션 없이 실행되며, 해당 공연의 `PENDING`·`CONFIRMED` 예매를 예매 ID 순서로 조회해 청크마다 별도 트랜잭션에서 공용 경로로 취소한다. `ticketing.booking.performance-cancellation.chunk-size`의 기본값은 100이다. 실패한 청크를 롤백하고 이벤트를 미완료로 남긴다. 재발행하면 아직 취소되지 않은 예매부터 다시 조회한다.
+
+[Spring Modulith 2.1.1의 `ApplicationModuleListener.propagation`](https://docs.spring.io/spring-modulith/docs/2.1.1/api/org/springframework/modulith/events/ApplicationModuleListener.html#propagation())은 `Transactional.propagation`의 별칭이다. 공연 취소 리스너는 기본값 `REQUIRES_NEW`를 `NOT_SUPPORTED`로 재정의하므로 사본 반영과 각 청크가 리스너의 외부 트랜잭션 없이 차례로 커넥션을 사용한다.
 4. audit는 같은 공연 취소 이벤트를 구독해 관리자와 사유를 기록한다. 운영자는 [런북의 예매 현황 확인 절차](../runbook.md#11-관리자-기능-운영)로 남은 예매를 확인할 수 있다.
 
 ## 6.4 결제 (이벤트 기반)

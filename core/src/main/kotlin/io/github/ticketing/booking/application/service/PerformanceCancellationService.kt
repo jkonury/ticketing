@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.application.service
 
+import io.github.ticketing.booking.application.port.provided.CancelPerformanceBookingsUseCase
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
 import io.github.ticketing.booking.domain.BookingStatus
 import io.github.ticketing.booking.domain.CancelReason
@@ -15,12 +16,12 @@ class PerformanceCancellationService(
     private val tx: TransactionTemplate,
     private val clock: Clock,
     @Value("\${ticketing.booking.performance-cancellation.chunk-size:100}") private val chunkSize: Int,
-) {
+) : CancelPerformanceBookingsUseCase {
     init {
         require(chunkSize > 0) { "공연 취소 청크 크기는 양수여야 한다" }
     }
 
-    fun cancelBookings(performanceId: Long) {
+    override fun cancelBookings(performanceId: Long) {
         var afterId = 0L
         while (true) {
             afterId = tx.execute {
