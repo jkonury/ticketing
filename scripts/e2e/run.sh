@@ -172,9 +172,9 @@ if $SAGA_RECOVERY; then
   )
 fi
 if $WEB; then
-  export TICKETING_MINIO_CORS_ORIGINS="${TICKETING_MINIO_CORS_ORIGINS:-$WEB_URL,http://127.0.0.1:$WEB_PORT}"
-  if ! docker compose up -d --wait minio >> "$LOG_DIR/compose.log" 2>&1 ||
-     ! docker compose run --rm --no-deps minio-init >> "$LOG_DIR/compose.log" 2>&1; then
+  export TICKETING_OBJECT_STORAGE_CORS_ORIGINS="${TICKETING_OBJECT_STORAGE_CORS_ORIGINS:-$WEB_URL,http://127.0.0.1:$WEB_PORT}"
+  if ! docker compose up -d --wait object-storage >> "$LOG_DIR/compose.log" 2>&1 ||
+     ! docker compose run --rm --no-deps object-storage-init >> "$LOG_DIR/compose.log" 2>&1; then
     echo "포스터 저장소 기동 실패: $LOG_DIR/compose.log" >&2
     tail -n 30 "$LOG_DIR/compose.log" >&2
     exit 1
@@ -197,7 +197,7 @@ start() {
 PIDS+=("$!")
 if $WEB; then
   poster_bucket=$(source .env; printf '%s' "${TICKETING_POSTER_BUCKET:-ticketing-posters}")
-  poster_endpoint="http://127.0.0.1:${TICKETING_MINIO_PORT:-19010}"
+  poster_endpoint="http://127.0.0.1:${TICKETING_OBJECT_STORAGE_PORT:-19010}"
   TICKETING_POSTER_ENDPOINT="$poster_endpoint" TICKETING_POSTER_UPLOAD_ENDPOINT="$poster_endpoint" \
     TICKETING_POSTER_PUBLIC_BASE_URL="$poster_endpoint/$poster_bucket" start core core/build/libs/core.jar --server.port="$CORE_PORT"
 else
