@@ -153,7 +153,10 @@ if $SAGA_RECOVERY; then
   fi
   saga_bootstrap="localhost:${BASH_REMATCH[1]}"
   kafka_target=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}} {{index .Config.Labels "com.docker.compose.service"}} {{.State.Running}} {{.State.Paused}} {{range .Config.Env}}{{if eq (index (split . "=") 0) "KAFKA_ADVERTISED_LISTENERS"}}{{.}}{{end}}{{end}}' "$kafka_id")
-  if [[ $kafka_target != "$COMPOSE_PROJECT_NAME kafka true false KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://$saga_bootstrap" ]]; then
+  kafka_state=${kafka_target%% KAFKA_ADVERTISED_LISTENERS=*}
+  kafka_listeners=${kafka_target#* KAFKA_ADVERTISED_LISTENERS=}
+  if [[ $kafka_state != "$COMPOSE_PROJECT_NAME kafka true false" ||
+    ",$kafka_listeners," != *",PLAINTEXT://$saga_bootstrap,"* ]]; then
     echo 'Kafka 프로젝트·서비스·상태·브로커 주소가 장애 실행 설정과 일치해야 합니다.' >&2
     exit 1
   fi
