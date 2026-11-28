@@ -127,6 +127,7 @@ class AdminBookingIntegrationTests(
                 extractingPath("$.memberId").convertTo(Long::class.java).isEqualTo(memberId)
                 extractingPath("$.scheduleId").convertTo(Long::class.java).isEqualTo(scheduleId)
                 extractingPath("$.status").isEqualTo("PENDING")
+                doesNotHavePath("$.cancelReason")
                 extractingPath("$.seats[0].label").isEqualTo("A1")
                 extractingPath("$.seats[0].price").isEqualTo(100)
                 extractingPath("$.listAmount").isEqualTo(100)

@@ -102,7 +102,7 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T6. web 관리자 화면
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T5
 - 변경 범위와 제약: [프런트엔드 지침](../../rules/frontend.md)과 U 트랙 토큰·프리미티브 규칙을 따른다. `/admin/bookings/[id]`의 PENDING·CONFIRMED 예매에 "강제 취소"(사유 입력, 확인 단계, 확정 예매는 환불된다는 안내)를 추가한다. `/admin/performances`의 `ACTIVE`·`SUSPENDED` 공연에 "공연 취소"(사유 입력, 되돌릴 수 없고 예매가 모두 취소·환불된다는 경고, 확인 단계)를 추가한다. `CANCELLED` 상태 표시와 필터를 추가하고, 취소된 공연에서는 중지·재개 버튼을 숨긴다. 취소된 공연 행에서 `/admin/bookings?performanceId=…` 목록으로 연결한다. 예매 상태·취소 사유 표시(`booking-status.ts`)에 새 사유를 추가한다. 서버 액션은 `features/admin/`에 두고 매번 `requireAdmin`을 다시 검사한다. JWT는 브라우저에 노출하지 않는다(규칙 5).
 - 테스트 경계와 선례: `features/admin/suspension-actions.test.ts`와 `actions.test.ts`. 서버 액션의 권한 재검사·사유 검증·409 오류 매핑을 단위 테스트로 확인한다. 화면은 `ui-builder` 지시서 방식의 headless 캡처로 확인한다.

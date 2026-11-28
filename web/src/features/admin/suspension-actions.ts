@@ -41,6 +41,7 @@ const errors: Record<string, string> = {
     '회원이 이미 요청한 상태예요. 목록을 새로고침해 주세요.',
   PERFORMANCE_SUSPENSION_UNCHANGED:
     '공연이 이미 요청한 상태예요. 목록을 새로고침해 주세요.',
+  PERFORMANCE_CANCELLED: '이미 취소된 공연이에요. 목록을 새로고침해 주세요.',
   INVALID_REQUEST: '입력 내용을 확인해 주세요.',
 };
 

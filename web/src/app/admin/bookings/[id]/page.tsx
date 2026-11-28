@@ -7,7 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { buttonClassName } from '@/components/ui/button';
 import { tableClass, thClass, tdClass } from '@/components/ui/table-styles';
 import { parsePositiveId } from '@/features/admin/admin-filters';
-import { bookingStatuses } from '@/features/admin/booking-status';
+import {
+  bookingCancelReasons,
+  bookingStatuses,
+} from '@/features/admin/booking-status';
+import { CancellationForm } from '@/features/admin/cancellation-form';
 import { formatSeoul } from '@/lib/datetime';
 import { ApiError } from '@/lib/problem';
 import { getAdminBookingDetail } from '@/server/aggregate/admin-booking-detail';
@@ -76,12 +80,22 @@ async function BookingDetail({ params }: { params: Params }) {
         title={`예매 #${booking.bookingId}`}
         description={booking.performanceTitle}
         actions={
-          <Link
-            href="/admin/bookings"
-            className={buttonClassName({ variant: 'secondary' })}
-          >
-            예매 목록
-          </Link>
+          <>
+            <Link
+              href="/admin/bookings"
+              className={buttonClassName({ variant: 'secondary' })}
+            >
+              예매 목록
+            </Link>
+            {(booking.status === 'PENDING' ||
+              booking.status === 'CONFIRMED') && (
+              <CancellationForm
+                id={booking.bookingId}
+                target="booking"
+                name={`예매 #${booking.bookingId}`}
+              />
+            )}
+          </>
         }
       />
       <div className="grid items-start gap-6 md:grid-cols-2">
@@ -110,6 +124,13 @@ async function BookingDetail({ params }: { params: Params }) {
               ['결제 대상 금액', won(booking.payableAmount)],
             ]}
           />
+          {booking.cancelReason && (
+            <Facts
+              entries={[
+                ['취소 유형', bookingCancelReasons[booking.cancelReason]],
+              ]}
+            />
+          )}
         </section>
         <section
           className="grid gap-4 rounded-card border border-line bg-surface p-4"
