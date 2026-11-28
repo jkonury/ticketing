@@ -26,7 +26,7 @@ approved_at: 2026-11-29T00:58:42+09:00
 
 ### T1. settlement 지표 수집
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: `observability/prometheus/prometheus.yml`의 `apps` job에 `host.docker.internal:18086`을 추가한다. settlement DB에는 `event_publication` 테이블이 없으므로 `settlement/src/main/resources/application.yml`에서 `ticketing.event-publication.metrics.enabled=false`를 설정한다. 이 설정이 없으면 settlement를 수집할 때마다 조회 실패 경고가 남는다. 다른 앱의 설정은 바꾸지 않는다.
 - 테스트 경계와 선례: settlement의 `/actuator/prometheus` 공개 경계. `core/.../ActuatorPrometheusTests.kt`를 선례로 settlement에 `ActuatorPrometheusTests`를 추가한다. `SettlementWebTestSupport`를 쓰고 인증 없이 200, `application="settlement"`, `hikaricp_connections` 포함, `ticketing_event_publication` 미포함을 확인한다. `prometheus.yml` 문법은 `promtool check config`로 확인한다.
