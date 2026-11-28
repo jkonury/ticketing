@@ -5,7 +5,7 @@ import { optional } from './section';
 
 export async function getAdminBookingDetail(id: number) {
   const booking = await getAdminBooking(id);
-  const payments = await optional(getAdminPayment(booking.bookingId), true);
+  const payments = await optional(getAdminPayment(booking.bookingId));
   return {
     booking,
     payment:
