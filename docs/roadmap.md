@@ -55,6 +55,7 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 ## 별도 구현 항목
 
 - [x] 관리자 기능 강화. 공연 판매 중지·재개, 회원 이용 정지·해제, 관리자 예매·결제 조회 ([실행 계획](./workflow/plans/2026-11-28-admin-enhancement.md), [ADR 0052](./adr/0052-admin-intervention-states.md))
+- [x] 개발·CI 포스터 저장소 RustFS 전환 ([실행 계획](./workflow/plans/2026-11-28-poster-storage-rustfs.md), [ADR 0053](./adr/0053-poster-storage-rustfs.md))
 
 ## 단계와 무관한 후속 항목
 
@@ -66,10 +67,9 @@ AI 개발 워크플로 작업은 별도 트랙 [workflow/roadmap.md](./workflow/
 
 | 순서 | 항목 | 도입 시점 |
 |---|---|---|
-| 1 | 포스터 저장소 RustFS 전환 | k8s 매니페스트 작성 전. 오브젝트 스토리지 구성이 매니페스트에 들어간다. [영향 범위와 검증 결과](reviews/2026-11-27-poster-storage-rustfs.md) |
-| 2 | 관리자 기능 후속 | 예매 강제 취소·공연 취소 Saga 먼저, 정산 전체 조회·운영 도구·대시보드는 그다음. [ADR 0052](./adr/0052-admin-intervention-states.md) |
-| 3 | 실제 PG 연동 (테스트 모드) | 가짜 PG 보상 흐름 검증 완료(M6 Saga 재검증). k8s Secret 구성 이후 |
-| 4 | 판매 통계 집계 Batch | 핵심 Batch 3종(M2) 완료. settlement의 Kafka 소비 구조에 붙인다 |
+| 1 | 관리자 기능 후속 | 예매 강제 취소·공연 취소 Saga 먼저, 정산 전체 조회·운영 도구·대시보드는 그다음. [ADR 0052](./adr/0052-admin-intervention-states.md) |
+| 2 | 실제 PG 연동 (테스트 모드) | 가짜 PG 보상 흐름 검증 완료(M6 Saga 재검증). k8s Secret 구성 이후 |
+| 3 | 판매 통계 집계 Batch | 핵심 Batch 3종(M2) 완료. settlement의 Kafka 소비 구조에 붙인다 |
 | - | `coupon-claim` rate limit 수치 검증 테스트 | M5.5-3 측정 후속. 현재 값은 임시. 범위가 작아 다른 작업 사이에 처리 |
 
 ### 보류 항목

@@ -7,7 +7,7 @@
 | 영역 | 전환 시 작업 |
 |---|---|
 | Compose | RustFS 이미지 버전과 다이제스트를 고정하고 새 데이터 볼륨을 사용한다. `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `RUSTFS_CORS_ALLOWED_ORIGINS`를 설정하고 readiness를 `/health/ready`로 바꾼다. 기본 바인딩 `127.0.0.1:19010`은 재사용할 수 있다. [Compose](../../compose.yaml) · [Docker 설치](https://github.com/rustfs/docs.rustfs.com/blob/main/content/en/installation/container/docker.md) · [CORS 설정](https://docs.rustfs.com/en/administration/cors) |
-| 버킷 초기화 | `ticketing-posters` 생성과 공개 읽기 정책 적용을 반복 실행할 수 있게 한다. 익명 `s3:GetObject`는 `posters/*`에만 허용한다. 기존 `mc` 초기화의 호환 여부를 확인하거나 표준 S3 API를 호출하는 CLI로 교체한다. [현재 초기화 스크립트](../../deploy/minio/init-posters.sh) |
+| 버킷 초기화 | `ticketing-posters` 생성과 공개 읽기 정책 적용을 반복 실행할 수 있게 한다. 익명 `s3:GetObject`는 `posters/*`에만 허용한다. 기존 `mc` 초기화의 호환 여부를 확인하거나 표준 S3 API를 호출하는 CLI로 교체한다. [현재 초기화 스크립트](https://github.com/jkonury/ticketing/blob/0a247ce7bd4a7a8b2a6bf6c93955426ab01ae96e/deploy/minio/init-posters.sh) |
 | 개발·CI | 개발 스크립트와 웹 E2E가 기동하는 Compose 서비스를 교체한다. 환경 변수 이름을 바꾸면 `.env.example`, 기존 로컬 `.env`, core 설정을 함께 맞춘다. 웹 CI와 데모 시드는 기존 스크립트와 API를 통해 전환된 저장소를 사용할 수 있다. [개발 기동](../../scripts/dev/run.sh) · [E2E 기동](../../scripts/e2e/run.sh) · [웹 CI](../../.github/workflows/web-e2e.yml) |
 | core·웹 | core는 AWS SDK의 path-style S3 주소와 `us-east-1`을 사용한다. 주소와 버킷을 유지한다는 전제에서 포스터 로직, API·BFF·화면, nginx 라우팅 수정은 필요 없어 보인다. nginx 경유 시 서명에 사용한 `Host`와 경로가 보존되어야 한다. [저장소 설정](../../core/src/main/kotlin/io/github/ticketing/catalog/config/PosterStorageConfig.kt) · [nginx 템플릿](../../nginx/ticketing.conf.template) |
 

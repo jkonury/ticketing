@@ -56,7 +56,7 @@ approved_at: 2026-11-28T16:28:04+09:00
 
 ### T3. 문서 갱신
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2
 - 변경 범위와 제약:
   - `docs/architecture.md`: 기술 스택 표의 "MinIO(개발·CI)"를 RustFS로 바꾸고 ADR 0053 링크를 단다. 로컬 실행 문단의 서비스 이름과 `minio-init`을 바꾼다.

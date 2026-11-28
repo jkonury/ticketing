@@ -62,7 +62,7 @@
 | Gradle | 9.8.2 | wrapper |
 | PostgreSQL / Redis | 18.3-alpine / 8.6.2-alpine | Compose, Testcontainers 공통 |
 | Kafka | apache/kafka 4.3.2 | Compose 단일 KRaft 브로커 |
-| S3 호환 객체 저장소 | MinIO(개발·CI) | 공연 포스터, S3 SDK로 접근 |
+| S3 호환 객체 저장소 | RustFS(개발·CI) | 공연 포스터, S3 SDK로 접근 ([ADR 0053](./adr/0053-poster-storage-rustfs.md)) |
 | Next.js | 16.4.6 | App Router |
 | Node.js | 24 | web 런타임 |
 
@@ -247,7 +247,7 @@ Gateway의 요청 한도는 검증된 회원 ID 또는 클라이언트 IP에 적
 
 ## 11. 개발 환경과 테스트
 
-- 로컬 실행은 Docker Compose의 PostgreSQL·Redis·Kafka·MinIO를 쓴다. MinIO는 `127.0.0.1:19010`에 바인딩하고, `minio-init`이 포스터 버킷의 공개 조회 정책을 설정한다. nginx 도메인으로 접속할 때는 `.env.example`에 있는 포스터 주소·CORS 설정을 적용하고 nginx 템플릿을 다시 설치한다. 가짜 PG는 `scripts/dev/run.sh --fake-pg`, payment 앱은 `scripts/dev/run.sh --payment`로 별도 실행한다.
+- 로컬 실행은 Docker Compose의 PostgreSQL·Redis·Kafka·RustFS를 쓴다. `object-storage`는 기본 주소 `127.0.0.1:19010`에 바인딩하고, `object-storage-init`이 포스터 버킷의 공개 조회 정책을 설정한다. nginx 도메인으로 접속할 때는 `.env.example`에 있는 포스터 주소·CORS 설정을 적용하고 nginx 템플릿을 다시 설치한다. 가짜 PG는 `scripts/dev/run.sh --fake-pg`, payment 앱은 `scripts/dev/run.sh --payment`로 별도 실행한다.
 - 통합 테스트: Testcontainers (PostgreSQL·Kafka 등)
 - 모듈 테스트: Modulith 모듈 단위 테스트(`@ApplicationModuleTest`)
 - 동시성 테스트: 같은 좌석에 대한 동시 선점·확정
