@@ -4,6 +4,17 @@ import 'server-only';
 
 import * as z from 'zod';
 
+export const zAdminPaymentResponse = z.object({
+  amount: z.number(),
+  approvedAt: z.iso.datetime({ offset: true }).nullish(),
+  bookingId: z.int(),
+  failureReason: z.string().nullish(),
+  refundRequestedAt: z.iso.datetime({ offset: true }).nullish(),
+  refundedAt: z.iso.datetime({ offset: true }).nullish(),
+  requestedAt: z.iso.datetime({ offset: true }),
+  status: z.string(),
+});
+
 export const zPaymentStatusResponse = z.object({
   approvedAt: z.iso.datetime({ offset: true }).nullish(),
   bookingId: z.int(),
@@ -11,6 +22,15 @@ export const zPaymentStatusResponse = z.object({
   refundedAt: z.iso.datetime({ offset: true }).nullish(),
   status: z.string(),
 });
+
+export const zAdminByBookingIdQuery = z.object({
+  bookingId: z.int().gt(0),
+});
+
+/**
+ * OK
+ */
+export const zAdminByBookingIdResponse = z.array(zAdminPaymentResponse);
 
 export const zMineQuery = z.object({
   bookingIds: z.array(z.int()).min(1).max(50),

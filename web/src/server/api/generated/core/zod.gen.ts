@@ -4,6 +4,35 @@ import 'server-only';
 
 import * as z from 'zod';
 
+export const zAdminBookingSummaryResponse = z.object({
+  bookingId: z.int(),
+  createdAt: z.iso.datetime({ offset: true }),
+  memberId: z.int(),
+  performanceTitle: z.string(),
+  scheduleId: z.int(),
+  status: z.enum(['PENDING', 'CONFIRMED', 'EXPIRED', 'CANCELLED']),
+  totalAmount: z.number(),
+});
+
+export const zAdminBookingPageResponse = z.object({
+  items: z.array(zAdminBookingSummaryResponse),
+  nextCursor: z.int().nullish(),
+});
+
+export const zAdminPerformanceSummary = z.object({
+  createdAt: z.iso.datetime({ offset: true }),
+  id: z.int(),
+  organizerId: z.int(),
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  title: z.string(),
+  venueName: z.string(),
+});
+
+export const zAdminPerformancePage = z.object({
+  items: z.array(zAdminPerformanceSummary),
+  nextCursor: z.int().nullish(),
+});
+
 export const zApplyCouponRequest = z.object({
   issuedCouponId: z.int().gt(0),
 });
@@ -54,6 +83,22 @@ export const zBookingSeatResponse = z.object({
   label: z.string(),
   price: z.number(),
   seatId: z.int(),
+});
+
+export const zAdminBookingDetailResponse = z.object({
+  bookingId: z.int(),
+  coupon: zBookingCouponView.nullish(),
+  createdAt: z.iso.datetime({ offset: true }),
+  discountAmount: z.number(),
+  expiresAt: z.iso.datetime({ offset: true }),
+  listAmount: z.number(),
+  memberId: z.int(),
+  payableAmount: z.number(),
+  performanceTitle: z.string(),
+  scheduleId: z.int(),
+  seats: z.array(zBookingSeatResponse),
+  startsAt: z.iso.datetime({ offset: true }),
+  status: z.enum(['PENDING', 'CONFIRMED', 'EXPIRED', 'CANCELLED']),
 });
 
 export const zBookingDetailResponse = z.object({
@@ -272,11 +317,17 @@ export const zMemberSummary = z.object({
   id: z.int(),
   name: z.string(),
   role: z.enum(['USER', 'ORGANIZER', 'ADMIN']),
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
 });
 
 export const zMemberPage = z.object({
   items: z.array(zMemberSummary),
   nextCursor: z.int().nullish(),
+});
+
+export const zMemberSuspensionResponse = z.object({
+  id: z.int(),
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
 });
 
 export const zMyCouponResponse = z.object({
@@ -310,6 +361,11 @@ export const zPerformanceSummaryResponse = z.object({
 export const zPerformancePageResponse = z.object({
   items: z.array(zPerformanceSummaryResponse),
   nextCursor: z.int().nullish(),
+});
+
+export const zPerformanceSuspensionResponse = z.object({
+  id: z.int(),
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
 });
 
 export const zPosterUploadRequest = z.object({
@@ -393,6 +449,11 @@ export const zPerformanceDetailResponse = z.object({
   venueName: z.string(),
 });
 
+export const zOrganizerPerformanceResponse = z.object({
+  performance: zPerformanceDetailResponse,
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
+});
+
 export const zSeatView = z.object({
   grade: z.string(),
   number: z
@@ -419,6 +480,14 @@ export const zSignUpRequest = z.object({
 export const zSseTicketResponse = z.object({
   expiresAt: z.iso.datetime({ offset: true }),
   ticket: z.string(),
+});
+
+export const zSuspendMemberRequest = z.object({
+  reason: z.string().min(0).max(200),
+});
+
+export const zSuspendPerformanceRequest = z.object({
+  reason: z.string().min(0).max(200),
 });
 
 export const zTokenResponse = z.object({
@@ -480,7 +549,7 @@ export const zRegisterVenueRequest = z.object({
   seats: z.array(zVenueSeatRequest).min(1).max(5000),
 });
 
-export const zList2Query = z.object({
+export const zList3Query = z.object({
   cursor: z.int().optional(),
   size: z.int().gte(1).lte(100).optional().default(20),
   action: z.string().optional(),
@@ -492,7 +561,31 @@ export const zList2Query = z.object({
 /**
  * OK
  */
-export const zList2Response = zAuditLogPage;
+export const zList3Response = zAuditLogPage;
+
+export const zList2Query = z.object({
+  memberId: z.int().gt(0).optional(),
+  scheduleId: z.int().gt(0).optional(),
+  status: z.enum(['PENDING', 'CONFIRMED', 'EXPIRED', 'CANCELLED']).optional(),
+  createdFrom: z.iso.datetime({ offset: true }).optional(),
+  createdTo: z.iso.datetime({ offset: true }).optional(),
+  cursor: z.int().gt(0).optional(),
+  size: z.int().gte(1).lte(50).optional().default(20),
+});
+
+/**
+ * OK
+ */
+export const zList2Response = zAdminBookingPageResponse;
+
+export const zDetail1Path = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zDetail1Response = zAdminBookingDetailResponse;
 
 export const zListQuery = z.object({
   cursor: z.int().optional(),
@@ -598,6 +691,59 @@ export const zChangeRolePath = z.object({
  * OK
  */
 export const zChangeRoleResponse = zMemberResponse;
+
+export const zReinstatePath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zReinstateResponse = zMemberSuspensionResponse;
+
+export const zSuspendMemberBody = zSuspendMemberRequest;
+
+export const zSuspendMemberPath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zSuspendMemberResponse = zMemberSuspensionResponse;
+
+export const zAdminPerformancesQuery = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
+  organizerId: z.int().optional(),
+  title: z.string().optional(),
+  cursor: z.int().optional(),
+  size: z.int().gte(1).lte(100).optional().default(20),
+});
+
+/**
+ * OK
+ */
+export const zAdminPerformancesResponse = zAdminPerformancePage;
+
+export const zResumePerformancePath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zResumePerformanceResponse = zPerformanceSuspensionResponse;
+
+export const zSuspendPerformanceBody = zSuspendPerformanceRequest;
+
+export const zSuspendPerformancePath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zSuspendPerformanceResponse = zPerformanceSuspensionResponse;
 
 export const zLoginBody = zLoginRequest;
 
@@ -732,6 +878,15 @@ export const zSignUpResponse = zMemberResponse;
  * OK
  */
 export const zMeResponse = zMemberResponse;
+
+export const zOwnedPerformancePath = z.object({
+  id: z.int(),
+});
+
+/**
+ * OK
+ */
+export const zOwnedPerformanceResponse = zOrganizerPerformanceResponse;
 
 /**
  * OK

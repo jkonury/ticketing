@@ -6,6 +6,37 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AdminBookingDetailResponse = {
+  bookingId: number;
+  coupon?: BookingCouponView | null;
+  createdAt: string;
+  discountAmount: number;
+  expiresAt: string;
+  listAmount: number;
+  memberId: number;
+  payableAmount: number;
+  performanceTitle: string;
+  scheduleId: number;
+  seats: Array<BookingSeatResponse>;
+  startsAt: string;
+  status: 'PENDING' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED';
+};
+
+export type AdminBookingPageResponse = {
+  items: Array<AdminBookingSummaryResponse>;
+  nextCursor?: number | null;
+};
+
+export type AdminBookingSummaryResponse = {
+  bookingId: number;
+  createdAt: string;
+  memberId: number;
+  performanceTitle: string;
+  scheduleId: number;
+  status: 'PENDING' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED';
+  totalAmount: number;
+};
+
 export type AdminCouponPageResponse = {
   items: Array<AdminCouponResponse>;
   nextCursor?: number | null;
@@ -27,6 +58,20 @@ export type AdminCouponResponse = {
   totalQuantity?: number | null;
   validFrom: string;
   validUntil: string;
+};
+
+export type AdminPerformancePage = {
+  items: Array<AdminPerformanceSummary>;
+  nextCursor?: number | null;
+};
+
+export type AdminPerformanceSummary = {
+  createdAt: string;
+  id: number;
+  organizerId: number;
+  status: 'ACTIVE' | 'SUSPENDED';
+  title: string;
+  venueName: string;
 };
 
 export type ApplyCouponRequest = {
@@ -230,6 +275,12 @@ export type MemberSummary = {
   id: number;
   name: string;
   role: 'USER' | 'ORGANIZER' | 'ADMIN';
+  status: 'ACTIVE' | 'SUSPENDED';
+};
+
+export type MemberSuspensionResponse = {
+  id: number;
+  status: 'ACTIVE' | 'SUSPENDED';
 };
 
 export type MyCouponResponse = {
@@ -242,6 +293,11 @@ export type MyCouponResponse = {
   orderId?: number | null;
   status: 'ISSUED' | 'RESERVED' | 'USED' | 'REVOKED' | 'EXPIRED';
   usedAt?: string | null;
+};
+
+export type OrganizerPerformanceResponse = {
+  performance: PerformanceDetailResponse;
+  status: 'ACTIVE' | 'SUSPENDED';
 };
 
 export type PaymentRequestResponse = {
@@ -275,6 +331,11 @@ export type PerformanceSummaryResponse = {
   posterUrl?: string | null;
   title: string;
   venueName: string;
+};
+
+export type PerformanceSuspensionResponse = {
+  id: number;
+  status: 'ACTIVE' | 'SUSPENDED';
 };
 
 export type PosterUploadRequest = {
@@ -355,6 +416,14 @@ export type SseTicketResponse = {
   ticket: string;
 };
 
+export type SuspendMemberRequest = {
+  reason: string;
+};
+
+export type SuspendPerformanceRequest = {
+  reason: string;
+};
+
 export type TokenResponse = {
   accessExpiresIn: number;
   accessToken: string;
@@ -396,7 +465,7 @@ export type VenueSeatRequest = {
   section: string;
 };
 
-export type List2Data = {
+export type List3Data = {
   body?: never;
   path?: never;
   query?: {
@@ -410,14 +479,62 @@ export type List2Data = {
   url: '/api/v1/admin/audit-logs';
 };
 
-export type List2Responses = {
+export type List3Responses = {
   /**
    * OK
    */
   200: AuditLogPage;
 };
 
+export type List3Response = List3Responses[keyof List3Responses];
+
+export type List2Data = {
+  body?: never;
+  path?: never;
+  query?: {
+    memberId?: number;
+    scheduleId?: number;
+    status?: 'PENDING' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED';
+    /**
+     * 예매 생성 시각 하한(포함)
+     */
+    createdFrom?: string;
+    /**
+     * 예매 생성 시각 상한(포함)
+     */
+    createdTo?: string;
+    cursor?: number;
+    size?: number;
+  };
+  url: '/api/v1/admin/bookings';
+};
+
+export type List2Responses = {
+  /**
+   * OK
+   */
+  200: AdminBookingPageResponse;
+};
+
 export type List2Response = List2Responses[keyof List2Responses];
+
+export type Detail1Data = {
+  body?: never;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/bookings/{id}';
+};
+
+export type Detail1Responses = {
+  /**
+   * OK
+   */
+  200: AdminBookingDetailResponse;
+};
+
+export type Detail1Response = Detail1Responses[keyof Detail1Responses];
 
 export type ListData = {
   body?: never;
@@ -603,6 +720,104 @@ export type ChangeRoleResponses = {
 };
 
 export type ChangeRoleResponse = ChangeRoleResponses[keyof ChangeRoleResponses];
+
+export type ReinstateData = {
+  body?: never;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/members/{id}/suspension';
+};
+
+export type ReinstateResponses = {
+  /**
+   * OK
+   */
+  200: MemberSuspensionResponse;
+};
+
+export type ReinstateResponse = ReinstateResponses[keyof ReinstateResponses];
+
+export type SuspendMemberData = {
+  body: SuspendMemberRequest;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/members/{id}/suspension';
+};
+
+export type SuspendMemberResponses = {
+  /**
+   * OK
+   */
+  200: MemberSuspensionResponse;
+};
+
+export type SuspendMemberResponse =
+  SuspendMemberResponses[keyof SuspendMemberResponses];
+
+export type AdminPerformancesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    status?: 'ACTIVE' | 'SUSPENDED';
+    organizerId?: number;
+    title?: string;
+    cursor?: number;
+    size?: number;
+  };
+  url: '/api/v1/admin/performances';
+};
+
+export type AdminPerformancesResponses = {
+  /**
+   * OK
+   */
+  200: AdminPerformancePage;
+};
+
+export type AdminPerformancesResponse =
+  AdminPerformancesResponses[keyof AdminPerformancesResponses];
+
+export type ResumePerformanceData = {
+  body?: never;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/performances/{id}/suspension';
+};
+
+export type ResumePerformanceResponses = {
+  /**
+   * OK
+   */
+  200: PerformanceSuspensionResponse;
+};
+
+export type ResumePerformanceResponse =
+  ResumePerformanceResponses[keyof ResumePerformanceResponses];
+
+export type SuspendPerformanceData = {
+  body: SuspendPerformanceRequest;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/admin/performances/{id}/suspension';
+};
+
+export type SuspendPerformanceResponses = {
+  /**
+   * OK
+   */
+  200: PerformanceSuspensionResponse;
+};
+
+export type SuspendPerformanceResponse =
+  SuspendPerformanceResponses[keyof SuspendPerformanceResponses];
 
 export type LoginData = {
   body: LoginRequest;
@@ -871,6 +1086,25 @@ export type MeResponses = {
 };
 
 export type MeResponse = MeResponses[keyof MeResponses];
+
+export type OwnedPerformanceData = {
+  body?: never;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/api/v1/organizer/performances/{id}';
+};
+
+export type OwnedPerformanceResponses = {
+  /**
+   * OK
+   */
+  200: OrganizerPerformanceResponse;
+};
+
+export type OwnedPerformanceResponse =
+  OwnedPerformanceResponses[keyof OwnedPerformanceResponses];
 
 export type GetScheduleSalesData = {
   body?: never;

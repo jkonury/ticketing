@@ -1,6 +1,41 @@
 {
   "components" : {
     "schemas" : {
+      "AdminPaymentResponse" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "approvedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "bookingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "failureReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "refundRequestedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "refundedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "requestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "bookingId", "requestedAt", "status" ],
+        "type" : "object"
+      },
       "PaymentStatusResponse" : {
         "properties" : {
           "approvedAt" : {
@@ -33,6 +68,37 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/admin/payments" : {
+      "get" : {
+        "operationId" : "adminByBookingId",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AdminPaymentResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "payment-query-controller" ]
+      }
+    },
     "/api/v1/payments/me" : {
       "get" : {
         "operationId" : "mine",
