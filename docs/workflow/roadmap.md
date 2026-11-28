@@ -2,7 +2,7 @@
 
 - 결정: [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md)
 - 작성일: 2026-11-25
-- 상태: W0~W3 완료. 다음 단계는 W4
+- 상태: W0~W4 완료. 다음 단계는 W5
 
 Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙이다. 서비스 로드맵 [docs/roadmap.md](../roadmap.md)의 M6와 병행하고, M6 task를 파이프라인의 시범 대상으로 쓴다. 각 단계는 **완료 기준**을 만족해야 다음 단계로 넘어간다.
 
@@ -89,3 +89,12 @@ Claude Code·Codex 공용 반자율 개발 파이프라인을 만드는 트랙�
 
 - 계획 형식이 [ADR 0048](../adr/0048-ai-dev-workflow-pipeline.md) 결정 7(계획 문서 형식과 `status`)을 바꾸면 새 ADR로 남긴다. 사용자와 합의한 뒤에 쓴다.
 - `/plan-next`의 앞 단계(요구 정리)는 [`grill-with-docs` 스킬](../../.agents/skills/grill-with-docs/SKILL.md)을 쓴다. 뒤 단계는 `tdd`(구현)와 `review-diff`(리뷰)다. `/implement`는 `review-diff`를 호출하지 않으며, 리뷰는 별도로 요청한다.
+
+## W4. 토큰 수집과 집계 리포트
+
+- [x] 두 도구의 대화 기록에서 task 구간의 토큰을 같은 항목(입력·캐시 읽기·캐시 쓰기·출력)으로 집계한다(`harness/lib/transcripts.py`).
+- [x] `harness/bin/report.py`로 계획별 리포트와 요약 표를 `docs/workflow/metrics/`에 만든다.
+- [x] 완주한 계획 6건의 리포트를 만들고 집계 형식과 한계를 [워크플로 지표](./metrics/README.md)에 적는다.
+- [ ] 사람 개입 지표(질문 라운드, 구현 중 프롬프트, 커밋 후 사람 수정)는 훅과 이벤트 형식을 바꿔야 하므로 미룬다. 필요해지면 새 계획으로 다룬다.
+
+**완료 기준**: W3 완주 건의 리포트가 `docs/workflow/metrics/`에 있다. 지금까지의 이벤트는 모두 Codex라 두 도구 비교는 필드 차이와 표본 한계만 서술하고, Claude Code 계획이 생기면 같은 스크립트로 리포트를 추가한다.
