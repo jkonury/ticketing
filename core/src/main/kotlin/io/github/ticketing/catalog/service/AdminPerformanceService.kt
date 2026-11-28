@@ -1,7 +1,9 @@
 package io.github.ticketing.catalog.service
 
+import io.github.ticketing.catalog.PerformanceCancelled
 import io.github.ticketing.catalog.PerformanceSuspensionChanged
 import io.github.ticketing.catalog.config.CatalogCaches
+import io.github.ticketing.catalog.domain.Performance
 import io.github.ticketing.catalog.domain.PerformanceStatus
 import io.github.ticketing.catalog.query.AdminPerformanceQueryRepository
 import io.github.ticketing.catalog.repository.PerformanceRepository
@@ -28,11 +30,17 @@ class AdminPerformanceService(
     @Transactional
     fun resume(actorId: Long, id: Long): PerformanceStatus = changeStatus(actorId, id, PerformanceStatus.ACTIVE, null)
 
+    @Transactional
+    fun cancel(actorId: Long, id: Long, reason: String): PerformanceStatus {
+        val performance = transition(id, PerformanceStatus.CANCELLED)
+        events.publishEvent(
+            PerformanceCancelled(UUID.randomUUID(), actorId, id, performance.suspensionVersion, reason.trim(), clock.instant()),
+        )
+        return performance.status
+    }
+
     private fun changeStatus(actorId: Long, id: Long, status: PerformanceStatus, reason: String?): PerformanceStatus {
-        val performance = performances.findForUpdate(id) ?: throw PerformanceNotFoundException()
-        if (performance.status == status) throw PerformanceSuspensionUnchangedException()
-        performance.changeStatus(status)
-        evictPublicViews(id)
+        val performance = transition(id, status)
         events.publishEvent(
             PerformanceSuspensionChanged(
                 eventId = UUID.randomUUID(),
@@ -45,6 +53,19 @@ class AdminPerformanceService(
             ),
         )
         return performance.status
+    }
+
+    private fun transition(id: Long, status: PerformanceStatus): Performance {
+        val performance = performances.findForUpdate(id) ?: throw PerformanceNotFoundException()
+        val error = when (performance.status) {
+            PerformanceStatus.CANCELLED -> PerformanceCancelledException()
+            status -> PerformanceSuspensionUnchangedException()
+            else -> null
+        }
+        if (error != null) throw error
+        performance.changeStatus(status)
+        evictPublicViews(id)
+        return performance
     }
 
     private fun evictPublicViews(id: Long) {

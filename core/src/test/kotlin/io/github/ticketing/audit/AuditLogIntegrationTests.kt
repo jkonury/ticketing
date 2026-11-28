@@ -3,6 +3,7 @@ package io.github.ticketing.audit
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.audit.service.AdminActionRecorder
 import io.github.ticketing.booking.BookingForceCancelled
+import io.github.ticketing.catalog.PerformanceCancelled
 import io.github.ticketing.member.MemberRoleChanged
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
@@ -88,6 +89,24 @@ class AuditLogIntegrationTests(
             assertThat(row.targetType).isEqualTo("BOOKING")
             assertThat(row.targetId).isEqualTo("123")
             assertThat(json.readValue(requireNotNull(row.detail).data(), Map::class.java)).isEqualTo(mapOf("reason" to "중복 예매"))
+        }
+    }
+
+    @Test
+    fun `공연 취소 이벤트를 재전달해도 관리자와 사유를 한 번 기록한다`() {
+        val event = PerformanceCancelled(UUID.randomUUID(), 7, 321, 2, "공연장 사정", Instant.parse("2030-01-01T00:00:00Z"))
+
+        repeat(2) { tx.executeWithoutResult { publisher.publishEvent(event) } }
+
+        await().atMost(10, TimeUnit.SECONDS).untilAsserted {
+            val rows = dsl.selectFrom(ADMIN_ACTION).where(ADMIN_ACTION.SOURCE_EVENT_ID.eq(event.eventId)).fetch()
+            assertThat(rows).hasSize(1)
+            val row = rows.single()
+            assertThat(row.actorId).isEqualTo(7L)
+            assertThat(row.action).isEqualTo("PERFORMANCE_CANCELLED")
+            assertThat(row.targetType).isEqualTo("PERFORMANCE")
+            assertThat(row.targetId).isEqualTo("321")
+            assertThat(json.readValue(requireNotNull(row.detail).data(), Map::class.java)).isEqualTo(mapOf("reason" to "공연장 사정"))
         }
     }
 

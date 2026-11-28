@@ -110,9 +110,14 @@ class CatalogRegistrationService(
     private fun requireEditablePerformance(performance: Performance?, requesterId: Long): Performance {
         val error = when {
             performance == null -> PerformanceNotFoundException()
+
             performance.organizerId != requesterId -> NotPerformanceOwnerException()
-            performance.status == PerformanceStatus.SUSPENDED -> PerformanceSuspendedException()
-            else -> return performance
+
+            else -> when (performance.status) {
+                PerformanceStatus.ACTIVE -> return performance
+                PerformanceStatus.SUSPENDED -> PerformanceSuspendedException()
+                PerformanceStatus.CANCELLED -> PerformanceCancelledException()
+            }
         }
         throw error
     }
