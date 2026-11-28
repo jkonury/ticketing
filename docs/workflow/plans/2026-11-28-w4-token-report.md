@@ -25,7 +25,7 @@ approved_at: 2026-11-28T21:43:28+09:00
 
 ### T1. 대화 기록의 task별 토큰 집계
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: `harness/lib/transcripts.py`를 추가한다. 공개 함수는 도구·세션 ID·시간 범위·기록 디렉터리를 받아 정규화한 토큰(입력, 캐시 읽기, 캐시 쓰기, 출력)을 돌려준다. 기록을 못 찾거나 범위에 토큰 이벤트가 없으면 값이 아니라 "미상"을 돌려주고 0으로 속이지 않는다. 세션 파일은 Claude Code가 `~/.claude/projects/*/<세션 ID>.jsonl`, Codex가 `~/.codex/sessions/*/*/*/rollout-*-<세션 ID>.jsonl`이므로 세션 ID로 찾는다. Claude Code는 assistant 메시지의 `usage`를 `message.id` 기준 중복 제거해 시각이 범위에 드는 것만 더한다(`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`). Codex는 `token_count` 이벤트의 `total_token_usage` 누적값에서 범위 시작 직전 값과 끝 직전 값의 차를 쓰고, 입력은 캐시 읽기를 포함한 값이므로 `input_tokens - cached_input_tokens`를 입력으로 정규화한다. 구현 전에 시범 세션 한두 개로 `total_tokens = input + output`과 `last_usage_includes_reasoning` 가정을 확인하고, 다르면 사용자와 규칙을 다시 정한다. 대화 내용은 읽되 결과에는 숫자만 남긴다. 이 task는 `.metrics/`와 훅을 건드리지 않는다.
 - 테스트 경계와 선례: `harness/tests/test_transcripts.py`(신규)가 합성 대화 기록 파일로 공개 함수를 검증한다. 선례는 `harness/tests/test_gate.py`·`support.py`의 임시 디렉터리 방식이다. 검증할 것: Claude Code의 중복 메시지 제거와 범위 경계, Codex의 누적 차분과 캐시 정규화, 같은 이벤트 반복에도 이중 집계 없음, 세션 파일 없음·범위에 이벤트 없음일 때 "미상".
