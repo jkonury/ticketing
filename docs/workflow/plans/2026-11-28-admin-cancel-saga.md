@@ -88,7 +88,7 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T5. OpenAPI 스펙과 BFF 경계 스키마 재생성
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: T1, T2, T4
 - 변경 범위와 제약: [ADR 0047](../../adr/0047-openapi-codegen-for-bff-boundary.md) 절차대로 core 스펙(`docs/api/openapi/`)과 `web`의 Zod 스키마를 재생성한다. 생성 파일은 손으로 고치지 않는다. `web/src/server/api/admin.ts`에 강제 취소·공연 취소 호출 함수와 예매 목록 `performanceId` 파라미터를 추가한다.
 - 테스트 경계와 선례: `web/src/server/api/admin.test.ts`. 요청 경로·본문·응답 파싱과 409·400 오류 매핑을 단위 테스트로 확인한다.

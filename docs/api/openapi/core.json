@@ -7,6 +7,10 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "cancelReason" : {
+            "enum" : [ "USER_REQUESTED", "PAYMENT_FAILED", "SEAT_ALREADY_SOLD", "AMOUNT_MISMATCH", "ADMIN_CANCELLED", "PERFORMANCE_CANCELLED" ],
+            "type" : [ "string", "null" ]
+          },
           "coupon" : {
             "oneOf" : [ {
               "$ref" : "#/components/schemas/BookingCouponView"
@@ -218,7 +222,7 @@
             "type" : "integer"
           },
           "status" : {
-            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "enum" : [ "ACTIVE", "SUSPENDED", "CANCELLED" ],
             "type" : "string"
           },
           "title" : {
@@ -473,6 +477,17 @@
         "required" : [ "bookingId", "createdAt", "performanceId", "performanceTitle", "seatCount", "startsAt", "status", "totalAmount" ],
         "type" : "object"
       },
+      "CancelPerformanceRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
+        "type" : "object"
+      },
       "ChangeRoleRequest" : {
         "properties" : {
           "role" : {
@@ -721,6 +736,17 @@
         "required" : [ "items" ],
         "type" : "object"
       },
+      "ForceCancelBookingRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
+        "type" : "object"
+      },
       "GradePrice" : {
         "properties" : {
           "grade" : {
@@ -955,7 +981,7 @@
             "$ref" : "#/components/schemas/PerformanceDetailResponse"
           },
           "status" : {
-            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "enum" : [ "ACTIVE", "SUSPENDED", "CANCELLED" ],
             "type" : "string"
           }
         },
@@ -973,6 +999,20 @@
           }
         },
         "required" : [ "bookingId", "status" ],
+        "type" : "object"
+      },
+      "PerformanceCancellationResponse" : {
+        "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED", "CANCELLED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "id", "status" ],
         "type" : "object"
       },
       "PerformanceDetailResponse" : {
@@ -1067,7 +1107,7 @@
             "type" : "integer"
           },
           "status" : {
-            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "enum" : [ "ACTIVE", "SUSPENDED", "CANCELLED" ],
             "type" : "string"
           }
         },
@@ -1565,6 +1605,15 @@
           }
         }, {
           "in" : "query",
+          "name" : "performanceId",
+          "required" : false,
+          "schema" : {
+            "exclusiveMinimum" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
           "name" : "status",
           "required" : false,
           "schema" : {
@@ -1645,6 +1694,43 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/AdminBookingDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-booking-controller" ]
+      }
+    },
+    "/api/v1/admin/bookings/{id}/cancellation" : {
+      "post" : {
+        "operationId" : "forceCancel",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ForceCancelBookingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingResponse"
                 }
               }
             },
@@ -2077,7 +2163,7 @@
           "name" : "status",
           "required" : false,
           "schema" : {
-            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "enum" : [ "ACTIVE", "SUSPENDED", "CANCELLED" ],
             "type" : "string"
           }
         }, {
@@ -2121,6 +2207,43 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/AdminPerformancePage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "admin-performance-controller" ]
+      }
+    },
+    "/api/v1/admin/performances/{id}/cancellation" : {
+      "put" : {
+        "operationId" : "cancelPerformance",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CancelPerformanceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerformanceCancellationResponse"
                 }
               }
             },
