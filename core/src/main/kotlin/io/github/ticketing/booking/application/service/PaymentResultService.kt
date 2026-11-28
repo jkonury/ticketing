@@ -10,6 +10,7 @@ import io.github.ticketing.booking.application.port.required.SeatHoldPort
 import io.github.ticketing.booking.domain.Booking
 import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.BookingStatus
+import io.github.ticketing.booking.domain.CancelReason
 import io.github.ticketing.booking.domain.CouponState
 import io.github.ticketing.booking.domain.PaymentOutcome
 import io.github.ticketing.coupon.CouponUseConfirmed
@@ -70,46 +71,7 @@ class PaymentResultService(
         val now = clock.instant()
         val before = booking.status
         return when (val outcome = booking.onPaymentSucceeded(now, amount)) {
-            PaymentOutcome.ConfirmationRequired -> {
-                val seatIds = booking.seats.map { it.seatId }
-
-                val inserted = bookings.insertSoldSeats(bookingId, booking.scheduleId, seatIds, now)
-
-                if (inserted == seatIds.size) {
-                    booking.confirm(now)
-                    val saved = bookings.save(booking)
-
-                    val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId)) { "회차 사본이 없다: ${booking.scheduleId.value}" }
-                    events.publishEvent(
-                        BookingConfirmed(
-                            bookingId.value,
-                            booking.memberId.value,
-                            booking.scheduleId.value,
-                            schedule.performanceId,
-                            schedule.organizerId,
-                            seatIds.map {
-                                it.value
-                            },
-                            booking.payableAmount,
-                            booking.listAmount,
-                            booking.discountAmount,
-                            now,
-                        ),
-                    )
-                    booking.appliedCoupon?.takeIf { it.state == CouponState.RESERVED }?.let {
-                        events.publishEvent(CouponUseConfirmed(bookingId.value, it.issuedCouponId, now, it.reservationAttemptId))
-                    }
-                    confirmationLag.record(Duration.between(paidAt, now).coerceAtLeast(Duration.ZERO))
-                    log.info("예매 확정 bookingId={} paymentId={}", bookingId.value, paymentId)
-                    After.MarkSold(saved)
-                } else {
-                    bookings.deleteSoldSeats(bookingId)
-                    booking.failConfirmation(now)
-                    cancelWithRefund(booking, "SEAT_ALREADY_SOLD", now)
-                    log.warn("좌석이 이미 판매되어 예매를 취소하고 환불을 요청한다 bookingId={} paymentId={}", bookingId.value, paymentId)
-                    After.Release(bookings.save(booking))
-                }
-            }
+            PaymentOutcome.ConfirmationRequired -> confirmSeats(booking, bookingId, paymentId, paidAt, now)
 
             PaymentOutcome.AmountMismatch -> {
                 cancelWithRefund(booking, "AMOUNT_MISMATCH", now)
@@ -129,6 +91,55 @@ class PaymentResultService(
             }
 
             is PaymentOutcome.RefundRequired -> refund(booking, before, outcome, paymentId, now)
+        }
+    }
+
+    private fun confirmSeats(booking: Booking, bookingId: BookingId, paymentId: Long, paidAt: Instant, now: Instant): After {
+        val schedule = checkNotNull(scheduleSeats.findSchedule(booking.scheduleId, forShare = true)) {
+            "회차 사본이 없다: ${booking.scheduleId.value}"
+        }
+        if (schedule.cancelled) {
+            val reason = CancelReason.PERFORMANCE_CANCELLED
+            booking.cancel(reason, now)
+            cancelWithRefund(booking, reason.name, now)
+            return After.Release(bookings.save(booking))
+        }
+        val seatIds = booking.seats.map { it.seatId }
+
+        val inserted = bookings.insertSoldSeats(bookingId, booking.scheduleId, seatIds, now)
+
+        return if (inserted == seatIds.size) {
+            booking.confirm(now)
+            val saved = bookings.save(booking)
+
+            events.publishEvent(
+                BookingConfirmed(
+                    bookingId.value,
+                    booking.memberId.value,
+                    booking.scheduleId.value,
+                    schedule.performanceId,
+                    schedule.organizerId,
+                    seatIds.map {
+                        it.value
+                    },
+                    booking.payableAmount,
+                    booking.listAmount,
+                    booking.discountAmount,
+                    now,
+                ),
+            )
+            booking.appliedCoupon?.takeIf { it.state == CouponState.RESERVED }?.let {
+                events.publishEvent(CouponUseConfirmed(bookingId.value, it.issuedCouponId, now, it.reservationAttemptId))
+            }
+            confirmationLag.record(Duration.between(paidAt, now).coerceAtLeast(Duration.ZERO))
+            log.info("예매 확정 bookingId={} paymentId={}", bookingId.value, paymentId)
+            After.MarkSold(saved)
+        } else {
+            bookings.deleteSoldSeats(bookingId)
+            booking.failConfirmation(now)
+            cancelWithRefund(booking, "SEAT_ALREADY_SOLD", now)
+            log.warn("좌석이 이미 판매되어 예매를 취소하고 환불을 요청한다 bookingId={} paymentId={}", bookingId.value, paymentId)
+            After.Release(bookings.save(booking))
         }
     }
 

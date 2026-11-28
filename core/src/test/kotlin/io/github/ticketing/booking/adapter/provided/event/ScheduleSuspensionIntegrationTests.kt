@@ -2,8 +2,10 @@ package io.github.ticketing.booking.adapter.provided.event
 
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.adapter.required.redis.RedisSeatHoldAdapter.Companion.holdKey
+import io.github.ticketing.booking.application.port.provided.UpdateScheduleSaleStatusUseCase
 import io.github.ticketing.booking.domain.ScheduleId
 import io.github.ticketing.booking.domain.SeatId
+import io.github.ticketing.catalog.PerformanceCancelled
 import io.github.ticketing.catalog.PerformanceSuspensionChanged
 import io.github.ticketing.catalog.ScheduleRegistered
 import io.github.ticketing.catalog.ScheduleSeat
@@ -37,6 +39,7 @@ class ScheduleSuspensionIntegrationTests(
     private val tokens: JwtTokenProvider,
     private val payments: KafkaPaymentStub,
     private val redis: StringRedisTemplate,
+    private val sales: UpdateScheduleSaleStatusUseCase,
 ) : IntegrationTestSupport() {
 
     private val amount = BigDecimal(100_000)
@@ -78,6 +81,48 @@ class ScheduleSuspensionIntegrationTests(
         deliver(state(true, 2))
         deliver(suspended)
         assertThat(book(scheduleId, 2)).hasStatus(HttpStatus.CREATED)
+    }
+
+    @Test
+    fun `취소는 오래된 판매 상태 이벤트를 무시하고 나중에 등록한 회차에도 반영한다`() {
+        val scheduleId = schedule()
+        val cancelled = PerformanceCancelled(UUID.randomUUID(), 17, performanceId, 3, "공연장 사정", Instant.now())
+        deliver(cancelled)
+        deliver(state(true, 2))
+        deliver(state(false, 1))
+        deliver(cancelled)
+
+        for (id in listOf(scheduleId, schedule())) {
+            assertThat(book(id, 1)).hasStatus(HttpStatus.CONFLICT)
+                .bodyJson().extractingPath("$.code").isEqualTo("PERFORMANCE_CANCELLED")
+            assertThat(redis.hasKey(holdKey(ScheduleId(id), SeatId(1)))).isFalse()
+            assertThat(availability(id)).hasStatus(HttpStatus.OK).bodyJson().extractingPath("$.length()").isEqualTo(0)
+        }
+    }
+
+    @Test
+    fun `공연 취소가 사본에 먼저 반영되면 결제 요청을 거절하고 늦은 결제 성공을 환불한다`() {
+        val scheduleId = schedule()
+        val bookingId = createBooking(scheduleId, 1)
+        val unpaidId = createBooking(scheduleId, 2)
+        assertThat(requestPayment(bookingId)).hasStatus(HttpStatus.ACCEPTED)
+        payments.awaitPaymentRequested(bookingId)
+
+        // 일괄 취소보다 결제 성공 처리가 먼저 실행되는 경우다.
+        sales.update(performanceId, saleEnabled = false, version = 3, cancelled = true)
+        assertThat(requestPayment(unpaidId)).hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("PERFORMANCE_CANCELLED")
+        assertThat(requestPayment(bookingId)).hasStatus(HttpStatus.CONFLICT)
+            .bodyJson().extractingPath("$.code").isEqualTo("PERFORMANCE_CANCELLED")
+
+        payments.publishSucceeded(bookingId, amount)
+        payments.awaitResultsConsumedByBooking(payments.topics.paymentSucceeded, bookingId, 1)
+        assertThat(payments.awaitRefundRequested(bookingId).reason).isEqualTo("PERFORMANCE_CANCELLED")
+        val reason = jdbc.queryForObject("select cancel_reason from booking.booking where id = ?", String::class.java, bookingId)
+        assertThat(reason).isEqualTo("PERFORMANCE_CANCELLED")
+        assertThat(jdbc.queryForObject("select count(*) from booking.sold_seat where booking_id = ?", Int::class.java, bookingId))
+            .isZero()
+        assertThat(redis.hasKey(holdKey(ScheduleId(scheduleId), SeatId(1)))).isFalse()
     }
 
     @Test
@@ -132,7 +177,7 @@ class ScheduleSuspensionIntegrationTests(
     private fun state(enabled: Boolean, version: Long) =
         PerformanceSuspensionChanged(UUID.randomUUID(), 17, performanceId, enabled, version, if (enabled) null else "점검", Instant.now())
 
-    private fun deliver(event: PerformanceSuspensionChanged) {
+    private fun deliver(event: Any) {
         val listener = "ScheduleRegisteredListener.on"
         val existing = publicationIds(jdbc, event.javaClass, "performanceId", performanceId, listener).toSet()
         tx.executeWithoutResult { publisher.publishEvent(event) }
@@ -150,4 +195,13 @@ class ScheduleSuspensionIntegrationTests(
     private fun book(scheduleId: Long, seatId: Long, key: String = UUID.randomUUID().toString()) =
         mvc.post().uri("/api/v1/bookings").header("Authorization", token).header("Idempotency-Key", key)
             .contentType(MediaType.APPLICATION_JSON).content("""{"scheduleId":$scheduleId,"seatIds":[$seatId]}""")
+
+    private fun createBooking(scheduleId: Long, seatId: Long): Long {
+        val result = book(scheduleId, seatId).exchange()
+        assertThat(result).hasStatus(HttpStatus.CREATED)
+        return json.readTree(result.response.contentAsString)["bookingId"].asLong()
+    }
+
+    private fun requestPayment(bookingId: Long) = mvc.post().uri("/api/v1/bookings/$bookingId/payments")
+        .header("Authorization", token).header("Idempotency-Key", UUID.randomUUID().toString())
 }

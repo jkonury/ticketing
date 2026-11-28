@@ -87,10 +87,15 @@ class CreateBookingService(
         now: Instant,
     ): CreateBookingResult? {
         val startsAt = checkNotNull(copies.values.first().startsAt) { "회차 시작 시각이 없다: ${scheduleId.value}" }
-        val saleEnabled = scheduleSeats.isSaleEnabled(scheduleId)
-        if (saleEnabled && now.isBefore(startsAt)) return null
+        val schedule = scheduleSeats.findSchedule(scheduleId) ?: throw ScheduleNotFoundException()
+        if (schedule.saleEnabled && now.isBefore(startsAt)) return null
         return stage("existing") { existing(memberId, key) } ?: translatingRuleViolations {
-            if (!saleEnabled) throw ScheduleSaleSuspendedException()
+            val error = when {
+                schedule.cancelled -> ScheduleSaleCancelledException()
+                !schedule.saleEnabled -> ScheduleSaleSuspendedException()
+                else -> null
+            }
+            if (error != null) throw error
             requireSalesOpen(startsAt, now)
             null
         }
@@ -156,7 +161,14 @@ class CreateBookingService(
     // 저장이 실패하면 선점을 되돌리고 원래 예외를 그대로 던진다
     @Suppress("TooGenericExceptionCaught")
     private fun save(booking: Booking, requested: List<SeatId>): Booking = try {
-        requireNotNull(tx.execute { bookings.save(booking) })
+        requireNotNull(
+            tx.execute {
+                // 공연 취소 Saga가 예매를 조회하기 전에 이 저장이 커밋되거나 취소가 먼저 반영된다.
+                val schedule = scheduleSeats.findSchedule(booking.scheduleId, forShare = true) ?: throw ScheduleNotFoundException()
+                if (schedule.cancelled) throw ScheduleSaleCancelledException()
+                bookings.save(booking)
+            },
+        )
     } catch (e: Exception) {
         runCatching { seatHold.release(booking.scheduleId, requested, booking.holdToken, clock.instant()) }
             .onFailure { log.warn("예매 저장 실패 후 선점 해제에 실패했다. TTL로 만료된다. scheduleId={}", booking.scheduleId.value, it) }

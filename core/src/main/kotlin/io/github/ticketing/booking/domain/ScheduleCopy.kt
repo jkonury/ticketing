@@ -3,7 +3,7 @@ package io.github.ticketing.booking.domain
 import java.math.BigDecimal
 import java.time.Instant
 
-/** catalog 회차의 사본. ScheduleRegistered 이벤트로 받은 값만 담는다. */
+/** catalog 회차와 판매 상태의 사본. */
 data class ScheduleCopy(
     val scheduleId: ScheduleId,
     val performanceId: Long,
@@ -11,6 +11,8 @@ data class ScheduleCopy(
     val organizerId: Long,
     val startsAt: Instant,
     val receivedAt: Instant,
+    val saleEnabled: Boolean = true,
+    val cancelled: Boolean = false,
 )
 
 data class ScheduleSeatCopy(
