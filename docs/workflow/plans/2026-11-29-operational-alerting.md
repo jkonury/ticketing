@@ -56,7 +56,7 @@ approved_at: 2026-11-29T00:58:42+09:00
 
 ### T3. Batch Job 상태 지표
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: `common`에 `EventPublicationMetrics`와 같은 형태의 자동 구성과 지표 클래스를 추가하고 `AutoConfiguration.imports`에 등록한다. 조건은 `DSLContext`·`MeterRegistry` 빈과 `ticketing.batch.metrics.jobs`(Job 이름 목록, 비어 있으면 빈 없음)다. `batch.batch_job_instance`·`batch.batch_job_execution`을 jOOQ 이름 참조로 읽고 10초 캐시를 쓴다. 지표는 Job별 두 개다.
   - 실패 여부 gauge(1/0): 가장 최근 **완료** 실행(`end_time`이 있는 실행)이 `FAILED`·`ABANDONED`이면 1이고, `COMPLETED`·`STOPPED`이면 0이다. 실행 중인 실행은 건너뛴다.

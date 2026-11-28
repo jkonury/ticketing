@@ -90,6 +90,10 @@ server:
   port: 18085
 
 ticketing:
+  batch:
+    metrics:
+      jobs:
+        - paymentReconciliationJob
   kafka:
     topic-prefix: ticketing
   startup-warmup:

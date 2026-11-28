@@ -11,3 +11,7 @@ spring:
   batch:
     job:
       enabled: true
+ticketing:
+  batch:
+    metrics:
+      jobs: []

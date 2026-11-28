@@ -4,3 +4,4 @@ io.github.ticketing.KafkaTopicConfig
 io.github.ticketing.KafkaConsumerConfig
 io.github.ticketing.KafkaMessageConfig
 io.github.ticketing.EventPublicationMetricsAutoConfiguration
+io.github.ticketing.BatchJobMetricsAutoConfiguration

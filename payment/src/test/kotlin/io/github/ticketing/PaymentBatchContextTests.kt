@@ -43,6 +43,7 @@ class PaymentBatchContextTests(
         assertThat(registry.listenerContainers).isNotEmpty().allSatisfy { assertThat(it.isRunning).isFalse() }
         assertThat(context.getBeansOfType(PaymentRequestListener::class.java)).isNotEmpty()
         assertThat(context.getBeansOfType(EventPublicationMetrics::class.java)).isEmpty()
+        assertThat(context.getBeansOfType(BatchJobMetrics::class.java)).isEmpty()
     }
 
     @Test
