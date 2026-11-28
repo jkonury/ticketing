@@ -123,16 +123,18 @@ Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `com
 | core | core DB (`TICKETING_POSTGRES_DB`) | `PaymentRequested`, `RefundRequested`, `BookingConfirmed`, `BookingCancelled`, `PerformanceCancelled`, `BookingForceCancelled`, 쿠폰 예약·보상 이벤트 |
 | payment | `payment_db` (`TICKETING_PAYMENT_POSTGRES_DB`) | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` |
 
-**증상·지표** (core만 수집한다. core-batch는 `ticketing.event-publication.metrics.enabled=false`로 중복 수집을 끈다)
+**증상·지표**
+
+상시 앱 core와 payment가 각자의 미완료 발행을 수집한다. 정산 서비스에는 `event_publication` 테이블이 없어 이 지표를 끈다. 배치 프로필에서도 중복 수집을 끈다.
 
 | 메트릭 | 의미 |
 |---|---|
 | `ticketing_event_publication_incomplete` | 미완료 발행 건수 |
 | `ticketing_event_publication_oldest_incomplete_age_seconds` | 가장 오래된 미완료 발행의 경과 시간(초). 없으면 0 |
 
-Grafana `Ticketing Overview` 하단의 "미완료 이벤트 발행 건수", "최고령 미완료 이벤트 경과" 패널에서 본다. 값은 10초 캐시이고 조회 실패 시 직전 값을 쓰며, 처음부터 실패하면 `NaN`이다. 정상 상태는 건수가 0이거나 잠깐 올랐다 내려오는 것이다. 최고령이 계속 늘면 재처리가 필요한 건이다.
+운영 대시보드 `Ticketing Overview`에서 상태 요약의 "미완료 이벤트 발행 건수"와 비동기 흐름의 "최고령 미완료 이벤트 경과"를 본다. 값은 10초 캐시이고 조회 실패 시 직전 값을 쓰며, 처음부터 실패하면 `NaN`이다. 정상 상태는 건수가 0이거나 잠깐 올랐다 내려오는 것이다. 최고령이 계속 늘면 재처리가 필요한 건이다.
 
-결제 확정 지연은 `ticketing_booking_payment_confirmation_lag_seconds`(Timer, 히스토그램)다. PG가 알린 결제 발생 시각(`PaymentSucceeded.paidAt`)부터 booking이 예매를 확정한 시각까지이며, 실제로 확정한 건만 기록한다(중복·만료 후 승인·환불 경로 제외). `Ticketing Overview`의 "결제 확정 지연" 패널과 부하 측정의 `server-delta.json`에서 p50·p95·p99를 본다. PG와 core의 시계가 다르면 오차가 섞인다(로컬은 같은 호스트).
+결제 확정 지연은 `ticketing_booking_payment_confirmation_lag_seconds`(Timer, 히스토그램)다. PG가 알린 결제 발생 시각(`PaymentSucceeded.paidAt`)부터 booking이 예매를 확정한 시각까지이며, 실제로 확정한 건만 기록한다(중복·만료 후 승인·환불 경로 제외). `Ticketing Overview`의 "결제 확정 지연 p95"에서 운영 추세를 보고, 부하 측정 비교에는 `Ticketing Load Test` 또는 `server-delta.json`의 p50·p95·p99를 사용한다. PG와 core의 시계가 다르면 오차가 섞인다(로컬은 같은 호스트).
 
 **확인 SQL**
 
@@ -221,6 +223,20 @@ returning id, listener_id, event_type;
 - 행을 직접 `delete`하거나 `completion_date`를 수동으로 채우는 것은 이벤트를 버리는 일이다. 의도적으로 폐기할 때만 하고, 대상 행을 먼저 조회해 확인한다.
 - 완료된 행은 계속 쌓인다. 정리(삭제) 정책은 아직 없고, 필요 시점은 [m6-msa.md](./plans/m6-msa.md) 후속 항목에 적었다.
 
+### 3.8 알림이 울렸다
+
+Alertmanager에서 알림 이름과 라벨을 확인하고 `Ticketing Overview`에서 대응 패널을 연다. 앱은 `service` 또는 `application`, Kafka는 `consumergroup`과 `topic`, Batch는 `exported_job`으로 대상을 좁힌다.
+
+| 알림 | 발화 조건 | 먼저 볼 패널 | 대응 |
+|---|---|---|---|
+| `AppDown` | 앱 스크레이프 실패가 1분 지속 | 앱 상태 | 해당 앱의 헬스·기동 로그와 Prometheus의 Targets를 확인한다. [앱 기동 진단](#31-앱이-뜨지-않는다) |
+| `HighErrorRate` | 앱의 HTTP 5xx 비율이 5% 초과로 5분 지속 | HTTP 5xx 비율 | 같은 시간대의 요청 수와 앱 로그를 보고 오류 경로를 좁힌다. 결제 요청이면 [결제 장애 진단](#32-결제가-pending에서-넘어가지-않는다)을 따른다. |
+| `EventPublicationStuck` | 최고령 미완료 발행이 300초를 초과한 상태가 5분 지속 | 최고령 미완료 이벤트 경과 | 발행 앱 DB에서 미완료 행을 찾고 리스너나 Kafka 전송 실패를 복구한다. [미완료 이벤트 대응](#37-미완료-이벤트-발행이-쌓인다) |
+| `KafkaConsumerLagHigh` | 그룹·토픽의 전체 파티션 lag가 1,000건 초과로 5분 지속 | 컨슈머 그룹 lag | 컨슈머 기동 상태와 소비 예외를 확인하고 재기동한 뒤 lag가 줄어드는지 본다. [결제 장애 진단](#32-결제가-pending에서-넘어가지-않는다) |
+| `KafkaDeadLetterIncreased` | 최근 10분 동안 DLT 토픽의 끝 오프셋 증가 | 최근 10분 DLT 증가 | "토픽별 DLT 적재"와 컨슈머 로그에서 반복 실패 원인을 먼저 찾고, 재처리 전에 해당 결제·예매 상태를 대조한다. [결제 장애 진단](#32-결제가-pending에서-넘어가지-않는다) |
+| `BatchJobFailed` | Job의 최근 종료 실행이 `FAILED` 또는 `ABANDONED` | Job별 마지막 상태 | 해당 배치의 실패 단계와 파라미터를 찾고 원인을 수정한다. 실패 실행의 재시작 절차를 따른다. [Batch 실행](#4-batch-실행) |
+| `HikariPoolExhausted` | Hikari 연결 대기가 2분 지속 | Hikari 연결 대기 | 같은 시간대의 PostgreSQL 연결 수와 긴 쿼리·트랜잭션, 앱 로그의 연결 타임아웃을 확인한다. [DB 상태 확인](#5-데이터-확인) |
+
 ## 4. Batch 실행
 
 Job은 업무별 배치 앱에서 하나씩 실행한다. 규칙과 파라미터의 기준은 [batch.md](./architecture/batch.md)다.
@@ -296,13 +312,41 @@ docker compose -f compose.yaml -f compose.observability.yaml down          # 종
 
 | 도구 | 주소 | 용도 |
 |---|---|---|
-| Grafana | http://localhost:13001 | 대시보드(`ticketing-overview`). 익명 Admin으로 열린다 |
+| Grafana | http://localhost:13001 | 대시보드 조회. 익명 Admin으로 열린다 |
+| Grafana · Ticketing Overview | http://localhost:13001/d/ticketing-overview | 앱 상태, 트래픽, 비동기 흐름, Batch, 자원 요약 |
+| Grafana · Ticketing Load Test | http://localhost:13001/d/ticketing-loadtest | 부하 측정과 상세 JVM 지표 |
+| Grafana · Ticketing · Gatling hot-seats 300ms | http://localhost:13001/d/ticketing-hot-seats-gatling | Gatling 전용 측정 지표 |
 | Prometheus | http://localhost:19090 | 지표 조회. k6 지표도 remote-write로 들어온다 |
+| Alertmanager | http://localhost:19093 | 발화 알림 조회. Grafana에는 Alertmanager 데이터 소스로 연결된다 |
 | Tempo | http://localhost:13200 | trace 조회. 보통은 Grafana Explore에서 본다 |
 
-- Grafana는 13000이 아니라 13001을 쓴다(13000은 web).
+- M6 이전 측정 기록의 `Ticketing Overview`는 지금의 `Ticketing Load Test`다.
+- 기본 설정은 Alertmanager UI에서 알림을 확인한다. 웹훅을 보내려면 Compose에 넘기는 환경 변수 또는 로컬 `.env`에 `ALERTMANAGER_WEBHOOK_URL`을 설정하고 `docker compose -f compose.yaml -f compose.observability.yaml up -d --wait alertmanager`로 반영한다. 수신처는 Alertmanager 웹훅 JSON을 받을 수 있어야 한다. URL은 저장소에 커밋하지 않는다.
 - 앱은 span을 기본으로 내보내지 않는다. 켜려면 앱을 띄울 때 `TRACING_EXPORT_ENABLED=true`를 주고, 비율은 `TRACING_SAMPLING_PROBABILITY`(기본 1.0)로 정한다. 내보내는 주소는 `OTLP_TRACES_ENDPOINT`(기본 `http://localhost:14318/v1/traces`)다. `scripts/loadtest/run.sh --observability`는 이 값을 `true`와 `0.1`로 넣는다.
-- 지표는 모든 Spring 앱의 `/actuator/prometheus`에서 Prometheus가 수집한다. 앱별 포트는 `application.yml`을 본다.
+- Prometheus는 [앱 포트](#1-구성-요소와-의존)의 `/actuator/prometheus`와 Kafka·PostgreSQL·Redis exporter에서 지표를 수집한다. 별도 프로세스로 실행한 Batch의 Job 상태는 같은 DB를 사용하는 상시 앱에서 노출한다.
+
+### 8.1 알림 발화와 해소 확인
+
+별도 개발 환경에서 관측 스택과 core·payment·fake-pg를 기동하고 아래 절차를 실행한다.
+
+1. payment를 별도 터미널에서 실행해 테스트 결제를 한 건 처리한다. 다음 명령으로 `ticketing-payment` 그룹이 오프셋을 커밋했고 lag가 0인지 확인한다. 그 터미널에서 Ctrl+C로 payment를 종료하고, 1분 이상 지난 뒤 Alertmanager에서 `service=payment`인 `AppDown`을 확인한다.
+
+   ```bash
+   docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+     --bootstrap-server kafka:29092 --describe --group ticketing-payment
+   ```
+
+2. payment가 정지한 동안 개발용 예매로 결제 요청 이벤트를 발생시킨다. 위 명령과 "컨슈머 그룹 lag" 패널에서 그룹·토픽별 파티션 합계가 1,000건을 초과하는 상태를 5분 유지해 `KafkaConsumerLagHigh`를 확인한다. payment를 재기동해 `AppDown`이 해소되고, 소비가 따라잡으면 lag 알림도 해소되는지 본다.
+3. payment와 fake-pg는 켜 둔다. 개발 DB 설정을 불러온 셸에서 새 테스트 날짜·실행 ID를 골라 결제 대사를 실행한다. 첫 명령에서는 Batch만 연결할 수 없는 PG 주소를 사용해 `fetchPgTransactionsStep`에서 실패한다. `Job별 마지막 상태`와 Alertmanager에서 `paymentReconciliationJob`의 실패를 확인한다.
+
+   ```bash
+   batch_args='--spring.batch.job.name=paymentReconciliationJob targetDate=2026-11-10,java.time.LocalDate run.id=99,java.lang.Long'
+   FAKE_PG_BASE_URL=http://127.0.0.1:1 ./gradlew :payment-batch:bootRun --args="$batch_args"
+   ```
+
+4. 같은 인자로 `./gradlew :payment-batch:bootRun --args="$batch_args"`를 실행한다. 개발 환경의 정상 PG 주소를 사용한 재실행이 끝나면 `Job별 마지막 성공 시각`이 갱신되고 `BatchJobFailed`가 해소되는지 본다.
+
+### 8.2 부하 테스트
 
 부하 테스트는 `scripts/loadtest/run.sh`로 실행한다. 필요한 것은 `.env`, 실행 중인 Docker, 비어 있는 18000·18080·18081·18090 포트다. k6 바이너리(`build/loadtest/k6`)는 실행 전에 `build-k6.sh`로 빌드된다. smoke는 없을 때만 빌드한다.
 

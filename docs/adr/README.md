@@ -68,3 +68,4 @@
 | [0052](0052-admin-intervention-states.md) | 관리자 개입 상태: 공연 판매 중지와 회원 이용 정지 | 합의 |
 | [0053](0053-poster-storage-rustfs.md) | 개발·CI 포스터 저장소의 RustFS 전환과 벤더 중립 설정 이름 | 합의 |
 | [0054](0054-admin-force-cancel-and-performance-cancel.md) | 관리자 예매 강제 취소와 공연 취소 Saga | 합의 |
+| [0055](0055-operational-alerting-and-async-flow-observability.md) | 운영 알림과 비동기 흐름 관측 | 합의 |

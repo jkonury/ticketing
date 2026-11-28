@@ -1,6 +1,7 @@
-# 부하 테스트용 관측 스택. 기존 인프라와 함께 띄운다:
+# 운영 알림과 부하 측정용 관측 스택. 기존 인프라와 함께 띄운다.
 #   docker compose -f compose.yaml -f compose.observability.yaml up -d
 # 앱은 호스트에서 실행되므로 Prometheus가 host.docker.internal로 수집한다.
+# ALERTMANAGER_WEBHOOK_URL을 설정하면 Alertmanager가 알림을 웹훅으로도 보낸다.
 services:
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -14,11 +15,32 @@ services:
       - "127.0.0.1:19090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  alertmanager:
+    image: prom/alertmanager:v0.32.0
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        config_file=$$(sh /etc/alertmanager/render-config.sh)
+        exec /bin/alertmanager --config.file="$$config_file" --storage.path=/alertmanager --cluster.listen-address=
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-}
+    ports:
+      - "127.0.0.1:19093:9093"
+    volumes:
+      - ./observability/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/ready"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -49,6 +71,7 @@ services:
     depends_on:
       - prometheus
       - tempo
+      - alertmanager
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
       interval: 5s
@@ -79,6 +102,13 @@ services:
       redis:
         condition: service_healthy
 
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.10.0
+    command: ["--kafka.server=kafka:29092"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.18.1
     environment:
@@ -88,6 +118,7 @@ services:
         condition: service_healthy
 
 volumes:
+  alertmanager-data:
   prometheus-data:
   tempo-data:
   grafana-data:

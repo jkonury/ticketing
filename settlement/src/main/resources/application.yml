@@ -69,6 +69,13 @@ server:
   port: 18086
 
 ticketing:
+  batch:
+    metrics:
+      jobs:
+        - dailySettlementJob
+  event-publication:
+    metrics:
+      enabled: false
   jwt:
     secret: ${TICKETING_JWT_SECRET}
 

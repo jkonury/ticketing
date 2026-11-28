@@ -5,7 +5,7 @@
 - 합의일: 2026-11-12
 - 결정 주체: 사용자
 - 대체: 없음
-- 대체됨·일부 변경: 없음
+- 대체됨·일부 변경: [ADR 0055](0055-operational-alerting-and-async-flow-observability.md)(결정 6의 관측 스택 구성)
 - 관련: [설계](../architecture.md), [ADR 0013](0013-jwt-behind-bff.md), [ADR 0014](0014-sse-bypasses-bff.md)
 
 ## 배경
@@ -52,3 +52,4 @@ M5에서 대기열·좌석 선점·결제 흐름에 1만 명 규모의 부하를
 ## 변경 이력
 
 - 2026-11-12: 작성, 합의
+- 2026-11-29: ADR 0055가 결정 6의 관측 스택 구성을 일부 변경(Alertmanager·kafka-exporter 추가, 운영 대시보드 분리)

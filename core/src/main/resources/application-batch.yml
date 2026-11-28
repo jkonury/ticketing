@@ -14,6 +14,9 @@ spring:
     events:
       republish-outstanding-events-on-restart: false
 ticketing:
+  batch:
+    metrics:
+      jobs: []
   event-publication:
     metrics:
       # core가 같은 DB의 지표를 이미 수집한다
