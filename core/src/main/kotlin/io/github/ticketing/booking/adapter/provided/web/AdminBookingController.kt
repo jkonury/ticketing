@@ -8,6 +8,7 @@ import io.github.ticketing.booking.application.port.provided.BookingDetailView
 import io.github.ticketing.booking.application.port.provided.BookingQueryUseCase
 import io.github.ticketing.booking.application.port.provided.CancelBookingUseCase
 import io.github.ticketing.booking.domain.BookingStatus
+import io.github.ticketing.booking.domain.CancelReason
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
@@ -58,6 +59,7 @@ class ForceCancelBookingRequest(reason: String) {
 data class AdminBookingListRequest(
     @field:Positive val memberId: Long? = null,
     @field:Positive val scheduleId: Long? = null,
+    @field:Positive val performanceId: Long? = null,
     val status: BookingStatus? = null,
     @field:Schema(description = "예매 생성 시각 하한(포함)") val createdFrom: Instant? = null,
     @field:Schema(description = "예매 생성 시각 상한(포함)") val createdTo: Instant? = null,
@@ -66,7 +68,7 @@ data class AdminBookingListRequest(
     @field:Schema(defaultValue = "${BookingQueryUseCase.DEFAULT_PAGE_SIZE}")
     val size: Int = BookingQueryUseCase.DEFAULT_PAGE_SIZE,
 ) {
-    fun toFilter() = AdminBookingFilter(memberId, scheduleId, status, createdFrom, createdTo, cursor, size)
+    fun toFilter() = AdminBookingFilter(memberId, scheduleId, performanceId, status, createdFrom, createdTo, cursor, size)
 }
 
 data class AdminBookingPageResponse(val items: List<AdminBookingSummaryResponse>, val nextCursor: Long?)
@@ -98,6 +100,7 @@ data class AdminBookingDetailResponse(
     val memberId: Long,
     val scheduleId: Long,
     val status: BookingStatus,
+    val cancelReason: CancelReason?,
     val performanceTitle: String,
     val startsAt: Instant,
     val listAmount: BigDecimal,
@@ -114,6 +117,7 @@ data class AdminBookingDetailResponse(
             memberId = view.memberId,
             scheduleId = view.scheduleId,
             status = BookingStatus.valueOf(view.status),
+            cancelReason = view.cancelReason,
             performanceTitle = view.performanceTitle,
             startsAt = view.startsAt,
             listAmount = view.listAmount,

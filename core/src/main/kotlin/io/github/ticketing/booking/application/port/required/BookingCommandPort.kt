@@ -14,6 +14,8 @@ interface BookingCommandPort {
 
     fun findByMemberAndIdempotencyKey(memberId: MemberId, key: String): Booking?
 
+    fun findActiveIds(performanceId: Long, afterId: Long, limit: Int): List<BookingId>
+
     /** INSERT ... ON CONFLICT DO NOTHING. 삽입된 행 수를 반환한다. */
     fun insertSoldSeats(bookingId: BookingId, scheduleId: ScheduleId, seatIds: List<SeatId>, now: Instant): Int
 

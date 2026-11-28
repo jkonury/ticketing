@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.application.port.provided
 
+import io.github.ticketing.booking.domain.CancelReason
 import io.github.ticketing.booking.domain.CouponState
 import java.math.BigDecimal
 import java.time.Instant
@@ -35,6 +36,7 @@ data class BookingDetailView(
     val memberId: Long,
     val scheduleId: Long,
     val status: String,
+    val cancelReason: CancelReason?,
     val performanceTitle: String,
     val startsAt: Instant,
     val totalAmount: BigDecimal,
