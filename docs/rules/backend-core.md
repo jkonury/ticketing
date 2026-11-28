@@ -32,7 +32,7 @@ WebMVC와 [Virtual Thread 공통 지침](backend.md#virtual-thread)을 적용한
 
 계층형 모듈(`member`, `catalog`, `audit`, `notification`)은 역할에 맞게 `web / service / repository` 등으로 단순하게 유지한다. 포트를 억지로 만들지 않는다.
 
-- `catalog`는 공연을 소유한 주최자에 한해 5분짜리 포스터 PUT URL을 발급한다. 객체 키와 콘텐츠 유형을 서명에 묶고, 완료 확인에서 타입과 크기(1바이트~5MiB)를 검증한다. 검증한 객체만 공개 키로 복사한 뒤 DB에 키를 저장하고 상세 캐시를 비운다. 목록과 상세의 응답 URL은 공개 기준 주소와 키로 조합한다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
+- `catalog`는 공연을 소유한 주최자에 한해 5분짜리 포스터 PUT URL을 발급한다. 객체 키와 콘텐츠 유형을 서명에 묶고, 완료 확인에서 타입과 크기(1바이트~5MiB)를 검증한다. 검증한 객체만 공개 키로 복사한 뒤 DB에 키를 저장하고 상세 캐시를 비운다. 목록과 상세의 응답 URL은 공개 기준 주소와 키로 조합한다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md) · [ADR 0053](../adr/0053-poster-storage-rustfs.md)
 
 ## JPA 엔티티
 

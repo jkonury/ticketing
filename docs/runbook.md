@@ -39,6 +39,28 @@ docker compose down -v              # 종료 + PostgreSQL 볼륨 삭제 (데이�
 - Linux에서 UFW를 쓰면 최초 1회 `sudo ./scripts/setup-firewall.sh`를 실행한다(멱등). 기존 네트워크에는 이름이 적용되지 않으므로 `docker compose down` 후 다시 기동한다(Redis 데이터는 사라진다).
 - 포트가 이미 사용 중이면 `ss -ltnp 'sport = :18080'`으로 점유 프로세스를 찾는다.
 
+### 2.1 로컬 포스터 저장소 RustFS 전환
+
+1. `.env`의 기존 설정값을 유지하면서 변수 이름을 바꾼다. 기존 이름은 `TICKETING_` 뒤에 아래 표의 접미사를 붙인 이름이다.
+
+   | 기존 접미사 | 새 변수 |
+   |---|---|
+   | `MINIO_USER` | `TICKETING_OBJECT_STORAGE_ACCESS_KEY` |
+   | `MINIO_PASSWORD` | `TICKETING_OBJECT_STORAGE_SECRET_KEY` |
+   | `MINIO_PORT` | `TICKETING_OBJECT_STORAGE_PORT` |
+   | `MINIO_CORS_ORIGINS` | `TICKETING_OBJECT_STORAGE_CORS_ORIGINS` |
+
+2. 기존과 같은 Compose 프로젝트에서 아래 명령을 실행한다. `--remove-orphans`가 이전 MinIO 컨테이너를 정리해 포트를 비운다. 기존 `minio-data` 볼륨은 롤백을 위해 보관한다.
+
+   ```bash
+   docker compose up -d --wait --remove-orphans object-storage
+   docker compose run --rm --no-deps object-storage-init
+   ```
+
+3. 빈 로컬 DB에서는 core와 Gateway를 기동한 뒤 `./scripts/dev/seed-demo.sh`로 시연 데이터와 포스터를 생성한다. 이미 시드한 로컬 데이터를 모두 버려도 되면 `./scripts/dev/seed-demo.sh --reset`으로 다시 생성한다. `--reset`은 메인·결제 DB의 데이터와 Redis 데이터를 지운다.
+4. 기존 포스터를 보존해야 하면 DB를 초기화하지 않는다. 같은 Compose 프로젝트에서 이전 Compose 설정으로 `minio` 서비스만 별도 포트에 띄워 `minio-data` 볼륨을 읽는다. S3 클라이언트로 양쪽 엔드포인트에 접속해 `posters/` 객체를 RustFS의 포스터 버킷에 복사한다. DB가 참조하는 객체 키와 원래 `Content-Type`을 유지한다. 복사가 끝나면 이전 서비스를 종료한다.
+5. 화면에서 포스터가 정상 표시되고 롤백이 필요 없어진 뒤 `docker volume ls --filter label=com.docker.compose.volume=minio-data`로 기존 프로젝트의 볼륨 이름을 확인하고 `docker volume rm <볼륨 이름>`으로 해당 볼륨만 직접 삭제한다. [ADR 0053](./adr/0053-poster-storage-rustfs.md)
+
 ## 3. 장애 진단
 
 ### 3.1 앱이 뜨지 않는다
@@ -242,7 +264,7 @@ docker compose exec postgres psql -U "$TICKETING_POSTGRES_USER" -d "$TICKETING_P
 
   ```bash
   export COMPOSE_PROJECT_NAME=ticketing-e2e TICKETING_BRIDGE_NAME=br-tkt-e2e
-  export TICKETING_POSTGRES_PORT=25432 TICKETING_REDIS_PORT=26379 TICKETING_KAFKA_PORT=29092 TICKETING_MINIO_PORT=29010
+  export TICKETING_POSTGRES_PORT=25432 TICKETING_REDIS_PORT=26379 TICKETING_KAFKA_PORT=29092 TICKETING_OBJECT_STORAGE_PORT=29010
   export E2E_APP_PORT_OFFSET=10000
   ./scripts/e2e/run.sh
   ./scripts/e2e/run.sh --web
