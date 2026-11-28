@@ -1,7 +1,9 @@
 package io.github.ticketing.member.service
 
 import io.github.ticketing.member.MemberRoleChanged
+import io.github.ticketing.member.MemberSuspensionChanged
 import io.github.ticketing.member.domain.Member
+import io.github.ticketing.member.domain.MemberStatus
 import io.github.ticketing.member.domain.Role
 import io.github.ticketing.member.repository.MemberRepository
 import io.github.ticketing.member.repository.RefreshTokenRepository
@@ -24,7 +26,7 @@ class AdminMemberService(
     fun changeRole(actorId: Long?, memberId: Long, newRole: Role): Member {
         // 동시에 서로를 강등해도 둘 다 통과하지 않도록 ADMIN 행을 잠근 뒤 센다
         val admins = members.findAllByRole(Role.ADMIN)
-        val member = members.findById(memberId).orElseThrow { MemberNotFoundException() }
+        val member = findForUpdate(memberId)
         val oldRole = member.role
         if (oldRole == newRole) return member
         if (oldRole == Role.ADMIN && admins.size <= 1) throw LastAdminException()
@@ -33,6 +35,30 @@ class AdminMemberService(
         member.changeRole(newRole)
         refreshTokens.revokeAllByMemberId(memberId, now)
         events.publishEvent(MemberRoleChanged(UUID.randomUUID(), actorId, memberId, oldRole.name, newRole.name, now))
+        return member
+    }
+
+    @Transactional
+    fun suspendMember(actorId: Long, memberId: Long, reason: String): Member {
+        val member = findForUpdate(memberId)
+        if (actorId == memberId || member.role == Role.ADMIN) throw MemberSuspensionForbiddenException()
+        return changeStatus(actorId, memberId, member, MemberStatus.SUSPENDED, reason.trim())
+    }
+
+    @Transactional
+    fun reinstate(actorId: Long, memberId: Long): Member =
+        changeStatus(actorId, memberId, findForUpdate(memberId), MemberStatus.ACTIVE, null)
+
+    private fun findForUpdate(memberId: Long): Member = members.findForUpdate(memberId) ?: throw MemberNotFoundException()
+
+    private fun changeStatus(actorId: Long, memberId: Long, member: Member, newStatus: MemberStatus, reason: String?): Member {
+        val oldStatus = member.status
+        if (oldStatus == newStatus) throw MemberSuspensionUnchangedException()
+
+        val now = clock.instant()
+        member.changeStatus(newStatus)
+        if (newStatus == MemberStatus.SUSPENDED) refreshTokens.revokeAllByMemberId(memberId, now)
+        events.publishEvent(MemberSuspensionChanged(UUID.randomUUID(), actorId, memberId, oldStatus.name, newStatus.name, reason, now))
         return member
     }
 }

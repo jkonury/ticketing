@@ -10,6 +10,9 @@ import java.time.Instant
 
 interface RefreshTokenRepository : JpaRepository<RefreshToken, Long> {
 
+    @Query("select token.memberId from RefreshToken token where token.tokenHash = :tokenHash")
+    fun findMemberIdByTokenHash(tokenHash: String): Long?
+
     // 같은 리프레시 토큰으로 동시에 갱신해도 한 번만 성공하도록 행을 잠근다
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     fun findByTokenHash(tokenHash: String): RefreshToken?

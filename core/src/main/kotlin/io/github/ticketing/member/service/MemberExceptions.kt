@@ -15,3 +15,10 @@ class MemberNotFoundException : DomainException("MEMBER_NOT_FOUND", HttpStatus.N
 class RoleNotAllowedException : DomainException("ROLE_NOT_ALLOWED", HttpStatus.BAD_REQUEST, "가입 시 선택할 수 없는 역할입니다.")
 
 class LastAdminException : DomainException("LAST_ADMIN", HttpStatus.CONFLICT, "마지막 관리자의 역할은 바꿀 수 없습니다.")
+
+class MemberSuspendedException : DomainException("MEMBER_SUSPENDED", HttpStatus.FORBIDDEN, "이용이 정지된 회원입니다.")
+
+class MemberSuspensionForbiddenException : DomainException("MEMBER_SUSPENSION_FORBIDDEN", HttpStatus.FORBIDDEN, "관리자는 이용 정지할 수 없습니다.")
+
+class MemberSuspensionUnchangedException :
+    DomainException("MEMBER_SUSPENSION_UNCHANGED", HttpStatus.CONFLICT, "회원의 이용 상태가 이미 요청한 상태입니다.")
