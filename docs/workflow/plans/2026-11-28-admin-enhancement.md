@@ -25,7 +25,7 @@ approved_at: 2026-11-28T14:43:06+09:00
 
 ### T1. 관리자 예매 조회 API (core)
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: `booking` 모듈에 `GET /api/v1/admin/bookings`(회원 ID·회차 ID·상태·기간 필터, 커서 페이지네이션)와 `GET /api/v1/admin/bookings/{id}`(좌석, 금액, 쿠폰 적용 내역, 상태)를 추가한다. 기존 `booking/adapter/provided/web` 구조와 jOOQ 조회 어댑터를 따르고 `@PreAuthorize("hasRole('ADMIN')")`를 건다. 결제 정보는 core에서 조회하지 않는다. 다른 스키마와 조인하지 않는다(규칙 2).
 - 테스트 경계와 선례: HTTP 공개 경계의 통합 테스트. 선례는 `AdminMemberIntegrationTests`. ADMIN은 200, USER·ORGANIZER는 403, 필터별 결과와 커서 이동, 없는 ID는 404를 확인한다.

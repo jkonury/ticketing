@@ -15,6 +15,8 @@ import org.springframework.http.HttpStatus
 
 class BookingNotFoundException : DomainException("BOOKING_NOT_FOUND", HttpStatus.NOT_FOUND, "예매를 찾을 수 없습니다.")
 
+class InvalidBookingPeriodException : DomainException("INVALID_REQUEST", HttpStatus.BAD_REQUEST, "조회 시작 시각은 종료 시각 이하여야 합니다.")
+
 class ScheduleNotFoundException : DomainException("SCHEDULE_NOT_FOUND", HttpStatus.NOT_FOUND, "회차를 찾을 수 없습니다.")
 
 class SeatNotFoundException : DomainException("SEAT_NOT_FOUND", HttpStatus.NOT_FOUND, "회차에 없는 좌석입니다.")
