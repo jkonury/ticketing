@@ -39,7 +39,7 @@ approved_at: 2026-11-29T00:58:42+09:00
 
 ### T2. kafka-exporter와 Kafka 내부 리스너
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: 지금 Kafka는 광고 주소가 `localhost:19092`뿐이라 Compose 네트워크 안의 exporter가 브로커에 붙을 수 없다. `compose.yaml`의 Kafka에 내부 리스너(예: `INTERNAL://kafka:29092`)를 추가하고, `KAFKA_LISTENERS`, `KAFKA_ADVERTISED_LISTENERS`, `KAFKA_LISTENER_SECURITY_PROTOCOL_MAP`, `KAFKA_INTER_BROKER_LISTENER_NAME`을 맞춘다. 호스트 접속(`localhost:${TICKETING_KAFKA_PORT}`)과 healthcheck는 그대로 둔다. `compose.observability.yaml`에 버전을 고정한 kafka-exporter(`danielqsj/kafka-exporter`)를 추가하고 내부 리스너로 연결한다. 포트는 호스트에 열지 않는다. `prometheus.yml`에 `kafka` job을 추가한다. 컨슈머 그룹 lag(`kafka_consumergroup_lag`)과 `.dlt` 토픽 오프셋(`kafka_topic_partition_current_offset`)이 수집되는지 확인한다.
 - 테스트 경계와 선례: Compose 스택과 Prometheus HTTP API가 경계다. 앱 동작은 바뀌지 않으므로 기존 Kafka 통합 테스트(`KafkaRecoveryIntegrationTests`, Testcontainers)는 영향이 없다. 호스트 접속은 E2E(`scripts/e2e/run.sh`)가 쓰므로 PR CI의 backend E2E에서 확인한다.
