@@ -34,6 +34,7 @@ function message(error: unknown) {
   if (error instanceof ApiError) {
     if (error.code === 'INVALID_CREDENTIALS')
       return '이메일 또는 비밀번호가 올바르지 않아요.';
+    if (error.code === 'MEMBER_SUSPENDED') return '이용이 정지된 계정이에요.';
     if (error.code === 'EMAIL_ALREADY_EXISTS')
       return '이미 사용 중인 이메일이에요.';
     if (error.code === 'CSRF_REJECTED') return '요청 출처를 확인해 주세요.';

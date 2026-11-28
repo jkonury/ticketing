@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { RouteLoading } from '@/components/route-loading';
 import { Page, PageHeader } from '@/components/layout/page';
+import { Badge } from '@/components/ui/badge';
 import { Button, buttonClassName } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,7 @@ import { formatSeoul } from '@/lib/datetime';
 import { listAdminMembers } from '@/server/api/admin';
 import { withSessionRedirect } from '@/server/auth/require-user';
 import { RoleForm } from '@/features/admin/role-form';
+import { SuspensionForm } from '@/features/admin/suspension-form';
 
 type SearchParams = Promise<{ email?: string; cursor?: string }>;
 
@@ -41,7 +43,7 @@ async function Members({ searchParams }: { searchParams: SearchParams }) {
   );
   const next = new URLSearchParams();
   if (email) next.set('email', email);
-  if (page.nextCursor !== null) next.set('cursor', String(page.nextCursor));
+  if (page.nextCursor != null) next.set('cursor', String(page.nextCursor));
   return (
     <Page>
       <PageHeader title="회원 관리" />
@@ -51,7 +53,7 @@ async function Members({ searchParams }: { searchParams: SearchParams }) {
         </Field>
         <Button type="submit">검색</Button>
       </form>
-      <table className={tableClass}>
+      <table className={tableClass} aria-label="회원 목록">
         <thead>
           <tr>
             <th className={`${thClass} ${secondaryCol}`}>ID</th>
@@ -59,6 +61,7 @@ async function Members({ searchParams }: { searchParams: SearchParams }) {
             <th className={`${thClass} ${secondaryCol}`}>이름</th>
             <th className={`${thClass} ${secondaryCol}`}>가입일</th>
             <th className={thClass}>역할</th>
+            <th className={thClass}>이용 상태</th>
           </tr>
         </thead>
         <tbody>
@@ -73,11 +76,30 @@ async function Members({ searchParams }: { searchParams: SearchParams }) {
               <td className={tdClass}>
                 <RoleForm memberId={member.id} role={member.role} />
               </td>
+              <td className={tdClass}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    tone={member.status === 'SUSPENDED' ? 'danger' : 'success'}
+                  >
+                    {member.status === 'SUSPENDED' ? '이용 정지' : '이용 가능'}
+                  </Badge>
+                  {(member.role !== 'ADMIN' ||
+                    member.status === 'SUSPENDED') && (
+                    <SuspensionForm
+                      key={member.status}
+                      id={member.id}
+                      target="member"
+                      name={member.email}
+                      suspended={member.status === 'SUSPENDED'}
+                    />
+                  )}
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      {page.nextCursor !== null && (
+      {page.nextCursor != null && (
         <Link
           href={`/admin/members?${next}`}
           className={buttonClassName({ variant: 'secondary' })}

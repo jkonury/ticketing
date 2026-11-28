@@ -24,13 +24,25 @@ export default async function AdminLayout({
     <>
       <nav
         aria-label="관리자 메뉴"
-        className="mx-auto flex w-full max-w-280 gap-2 px-4 pt-6 md:px-6"
+        className="mx-auto flex w-full max-w-280 flex-wrap gap-2 px-4 pt-6 md:px-6"
       >
         <Link
           href="/admin/members"
           className={buttonClassName({ variant: 'secondary' })}
         >
           회원
+        </Link>
+        <Link
+          href="/admin/performances"
+          className={buttonClassName({ variant: 'secondary' })}
+        >
+          공연
+        </Link>
+        <Link
+          href="/admin/bookings"
+          className={buttonClassName({ variant: 'secondary' })}
+        >
+          예매
         </Link>
         <Link
           href="/admin/coupons"

@@ -102,10 +102,7 @@ export function createGatewayClient(deps: Dependencies) {
             ),
             cache: 'no-store',
           });
-          if (response.status === 401) {
-            await deps.sessions.destroy(id);
-            throw new SessionExpiredError();
-          }
+          if (response.status === 401) throw new SessionExpiredError();
           if (!response.ok) return await readError(response);
           const result = zTokenResponse.safeParse(
             await response.json().catch(() => null),
@@ -121,6 +118,8 @@ export function createGatewayClient(deps: Dependencies) {
           return next;
         } catch (error) {
           await deps.sessions.destroy(id);
+          if (error instanceof ApiError && error.code === 'MEMBER_SUSPENDED')
+            throw new SessionExpiredError();
           throw error;
         } finally {
           await deps.sessions.unlock(id);
