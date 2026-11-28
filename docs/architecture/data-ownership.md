@@ -19,7 +19,7 @@ PostgreSQL 인스턴스 하나에 core DB, `payment_db`, `settlement_db`를 둔�
 |---|---|---|---|
 | `member` | member | `member`, `refresh_token` | 회원 이용 상태 원본. refresh 토큰은 SHA-256 해시만 저장 |
 | `catalog` | catalog | `venue`, `venue_seat`, `performance`, `performance_price`, `schedule` | 공연·회차·공연 판매 상태 원본 |
-| `booking` | booking | `schedule`, `schedule_seat`, `performance_sale`, `booking`, `booking_seat`, `sold_seat` | catalog 이벤트로 회차·좌석 사본과 판매 가능 여부를 적재. `sold_seat`가 좌석 확정의 유니크 제약 |
+| `booking` | booking | `schedule`, `schedule_seat`, `performance_sale`, `booking`, `booking_seat`, `sold_seat` | catalog 이벤트로 회차·좌석 사본과 판매 가능 여부·공연 취소 여부를 적재. `sold_seat`가 좌석 확정의 유니크 제약 |
 | `coupon` | coupon | `coupon_definition`, `issued_coupon`, `reservation_attempt`, `use_mismatch` | `issued_coupon`의 `(definition_id, member_id)` 유니크가 중복 발급의 최종 방어선. `booking`은 발급 쿠폰 ID와 예매별 시도 ID를 값으로 보관 |
 | `audit` | audit | `admin_action` | 관리자 행위 이벤트 사본. `source_event_id` 유니크로 멱등 |
 | `batch` | core-batch | Spring Batch 메타데이터 | 공식 DDL을 Flyway로 생성 |
@@ -78,7 +78,7 @@ PostgreSQL 인스턴스 하나에 core DB, `payment_db`, `settlement_db`를 둔�
 - 사본은 **이벤트로만** 채운다. 소유자 테이블을 직접 읽어 복사하지 않는다.
 - 사본의 쓰기는 사본을 가진 모듈의 이벤트 리스너만 한다. 리스너는 멱등이다.
 - 원본이 바뀌어도 사본이 소급 갱신되지 않을 수 있다. 사본을 쓰는 로직은 이를 감안한다. 회차 변경 기능을 추가한다면 변경 이벤트를 새로 정의하고 사본 갱신 방식을 정한다.
-- booking은 `booking.performance_sale.status_version`보다 큰 공연 판매 상태 변경만 반영한다. 새 회차의 `booking.schedule.sale_enabled`는 같은 공연 상태를 따라 초기화한다.
+- booking은 `booking.performance_sale.status_version`보다 큰 공연 판매 상태 변경만 반영한다. 공연 취소 시 `booking.performance_sale`과 `booking.schedule`에 `cancelled=true`, `sale_enabled=false`를 저장한다. 뒤늦게 등록한 회차의 두 값도 공연 사본을 따라 초기화한다.
 - 사본의 컬럼은 소비에 필요한 최소한만 둔다.
 
 ## 5. 분리 대비 규칙

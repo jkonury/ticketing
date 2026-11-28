@@ -12,7 +12,7 @@
 
 ## booking 스키마 데이터
 
-- **좌석 사본**: `booking`은 `catalog`의 `ScheduleRegistered`를 받아 `booking.schedule`과 `booking.schedule_seat`에 회차와 좌석·가격 사본을 둔다. `PerformanceSuspensionChanged`를 받아 `booking.performance_sale`과 회차의 판매 가능 여부를 갱신한다.
+- **좌석 사본**: `booking`은 `catalog`의 `ScheduleRegistered`를 받아 `booking.schedule`과 `booking.schedule_seat`에 회차와 좌석·가격 사본을 둔다. `PerformanceSuspensionChanged`와 `PerformanceCancelled`를 받아 `booking.performance_sale`과 회차의 판매 가능 여부·취소 여부를 갱신한다.
 - **`booking.sold_seat (schedule_id, seat_id)`**: 확정 시에만 행을 넣고 취소 시 지우는 테이블이며 여기에 유니크 제약을 둔다. 예매 좌석 테이블에 유니크를 걸면 취소·만료된 예매가 좌석을 계속 점유하기 때문이다.
 
 ## 테이블 구조 (ERD)
@@ -30,7 +30,7 @@ erDiagram
         varchar password_hash
         varchar name
         varchar role
-        varchar status "ACTIVE, SUSPENDED"
+        varchar status "ACTIVE, SUSPENDED, CANCELLED"
         timestamptz created_at
     }
     refresh_token {
@@ -89,7 +89,7 @@ erDiagram
 
 ### booking
 
-`schedule`, `schedule_seat`는 `ScheduleRegistered`로 받은 catalog 사본이다. `performance_sale`은 마지막으로 반영한 공연의 판매 가능 여부와 상태 번호를 기록한다.
+`schedule`, `schedule_seat`는 `ScheduleRegistered`로 받은 catalog 사본이다. `performance_sale`은 마지막으로 반영한 공연의 판매 가능 여부, 취소 여부, 상태 번호를 기록한다. `schedule.cancelled`와 `performance_sale.cancelled`의 기본값은 `false`다.
 
 ```mermaid
 erDiagram
@@ -99,6 +99,7 @@ erDiagram
     performance_sale {
         bigint performance_id PK "catalog.performance.id 사본"
         boolean sale_enabled
+        boolean cancelled
         bigint status_version
     }
     schedule {
@@ -109,6 +110,7 @@ erDiagram
         timestamptz starts_at
         timestamptz received_at
         boolean sale_enabled
+        boolean cancelled
     }
     schedule_seat {
         bigint schedule_id PK

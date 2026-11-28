@@ -120,7 +120,7 @@ Modulith 이벤트 발행 레지스트리(`public.event_publication`)에서 `com
 
 | 발행 앱 | 조회 DB | 이벤트 예 |
 |---|---|---|
-| core | core DB (`TICKETING_POSTGRES_DB`) | `PaymentRequested`, `RefundRequested`, `BookingConfirmed`, `BookingCancelled`, 쿠폰 예약·보상 이벤트 |
+| core | core DB (`TICKETING_POSTGRES_DB`) | `PaymentRequested`, `RefundRequested`, `BookingConfirmed`, `BookingCancelled`, `PerformanceCancelled`, `BookingForceCancelled`, 쿠폰 예약·보상 이벤트 |
 | payment | `payment_db` (`TICKETING_PAYMENT_POSTGRES_DB`) | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded` |
 
 **증상·지표** (core만 수집한다. core-batch는 `ticketing.event-publication.metrics.enabled=false`로 중복 수집을 끈다)
@@ -557,4 +557,22 @@ echo "$TARGET_DB"                            # 이후 모든 단계가 이 DB를
 - **회원 이용 정지**. 관리자 메뉴의 회원 목록에서 이메일로 대상을 찾고 사유를 입력한다. 정지 즉시 로그인과 토큰 갱신을 거부하고 refresh 토큰을 모두 폐기한다. 이미 발급된 access 토큰은 남은 유효 기간(기본 설정 기준 발급 후 최대 15분) 동안 사용할 수 있다. 해제한 회원은 다시 로그인한다. 정지된 회원을 관리자 역할로 바꿔도 이용 정지는 별도로 해제해야 한다. 마지막 활성 관리자의 강등은 거부된다.
 - **공연 판매 중지**. 공연 목록에서 제목·주최자 ID로 대상을 찾고 사유를 입력한다. 공개 공연·회차·좌석 조회에서 제외되며, booking이 상태 변경 이벤트를 반영하면 신규 예매가 409 `PERFORMANCE_SUSPENDED`로 거부된다. 이미 만든 예매는 기존 기한과 상태 규칙에 따라 결제·만료·조회·취소할 수 있다. 주최자 전용 상세와 판매 현황·정산 조회도 가능하다.
 - **판매 상태 반영 확인**. 관리 화면에서 중지·재개에 성공했는데 신규 예매 동작이 계속 다르면, core DB의 미완료 발행에서 `PerformanceSuspensionChanged`의 booking 수신 건을 확인한다. 같은 이벤트를 다시 처리해도 최신 판매 상태가 유지된다. 공개 목록을 이미 연 브라우저에서는 새로고침해 확인한다. [이벤트 발행 진단](#37-미완료-이벤트-발행이-쌓인다)
+- **예매 강제 취소**. 결제 대기·확정 예매의 상세에서 사유를 입력하고 강제 취소를 확정한다. 확정 예매는 취소 후 비동기로 환불한다. 예매 상세에서 취소 유형을, 감사 로그의 `BOOKING_FORCE_CANCELLED`에서 처리자와 입력한 사유를 확인한다.
+- **공연 취소**. 공연 관리에서 판매 중 또는 판매 중지 상태의 공연을 취소한다. 공개 조회에서 즉시 제외되고 취소는 되돌릴 수 없다. 예매 취소와 환불은 순차 처리된다. 감사 로그의 `PERFORMANCE_CANCELLED`에서 처리자와 사유를 확인한다.
 - **감사와 예매 조사**. 감사 로그에서 `MEMBER_SUSPENSION_CHANGED` 또는 `PERFORMANCE_SUSPENSION_CHANGED`를 찾아 처리자, 상태 전이, 정지·중지 사유를 확인한다. 예매 관리 화면에서는 예매·좌석·쿠폰 정보와 결제 상태를 함께 볼 수 있다. 결제 조회 실패 문구가 표시되면 예매 ID로 payment 상태를 다시 확인한다. 결제 내역이 없을 때는 별도 문구가 표시된다.
+
+### 공연 취소 후 남은 예매 확인
+
+1. 취소된 공연 행에서 **예매 현황**을 연다(`/admin/bookings?performanceId=…`). 관리자 API에서는 `GET /api/v1/admin/bookings?performanceId=…`를 사용한다. `PENDING`과 `CONFIRMED`를 각각 필터링해 남은 예매를 확인한다. 두 상태가 모두 비면 예매 취소가 끝난 것이다. 결제 환불 완료는 예매 상세의 결제 상태로 확인한다.
+2. 남은 예매가 줄지 않거나 오류가 반복되면 core DB의 미완료 발행을 확인한다. 아래 SQL의 예시 ID `123`을 대상 공연 ID로 바꾼다.
+
+   ```sql
+   select id, listener_id, status, completion_attempts, publication_date
+   from public.event_publication
+   where completion_date is null
+     and event_type = 'io.github.ticketing.catalog.PerformanceCancelled'
+     and listener_id like '%ScheduleRegisteredListener.on%'
+     and serialized_event::jsonb ->> 'performanceId' = '123';
+   ```
+
+3. 리스너 오류 원인을 찾아 고친 뒤 [미완료 이벤트 재처리](#37-미완료-이벤트-발행이-쌓인다) 절차대로 core를 재기동한다. 이미 커밋된 청크는 유지되고 남은 예매를 이어서 취소한다. 같은 발행 ID의 `completion_date`와 두 상태의 예매 목록을 다시 확인한다.

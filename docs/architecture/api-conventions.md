@@ -124,6 +124,7 @@
 | 409 | `SEAT_ALREADY_HELD` | 좌석이 이미 선점·판매됨 |
 | 409 | `BOOKING_IN_PROGRESS` | 동일 예매 요청 처리 중. 같은 멱등 키로 재시도 |
 | 409 | `PERFORMANCE_SUSPENDED` | 공연 판매 중지 상태에서 신규 예매, 회차 추가, 포스터 변경 불가 |
+| 409 | `PERFORMANCE_CANCELLED` | 취소된 공연의 신규 예매, 결제 대기 예매 결제 요청, 주최자 수정, 판매 상태 변경 불가 |
 | 409 | `MEMBER_SUSPENSION_UNCHANGED`, `PERFORMANCE_SUSPENSION_UNCHANGED` | 이미 요청한 상태 |
 | 409 | `SALES_CLOSED` | 회차가 시작되어 신규 예매 또는 첫 결제 요청 불가 |
 | 409 | `INVALID_BOOKING_STATE`, `BOOKING_EXPIRED` | 현재 예매 상태에서 불가능한 동작 |
@@ -187,11 +188,13 @@
 | `GET /api/v1/admin/members` | ADMIN | 회원 목록과 이용 상태 |
 | `PUT /api/v1/admin/members/{id}/suspension` | ADMIN | 회원 이용 정지 |
 | `DELETE /api/v1/admin/members/{id}/suspension` | ADMIN | 회원 이용 정지 해제 |
-| `GET /api/v1/admin/performances` | ADMIN | 공연 목록. 커서와 `organizerId`, `title`, `status` 필터 |
+| `GET /api/v1/admin/performances` | ADMIN | 공연 목록. 커서와 `organizerId`, `title`, `status`(`ACTIVE`·`SUSPENDED`·`CANCELLED`) 필터 |
 | `PUT /api/v1/admin/performances/{id}/suspension` | ADMIN | 공연 판매 중지 |
 | `DELETE /api/v1/admin/performances/{id}/suspension` | ADMIN | 공연 판매 재개 |
-| `GET /api/v1/admin/bookings` | ADMIN | 예매 목록. 커서와 `memberId`, `scheduleId`, `status`, `createdFrom`, `createdTo` 필터. 두 시각 경계 포함 |
-| `GET /api/v1/admin/bookings/{id}` | ADMIN | 예매 상태·좌석·쿠폰·금액 상세 |
+| `PUT /api/v1/admin/performances/{id}/cancellation` | ADMIN | 공연 취소. `ACTIVE`·`SUSPENDED`에서 `CANCELLED`로 종료. 예매 일괄 취소는 비동기 |
+| `GET /api/v1/admin/bookings` | ADMIN | 예매 목록. 커서와 `memberId`, `scheduleId`, `performanceId`, `status`, `createdFrom`, `createdTo` 필터. 두 시각 경계 포함 |
+| `GET /api/v1/admin/bookings/{id}` | ADMIN | 예매 상태·좌석·쿠폰·금액 상세. 취소 유형이 있으면 `cancelReason` 반환 |
+| `POST /api/v1/admin/bookings/{id}/cancellation` | ADMIN | `PENDING`·`CONFIRMED` 예매 강제 취소. `EXPIRED`·`CANCELLED`는 409 `INVALID_BOOKING_STATE` |
 | `GET /api/v1/admin/payments?bookingId=` | ADMIN | 해당 예매에 연결된 결제 0건 또는 1건을 배열로 반환(payment 앱, Gateway 경유) |
 | `PUT /api/v1/admin/members/{id}/role` | ADMIN | 역할 변경(ADR 0034) |
 | `GET /api/v1/admin/audit-logs` | ADMIN | 감사 로그 조회 |
@@ -204,6 +207,8 @@
 | `POST /api/v1/admin/issued-coupons/{issuedCouponId}/revoke` | ADMIN | 발급 쿠폰 회수 |
 
 정지·중지에는 공백만으로 이루어지지 않은 사유 1~200자가 필요하다. 저장 전에 앞뒤 공백을 제거한다. 해제·재개의 요청 본문은 비운다. 성공 시 200과 `{id, status}`를 반환한다. 판매 중지된 공연은 공개 공연 목록에서 제외하며 공개 공연·회차·좌석 상세는 404로 응답한다. booking이 판매 상태 변경을 반영하면 잔여 좌석 조회에서도 해당 회차가 제외된다. 주최자 전용 상세에는 중지 상태도 반환한다.
+
+관리자 예매 강제 취소와 공연 취소에는 `reason`이 필요하다. 예매 강제 취소는 앞뒤 공백을 제거한 사유 1~200자를 받고 성공 시 200과 `BookingResponse`를 반환한다. 공연 취소는 공백만으로 이루어지지 않은 최대 200자 사유를 받고 저장 전 앞뒤 공백을 제거한다. 성공 시 200과 `{id, status: "CANCELLED"}`를 반환한다. 취소된 공연은 중지와 같은 공개 범위에서 제외하고 주최자 전용 상세에는 `CANCELLED`를 반환한다. 취소된 공연의 재취소·중지·재개는 409 `PERFORMANCE_CANCELLED`로 거부한다. [ADR 0054](../adr/0054-admin-force-cancel-and-performance-cancel.md)
 
 공연 목록과 상세는 `genre`와 `posterUrl`을 반환한다. 장르는 `CONCERT`, `MUSICAL`, `PLAY`, `CLASSICAL`, `SPORTS`, `EXHIBITION`이며 값이 없는 공연은 전체 목록에 포함된다. URL 발급 후에는 응답의 헤더를 포함해 저장소에 직접 PUT을 보낸다. 포스터는 JPEG·PNG·WebP를 지원하며 최대 크기는 5MiB다. [ADR 0050](../adr/0050-poster-storage-minio-presigned.md)
 
