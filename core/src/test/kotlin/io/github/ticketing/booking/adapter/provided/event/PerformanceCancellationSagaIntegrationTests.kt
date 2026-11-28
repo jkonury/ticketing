@@ -3,11 +3,14 @@ package io.github.ticketing.booking.adapter.provided.event
 import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.booking.BookingCancelled
+import io.github.ticketing.booking.application.port.provided.CreateBookingCommand
+import io.github.ticketing.booking.application.port.provided.CreateBookingUseCase
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.booking.application.port.required.BookingCommandPort
 import io.github.ticketing.booking.domain.BookedSeat
 import io.github.ticketing.booking.domain.Booking
+import io.github.ticketing.booking.domain.BookingId
 import io.github.ticketing.booking.domain.BookingStatus
 import io.github.ticketing.booking.domain.CancelReason
 import io.github.ticketing.booking.domain.HoldToken
@@ -36,11 +39,14 @@ import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import ticketing.jooq.booking.tables.references.BOOKING_ as BOOKING
 
 @TestPropertySource(properties = ["ticketing.booking.performance-cancellation.chunk-size=2"])
 class PerformanceCancellationSagaIntegrationTests(
     private val bookings: BookingCommandPort,
+    private val createBooking: CreateBookingUseCase,
     private val schedules: RegisterScheduleSeatsUseCase,
     private val dsl: DSLContext,
     private val jdbc: JdbcTemplate,
@@ -85,6 +91,32 @@ class PerformanceCancellationSagaIntegrationTests(
         val couponRelease = collector.of(CouponReleaseRequested::class.java) { it.orderId == pendingWithCoupon }.single()
         assertThat(couponRelease.reason).isEqualTo("PERFORMANCE_CANCELLED")
         assertThat(collector.of(RefundRequested::class.java) { it.orderId == pending || it.orderId == pendingWithCoupon }).isEmpty()
+    }
+
+    @Test
+    fun `취소 사본은 진행 중인 예매 저장을 기다리고 커밋된 예매를 취소한다`() {
+        val scheduleId = schedule()
+        val command = CreateBookingCommand(uniqueId(), UUID.randomUUID().toString(), scheduleId, listOf(1))
+        Executors.newVirtualThreadPerTaskExecutor().use { executor ->
+            val (bookingId, publication) = requireNotNull(
+                tx.execute {
+                    val booking = createBooking.create(command).booking
+                    val bookingTransactionPid = jdbc.queryForObject("select pg_backend_pid()", Int::class.java)
+                    val publicationId = executor.submit<UUID> { cancelPerformance() }.get(10, TimeUnit.SECONDS)
+                    await().atMost(Duration.ofSeconds(10)).until {
+                        jdbc.queryForObject(
+                            "select exists (select from pg_stat_activity where ? = any(pg_blocking_pids(pid)))",
+                            Boolean::class.java,
+                            bookingTransactionPid,
+                        ) == true
+                    }
+                    booking.bookingId to publicationId
+                },
+            )
+
+            await().atMost(Duration.ofSeconds(10)).until { publicationCompleted(jdbc, publication) }
+            assertThat(bookings.findById(BookingId(bookingId))?.cancelReason).isEqualTo(CancelReason.PERFORMANCE_CANCELLED)
+        }
     }
 
     @Test

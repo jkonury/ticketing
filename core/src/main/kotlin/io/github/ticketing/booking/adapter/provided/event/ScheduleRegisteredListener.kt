@@ -1,9 +1,9 @@
 package io.github.ticketing.booking.adapter.provided.event
 
+import io.github.ticketing.booking.application.port.provided.CancelPerformanceBookingsUseCase
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
 import io.github.ticketing.booking.application.port.provided.UpdateScheduleSaleStatusUseCase
-import io.github.ticketing.booking.application.service.PerformanceCancellationService
 import io.github.ticketing.catalog.PerformanceCancelled
 import io.github.ticketing.catalog.PerformanceSuspensionChanged
 import io.github.ticketing.catalog.ScheduleRegistered
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Propagation
 class ScheduleRegisteredListener(
     private val registerScheduleSeats: RegisterScheduleSeatsUseCase,
     private val updateScheduleSaleStatus: UpdateScheduleSaleStatusUseCase,
-    private val performanceCancellation: PerformanceCancellationService,
+    private val performanceCancellation: CancelPerformanceBookingsUseCase,
 ) {
     // 사본을 먼저 커밋하고 청크마다 하나의 커넥션만 사용한다.
     @ApplicationModuleListener(propagation = Propagation.NOT_SUPPORTED)
