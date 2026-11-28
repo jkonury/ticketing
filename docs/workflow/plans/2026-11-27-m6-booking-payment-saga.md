@@ -1,5 +1,5 @@
 ---
-status: approved
+status: done
 approved_at: 2026-11-28T06:08:54+09:00
 ---
 
@@ -73,8 +73,7 @@ M6 사전 작업(P1~P6), Kafka 도입, payment 분리, HTTP 계약 생성, settl
 
 ### T4. 보상 결과와 복구 절차를 문서로 확인할 수 있다
 
-- [ ] 완료
-- 복구 문서와 로컬 검증 후 PR CI의 분리 스택 15개 결과를 확인해야 T4와 로드맵 Saga 항목을 완료할 수 있다.
+- [x] 완료 ([검증 결과](#검증-결과))
 - Blocked by: T1, T2, T3
 - 변경 범위와 제약: 흐름 문서의 자동 환불 조건에 금액 불일치와 취소 후 늦은 승인을 반영하고, 결제 재호출 설명을 ADR 0044와 맞춘다. 런북에는 발행 앱별 DB에서 미완료 발행을 찾고 브로커 복구 후 해당 앱을 재기동하는 절차, 이미 Kafka에 적재된 환불의 소비 재개, DLT 확인이 필요한 조건을 주문 상태와 함께 적는다. E2E 문서에 `--saga-recovery`와 격리 사전 조건을, fake-pg 테스트 제어 문서에 T1 동작을 반영한다. [ADR 0044](../../adr/0044-sales-close-and-payment-retry.md), [장애 진단 런북](../../runbook.md#37-미완료-이벤트-발행이-쌓인다), [fake-pg 연동 규약](../../architecture/integrations.md#승인-보류-테스트-제어)
 - 테스트 경계와 선례: `BookingPaymentFlowTests`·`BookingCouponSagaTests`로 좌석 충돌, 금액 불일치, 쿠폰 해제·사용 확정 및 이전 시도 재전달을 확인한다. `ExpirePendingBookingsJobTests`·`ReleaseStaleCouponReservationsJobTests`와 P2 기준선으로 배치 보정 경계를 확인한다. 이 테스트와 분리 스택 결과를 근거로 복구 절차를 검토한 뒤 로드맵 Saga 항목을 완료 처리한다.
@@ -90,3 +89,9 @@ M6 사전 작업(P1~P6), Kafka 도입, payment 분리, HTTP 계약 생성, settl
 
 - 시작 SHA부터 HEAD까지 `./scripts/agent/test/verify-changed.sh <시작-SHA>..HEAD`를 실행한다. 필터 없는 `./scripts/agent/test/run-tests.sh`와 `./scripts/agent/test/check-summary.sh ktlintCheck detekt`를 실행한다. 모듈 의존 변경이 발생하면 `ModularityTests`와 `./gradlew :core:modulithDocs`를 적용한다.
 - PR의 `backend E2E`는 T2에서 지정하는 전용 Compose 프로젝트로 `./scripts/e2e/run.sh --saga-recovery`를 실행한다. 결과에서 기존 분리 스택 12개와 T1~T3의 신규 3개가 모두 실행됐는지 확인한다. P2의 정산·결제 대사·미결제 정리 결과를 포함한다. 로컬 E2E는 사용자가 명시적으로 실행을 요청한 경우에만 수행하며, 장애 시나리오는 T2의 로컬 격리 조건을 준비한 뒤 실행한다. CI 확인이 남으면 로드맵 항목과 계획 완료 상태를 보류한다. [E2E·부하·CI 실행 지침](../../rules/backend-testing.md#e2e부하ci-실행)
+
+### 검증 결과
+
+- PR #9가 `main`에 병합됐다. 최종 커밋 `80f69e1`의 백엔드 빌드(테스트·ktlint·detekt 포함), 백엔드 E2E, 웹 검사, 문서 검사와 Web E2E가 모두 통과했다. [PR #9](https://github.com/jkonury/ticketing/pull/9) · [CI](https://github.com/jkonury/ticketing/actions/runs/46072018682) · [Web E2E](https://github.com/jkonury/ticketing/actions/runs/46072018722)
+- 백엔드 E2E JUnit 리포트에서 P2 배치 3개를 포함한 기존 12개와 신규 3개가 모두 통과했다. 신규 시나리오는 쿠폰 예매의 결제 실패 보상, Kafka 복구 후 만료 예매 환불과 쿠폰·좌석 반환, payment 재기동 후 확정 예매 취소 환불과 쿠폰 사용 상태 유지다. 실패·오류·건너뜀은 0건이었다. [백엔드 E2E 실행](https://github.com/jkonury/ticketing/actions/runs/46072018682/job/140750965443)
+- 로컬에서 `d1fc1ab..0ee974e` 변경 범위 검사, 필터 없는 Gradle 테스트, ktlint·detekt 및 완료 문서 검사가 통과했다. Gradle 테스트는 기존 결과를 재사용했다.
