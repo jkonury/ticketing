@@ -2,6 +2,7 @@ package io.github.ticketing.audit
 
 import io.github.ticketing.IntegrationTestSupport
 import io.github.ticketing.audit.service.AdminActionRecorder
+import io.github.ticketing.booking.BookingForceCancelled
 import io.github.ticketing.member.MemberRoleChanged
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.assertj.MockMvcTester
 import org.springframework.transaction.support.TransactionTemplate
+import ticketing.jooq.audit.tables.references.ADMIN_ACTION
 import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
 import java.util.UUID
@@ -69,6 +71,24 @@ class AuditLogIntegrationTests(
         assertThat(row["target_type"]).isEqualTo("MEMBER")
         assertThat(row["target_id"]).isEqualTo("3")
         assertThat(json.readValue(row["d"].toString(), Map::class.java)).isEqualTo(mapOf("from" to "USER", "to" to "ADMIN"))
+    }
+
+    @Test
+    fun `예매 강제 취소 이벤트를 재전달해도 관리자와 사유를 한 번 기록한다`() {
+        val event = BookingForceCancelled(UUID.randomUUID(), 7, 123, "중복 예매", Instant.parse("2030-01-01T00:00:00Z"))
+
+        repeat(2) { tx.executeWithoutResult { publisher.publishEvent(event) } }
+
+        await().atMost(10, TimeUnit.SECONDS).untilAsserted {
+            val rows = dsl.selectFrom(ADMIN_ACTION).where(ADMIN_ACTION.SOURCE_EVENT_ID.eq(event.eventId)).fetch()
+            assertThat(rows).hasSize(1)
+            val row = rows.single()
+            assertThat(row.actorId).isEqualTo(7L)
+            assertThat(row.action).isEqualTo("BOOKING_FORCE_CANCELLED")
+            assertThat(row.targetType).isEqualTo("BOOKING")
+            assertThat(row.targetId).isEqualTo("123")
+            assertThat(json.readValue(requireNotNull(row.detail).data(), Map::class.java)).isEqualTo(mapOf("reason" to "중복 예매"))
+        }
     }
 
     @Test

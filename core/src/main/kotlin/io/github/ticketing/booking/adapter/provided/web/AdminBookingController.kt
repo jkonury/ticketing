@@ -6,17 +6,23 @@ import io.github.ticketing.booking.application.port.provided.AdminBookingSummary
 import io.github.ticketing.booking.application.port.provided.BookingCouponView
 import io.github.ticketing.booking.application.port.provided.BookingDetailView
 import io.github.ticketing.booking.application.port.provided.BookingQueryUseCase
+import io.github.ticketing.booking.application.port.provided.CancelBookingUseCase
 import io.github.ticketing.booking.domain.BookingStatus
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
 import org.springdoc.core.annotations.ParameterObject
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
@@ -25,7 +31,7 @@ import java.time.Instant
 @RestController
 @RequestMapping("/api/v1/admin/bookings")
 @PreAuthorize("hasRole('ADMIN')")
-class AdminBookingController(private val queries: AdminBookingQueryUseCase) {
+class AdminBookingController(private val queries: AdminBookingQueryUseCase, private val cancellations: CancelBookingUseCase) {
     @GetMapping
     fun list(@Valid @ModelAttribute @ParameterObject request: AdminBookingListRequest): AdminBookingPageResponse {
         val page = queries.list(request.toFilter())
@@ -34,6 +40,19 @@ class AdminBookingController(private val queries: AdminBookingQueryUseCase) {
 
     @GetMapping("/{id}")
     fun detail(@PathVariable id: Long): AdminBookingDetailResponse = AdminBookingDetailResponse.from(queries.detail(id))
+
+    @PostMapping("/{id}/cancellation")
+    fun forceCancel(
+        authentication: Authentication,
+        @PathVariable id: Long,
+        @Valid @RequestBody request: ForceCancelBookingRequest,
+    ): BookingResponse = BookingResponse.from(cancellations.forceCancel(authentication.name.toLong(), id, request.reason))
+}
+
+class ForceCancelBookingRequest(reason: String) {
+    @field:NotBlank
+    @field:Size(max = 200)
+    val reason: String = reason.trim()
 }
 
 data class AdminBookingListRequest(

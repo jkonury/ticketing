@@ -1,8 +1,20 @@
 package io.github.ticketing.booking.adapter.provided.web
 
+import io.github.ticketing.EventCollector
 import io.github.ticketing.IntegrationTestSupport
+import io.github.ticketing.MutableClock
+import io.github.ticketing.booking.BookingCancelled
+import io.github.ticketing.booking.BookingForceCancelled
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsCommand
 import io.github.ticketing.booking.application.port.provided.RegisterScheduleSeatsUseCase
+import io.github.ticketing.booking.application.port.required.HoldResult
+import io.github.ticketing.booking.application.port.required.SeatHoldPort
+import io.github.ticketing.booking.domain.Booking
+import io.github.ticketing.booking.domain.HoldToken
+import io.github.ticketing.booking.domain.ScheduleId
+import io.github.ticketing.booking.domain.SeatId
+import io.github.ticketing.coupon.CouponReleaseRequested
+import io.github.ticketing.payment.RefundRequested
 import org.assertj.core.api.Assertions.assertThat
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
@@ -14,6 +26,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.test.web.servlet.assertj.MockMvcTester
 import ticketing.jooq.booking.tables.references.BOOKING_SEAT
+import ticketing.jooq.booking.tables.references.SOLD_SEAT
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.ZoneOffset
@@ -25,6 +38,9 @@ class AdminBookingIntegrationTests(
     private val encoder: JwtEncoder,
     private val dsl: DSLContext,
     private val register: RegisterScheduleSeatsUseCase,
+    private val collector: EventCollector,
+    private val holds: SeatHoldPort,
+    private val clock: MutableClock,
 ) : IntegrationTestSupport() {
 
     @Test
@@ -107,11 +123,95 @@ class AdminBookingIntegrationTests(
     }
 
     @Test
+    fun `관리자가 다른 회원의 미결제 예매를 강제 취소한다`() {
+        val memberId = uniqueId()
+        val scheduleId = ScheduleId(schedule())
+        val id = booking(memberId, scheduleId.value, "PENDING", clock.instant())
+        val owner = HoldToken(requireNotNull(dsl.select(BOOKING.HOLD_TOKEN).from(BOOKING).where(BOOKING.ID.eq(id)).fetchSingle().value1()))
+        val seat = listOf(SeatId(1))
+        dsl.update(BOOKING).set(BOOKING.COUPON_ISSUED_ID, 42L)
+            .set(BOOKING.COUPON_STATE, "RESERVED").set(BOOKING.DISCOUNT_AMOUNT, 30L).where(BOOKING.ID.eq(id)).execute()
+        assertThat(holds.hold(scheduleId, seat, owner, Booking.HOLD_DURATION, clock.instant())).isEqualTo(HoldResult.Held)
+
+        assertThat(cancellation(id, "ADMIN", """{"reason":"  중복 예매  "}""")).hasStatus(HttpStatus.OK)
+
+        val saved = dsl.selectFrom(BOOKING).where(BOOKING.ID.eq(id)).fetchSingle()
+        assertThat(saved.status).isEqualTo("CANCELLED")
+        assertThat(saved.cancelReason).isEqualTo("ADMIN_CANCELLED")
+        assertThat(holds.hold(scheduleId, seat, HoldToken("next-owner"), Booking.HOLD_DURATION, clock.instant())).isEqualTo(HoldResult.Held)
+        assertThat(collector.of(CouponReleaseRequested::class.java) { it.orderId == id }).hasSize(1)
+        assertThat(collector.of(RefundRequested::class.java) { it.orderId == id }).isEmpty()
+        val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(cancelled.memberId).isEqualTo(memberId)
+        assertThat(cancelled.refundRequired).isFalse()
+        val forced = collector.of(BookingForceCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(forced.actorId).isEqualTo(1L)
+        assertThat(forced.reason).isEqualTo("중복 예매")
+    }
+
+    @Test
+    fun `확정 예매를 강제 취소하면 좌석을 반환하고 환불을 요청한다`() {
+        val scheduleId = schedule()
+        val id = booking(uniqueId(), scheduleId, "CONFIRMED", clock.instant())
+        dsl.insertInto(SOLD_SEAT).set(SOLD_SEAT.SCHEDULE_ID, scheduleId).set(SOLD_SEAT.SEAT_ID, 1L)
+            .set(SOLD_SEAT.BOOKING_ID, id).set(SOLD_SEAT.SOLD_AT, clock.instant().atOffset(ZoneOffset.UTC)).execute()
+
+        assertThat(cancellation(id, "ADMIN", """{"reason":"운영자 취소"}"""))
+            .hasStatus(HttpStatus.OK).bodyJson().extractingPath("$.status").isEqualTo("CANCELLED")
+
+        assertThat(dsl.fetchExists(SOLD_SEAT, SOLD_SEAT.BOOKING_ID.eq(id))).isFalse()
+        val refund = collector.of(RefundRequested::class.java) { it.orderId == id }.single()
+        assertThat(refund.reason).isEqualTo("ADMIN_CANCELLED")
+        val cancelled = collector.of(BookingCancelled::class.java) { it.bookingId == id }.single()
+        assertThat(cancelled.reason).isEqualTo("ADMIN_CANCELLED")
+        assertThat(cancelled.refundRequired).isTrue()
+        assertThat(collector.of(CouponReleaseRequested::class.java) { it.orderId == id }).isEmpty()
+    }
+
+    @Test
+    fun `만료되거나 취소된 예매의 강제 취소를 거부한다`() {
+        val scheduleId = schedule()
+        for (status in listOf("EXPIRED", "CANCELLED")) {
+            val id = booking(uniqueId(), scheduleId, status, clock.instant())
+
+            assertThat(cancellation(id, "ADMIN", """{"reason":"운영자 취소"}"""))
+                .hasStatus(HttpStatus.CONFLICT).bodyJson().extractingPath("$.code").isEqualTo("INVALID_BOOKING_STATE")
+        }
+    }
+
+    @Test
+    fun `사유가 없거나 공백이거나 200자를 넘으면 강제 취소를 거부한다`() {
+        val id = booking(uniqueId(), schedule(), "PENDING", clock.instant())
+
+        for (body in listOf("{}", """{"reason":"  "}""", """{"reason":"${"가".repeat(201)}"}""")) {
+            assertThat(cancellation(id, "ADMIN", body)).hasStatus(HttpStatus.BAD_REQUEST)
+        }
+    }
+
+    @Test
+    fun `일반 회원과 주최자는 예매를 강제 취소할 수 없다`() {
+        val id = booking(uniqueId(), schedule(), "PENDING", clock.instant())
+
+        for (role in listOf("USER", "ORGANIZER")) {
+            assertThat(cancellation(id, role, """{"reason":"운영자 취소"}""")).hasStatus(HttpStatus.FORBIDDEN)
+        }
+    }
+
+    @Test
+    fun `없는 예매의 강제 취소는 404다`() {
+        assertThat(cancellation(Long.MAX_VALUE, "ADMIN", """{"reason":"운영자 취소"}"""))
+            .hasStatus(HttpStatus.NOT_FOUND).bodyJson().extractingPath("$.code").isEqualTo("BOOKING_NOT_FOUND")
+    }
+
+    @Test
     fun `없는 예매 상세는 404다`() {
         assertThat(mockMvcTester.get().uri("$PATH/${Long.MAX_VALUE}").header("Authorization", bearer("ADMIN")))
             .hasStatus(HttpStatus.NOT_FOUND)
             .bodyJson().extractingPath("$.code").isEqualTo("BOOKING_NOT_FOUND")
     }
+
+    private fun cancellation(id: Long, role: String, body: String) = mockMvcTester.post().uri("$PATH/$id/cancellation")
+        .header("Authorization", bearer(role)).contentType("application/json").content(body)
 
     private fun schedule(): Long {
         val id = uniqueId()

@@ -25,7 +25,7 @@ approved_at: 2026-11-28T20:21:06+09:00
 
 ### T1. 관리자 예매 강제 취소 (booking·audit)
 
-- [ ] 완료
+- [x] 완료
 - Blocked by: 없음
 - 변경 범위와 제약: `CancelReason`에 `ADMIN_CANCELLED`, `PERFORMANCE_CANCELLED`를 추가한다(`cancel_reason`은 `varchar(30)`이고 CHECK 제약이 없어 마이그레이션은 필요 없다). 도메인 `Booking.cancelByUser`의 상태별 전이를 사유를 받는 공용 취소 메서드로 일반화하고, 사용자 취소는 소유자 검사 후 이를 호출한다. `CancelBookingService`의 트랜잭션 처리(환불 요청·`sold_seat` 삭제·쿠폰 복원·`BookingCancelled` 발행·커밋 후 Redis)를 사유를 받는 내부 경로로 추출해 사용자 취소·강제 취소·T4 Saga가 공유하게 한다. 사용자 취소의 동작과 응답은 바꾸지 않는다. `POST /api/v1/admin/bookings/{id}/cancellation`(본문 `reason` 필수, 공백 제거 후 1~200자)을 `AdminBookingController`에 추가하고 ADMIN만 허용한다. EXPIRED·CANCELLED는 409로 거부한다. booking 패키지 루트에 core 내부 이벤트 `BookingForceCancelled(eventId, actorId, bookingId, reason, cancelledAt)`를 두고 같은 트랜잭션에서 발행한다. audit에 `BookingAuditListener`를 추가해 `AdminActionRecorder`로 멱등 기록한다. 이 이벤트는 Kafka로 외부화하지 않는다(`BookingEventExternalizationConfig` 변경 없음). `BookingCancelled` 클래스는 바꾸지 않는다.
 - 테스트 경계와 선례: HTTP 공개 경계 통합 테스트는 `AdminBookingIntegrationTests`에, 도메인 전이는 `BookingTests`에, 감사는 `AuditLogIntegrationTests`에 추가한다. PENDING 강제 취소는 선점 해제와 쿠폰 복원 요청을, CONFIRMED 강제 취소는 `RefundRequested`·`BookingCancelled(reason=ADMIN_CANCELLED, refundRequired=true)` 발행과 `sold_seat` 삭제를 확인한다. EXPIRED·CANCELLED는 409, 사유 누락·201자는 400, USER·ORGANIZER는 403, 없는 ID는 404를 확인한다. 감사 로그 1건과 재전달 멱등도 확인한다. 기존 사용자 취소 테스트(`BookingApiIntegrationTests`, `BookingPaymentFlowTests`)가 그대로 통과해야 한다. `ModularityTests`를 같은 실행에 포함한다.

@@ -1,5 +1,6 @@
 package io.github.ticketing.booking.domain
 
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.math.BigDecimal
@@ -305,6 +306,20 @@ class BookingTests {
         assertEquals(CancelOutcome.RefundRequired, outcome)
         assertEquals(BookingStatus.CANCELLED, confirmedBooking.status)
         assertEquals(CancelReason.USER_REQUESTED, confirmedBooking.cancelReason)
+    }
+
+    @Test
+    fun `관리자와 공연 취소는 상태별 결과와 지정된 사유를 남긴다`() {
+        val pendingBooking = booking()
+        val confirmedBooking = confirmed()
+
+        val pendingOutcome = pendingBooking.cancel(CancelReason.ADMIN_CANCELLED, beforeExpiry)
+        val confirmedOutcome = confirmedBooking.cancel(CancelReason.PERFORMANCE_CANCELLED, beforeExpiry)
+
+        assertThat(pendingOutcome).isEqualTo(CancelOutcome.ReleasedHold)
+        assertThat(pendingBooking.cancelReason).isEqualTo(CancelReason.ADMIN_CANCELLED)
+        assertThat(confirmedOutcome).isEqualTo(CancelOutcome.RefundRequired)
+        assertThat(confirmedBooking.cancelReason).isEqualTo(CancelReason.PERFORMANCE_CANCELLED)
     }
 
     @Test
